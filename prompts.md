@@ -237,3 +237,23 @@ commit it and wire up expenses
 commit it and wire up exports
 ~~~
 
+
+## Prompt
+
+~~~
+<task-notification>
+<task-id>bt33p90qp</task-id>
+<tool-use-id>toolu_017sQmyrfpaLEuf8fKQs5NgS</tool-use-id>
+<output-file>/tmp/claude-1000/-home-bram-src-sred/8104ef29-2536-4afe-b7c3-b2175650e04d/tasks/bt33p90qp.output</output-file>
+<status>failed</status>
+<summary>Background command "Boot server" failed with exit code 143</summary>
+</task-notification>
+~~~
+
+
+## Prompt
+
+~~~
+Commit the exports work. I have mailpit running locally. Kan you wire up emails to send there?
+~~~
+
