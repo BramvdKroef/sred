@@ -1,6 +1,6 @@
 import { api, apiUpload, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
-         wireJwtDownloads, renderPreferencesPage } from './api.js';
+         wireJwtDownloads, renderPreferencesPage, bindForm, onSubmit } from './api.js';
 
 const state = {
   me: null,
@@ -31,7 +31,7 @@ function shell() {
     <header>
       <h1>Precision <strong>SR&amp;ED</strong></h1>
       <div class="user">
-        <strong><a href="#preferences" style="color:#fff; text-decoration:none">${esc(state.me.user.name)}</a></strong>
+        <strong><a href="#preferences" class="header-link">${esc(state.me.user.name)}</a></strong>
         <span class="role">employee</span>
         <button class="secondary small" id="signout">Sign out</button>
       </div>
@@ -218,8 +218,8 @@ function labourEditForm(e) {
   return `<form data-form-edit-labour="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0">
     <div><label>Date</label><input type="date" name="work_date" value="${esc(e.work_date)}" required></div>
     <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required style="width:6rem"></div>
-    <div><label>&nbsp;</label><label style="display:flex; align-items:center; gap:0.4rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_overtime" style="width:auto" ${e.is_overtime ? 'checked' : ''}> Overtime</label></div>
-    <div style="flex:1; min-width:14rem"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
+    <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime" ${e.is_overtime ? 'checked' : ''}> Overtime</label></div>
+    <div class="input-grow"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
     <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save</button><button type="button" class="small secondary" data-cancel-labour="${e.id}">Cancel</button></div></div>
   </form>`;
 }
@@ -233,7 +233,7 @@ function expenseEditForm(e) {
     <div><label>Amount (cents)</label><input type="number" name="amount_cents" min="1" value="${e.amount_cents}" required style="width:8rem"></div>
     <div><label>Currency</label><input name="currency" value="${esc(e.currency)}" required style="width:5rem"></div>
     <div><label>FX rate</label><input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" style="width:6rem"></div>
-    <div style="flex:1; min-width:14rem"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
+    <div class="input-grow"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
     <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save</button><button type="button" class="small secondary" data-cancel-expense="${e.id}">Cancel</button></div></div>
   </form>`;
 }
@@ -241,8 +241,8 @@ function expenseEditForm(e) {
 function evidenceEditForm(e) {
   return `<form data-form-edit-evidence="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0; flex-wrap:wrap">
     <div><label>Date</label><input type="date" name="evidence_date" value="${esc(e.evidence_date)}" required></div>
-    <div style="flex:1; min-width:14rem"><label>Caption</label><input name="caption" value="${esc(e.caption)}" required></div>
-    ${e.kind === 'link' ? `<div style="flex:1; min-width:14rem"><label>URL</label><input type="url" name="url" value="${esc(e.url ?? '')}" required></div>` : ''}
+    <div class="input-grow"><label>Caption</label><input name="caption" value="${esc(e.caption)}" required></div>
+    ${e.kind === 'link' ? `<div class="input-grow"><label>URL</label><input type="url" name="url" value="${esc(e.url ?? '')}" required></div>` : ''}
     ${e.kind === 'note' ? `<div style="flex:1 1 100%"><label>Note</label><textarea name="note_text" rows="2" required>${esc(e.note_text ?? '')}</textarea></div>` : ''}
     ${e.kind === 'file' ? `<div><label>&nbsp;</label><span class="muted">file content not editable</span></div>` : ''}
     <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save</button><button type="button" class="small secondary" data-cancel-evidence="${e.id}">Cancel</button></div></div>
@@ -259,11 +259,11 @@ function renderLabourForm() {
         <div><label>Project</label>${projectSelect()}</div>
         <div><label>Date</label><input type="date" name="work_date" required></div>
         <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" required></div>
-        <div><label>&nbsp;</label><label style="display:flex; align-items:center; gap:0.4rem; font-size:0.92rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_overtime" style="width:auto"> Overtime</label></div>
+        <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime"> Overtime</label></div>
         <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
       </div>
       <details class="attach-block" style="margin-top:0.6rem">
-        <summary style="cursor:pointer; font-size:0.9rem; color:var(--brand); font-weight:600">＋ Attach evidence (optional)</summary>
+        <summary class="summary-link">＋ Attach evidence (optional)</summary>
         <div class="grid" style="margin-top:0.6rem">
           <div><label>Kind</label>
             <select name="ev_kind" class="ev-kind">
@@ -331,7 +331,7 @@ function renderExpenseForm() {
         <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
       </div>
       <details class="attach-block" style="margin-top:0.6rem" open>
-        <summary style="cursor:pointer; font-size:0.9rem; color:var(--brand); font-weight:600">＋ Attach receipt (optional, strongly encouraged)</summary>
+        <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
         <div class="grid" style="margin-top:0.6rem">
           <div style="flex:1"><label>Caption</label><input name="receipt_caption" placeholder="e.g. Invoice #INV-2026-0312"></div>
           <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
@@ -384,26 +384,21 @@ function bind() {
     document.getElementById('ev-note').hidden = k !== 'note';
   });
 
-  const evForm = document.getElementById('evidence-form');
-  if (evForm) evForm.addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(evForm);
-    try {
-      if (fd.get('kind') === 'file') {
-        await apiUpload('/api/evidence', fd);
-      } else {
-        const body = {
-          project_id: Number(fd.get('project_id')),
-          kind: fd.get('kind'),
-          caption: fd.get('caption'),
-          evidence_date: fd.get('evidence_date'),
-        };
-        if (body.kind === 'link') body.url = fd.get('url');
-        if (body.kind === 'note') body.note_text = fd.get('note_text');
-        await api('POST', '/api/evidence', body);
-      }
-      state.tab = 'activity'; await reload();
-    } catch (err) { alert(err.message); }
+  onSubmit(document.getElementById('evidence-form'), async fd => {
+    if (fd.get('kind') === 'file') {
+      await apiUpload('/api/evidence', fd);
+    } else {
+      const body = {
+        project_id: Number(fd.get('project_id')),
+        kind: fd.get('kind'),
+        caption: fd.get('caption'),
+        evidence_date: fd.get('evidence_date'),
+      };
+      if (body.kind === 'link') body.url = fd.get('url');
+      if (body.kind === 'note') body.note_text = fd.get('note_text');
+      await api('POST', '/api/evidence', body);
+    }
+    state.tab = 'activity'; await reload();
   });
 
   // Inline row-edit toggles for labour / expense / evidence
@@ -422,71 +417,41 @@ function bind() {
     });
   }
 
-  document.querySelectorAll('[data-form-edit-labour]').forEach(form => {
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const id = form.dataset.formEditLabour;
-      const fd = new FormData(form);
-      try {
-        await api('PATCH', `/api/labour/${id}`, {
-          work_date: fd.get('work_date'),
-          hours: Number(fd.get('hours')),
-          description: fd.get('description'),
-          is_overtime: fd.get('is_overtime') === 'on',
-        });
-        await reload();
-      } catch (err) { alert(err.message); }
+  document.querySelectorAll('[data-form-edit-labour]').forEach(form => onSubmit(form, async fd => {
+    await api('PATCH', `/api/labour/${form.dataset.formEditLabour}`, {
+      work_date: fd.get('work_date'),
+      hours: Number(fd.get('hours')),
+      description: fd.get('description'),
+      is_overtime: fd.get('is_overtime') === 'on',
     });
-  });
+    await reload();
+  }));
 
-  document.querySelectorAll('[data-form-edit-expense]').forEach(form => {
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const id = form.dataset.formEditExpense;
-      const fd = new FormData(form);
-      const body = {
-        expense_date: fd.get('expense_date'),
-        category: fd.get('category'),
-        amount_cents: Number(fd.get('amount_cents')),
-        currency: fd.get('currency') || 'CAD',
-        description: fd.get('description'),
-      };
-      const fx = fd.get('fx_rate');
-      body.fx_rate = fx ? Number(fx) : null;
-      try {
-        await api('PATCH', `/api/expenses/${id}`, body);
-        await reload();
-      } catch (err) { alert(err.message); }
-    });
-  });
+  document.querySelectorAll('[data-form-edit-expense]').forEach(form => onSubmit(form, async fd => {
+    const body = {
+      expense_date: fd.get('expense_date'),
+      category: fd.get('category'),
+      amount_cents: Number(fd.get('amount_cents')),
+      currency: fd.get('currency') || 'CAD',
+      description: fd.get('description'),
+    };
+    const fx = fd.get('fx_rate');
+    body.fx_rate = fx ? Number(fx) : null;
+    await api('PATCH', `/api/expenses/${form.dataset.formEditExpense}`, body);
+    await reload();
+  }));
 
-  document.querySelectorAll('[data-form-edit-evidence]').forEach(form => {
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const id = form.dataset.formEditEvidence;
-      const fd = new FormData(form);
-      const body = {
-        evidence_date: fd.get('evidence_date'),
-        caption: fd.get('caption'),
-      };
-      if (fd.get('url') !== null)       body.url = fd.get('url');
-      if (fd.get('note_text') !== null) body.note_text = fd.get('note_text');
-      try {
-        await api('PATCH', `/api/evidence/${id}`, body);
-        await reload();
-      } catch (err) { alert(err.message); }
-    });
-  });
+  document.querySelectorAll('[data-form-edit-evidence]').forEach(form => onSubmit(form, async fd => {
+    const body = {
+      evidence_date: fd.get('evidence_date'),
+      caption: fd.get('caption'),
+    };
+    if (fd.get('url') !== null)       body.url = fd.get('url');
+    if (fd.get('note_text') !== null) body.note_text = fd.get('note_text');
+    await api('PATCH', `/api/evidence/${form.dataset.formEditEvidence}`, body);
+    await reload();
+  }));
 
   wireJwtDownloads(document);
 }
 
-function bindForm(selector, handler) {
-  const form = document.querySelector(selector);
-  if (!form) return;
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    try { await handler(new FormData(form)); }
-    catch (err) { alert(err.message); }
-  });
-}

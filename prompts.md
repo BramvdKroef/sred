@@ -872,3 +872,31 @@ Add a user preferences page where users can register additional auth devices.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+If I wanted to get access from my phone would I just use the magic link email option?
+~~~
+
+
+## Prompt
+
+~~~
+I'd like to do some code clean up now. What do you suggest we start with?
+~~~
+
+
+## Prompt
+
+~~~
+start with the form-submit helper and inline styles
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

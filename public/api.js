@@ -141,6 +141,23 @@ export function bindEvidenceKindToggle(form) {
   update();
 }
 
+// Attach a submit handler that preventDefaults, hands you a FormData,
+// alerts on error, and otherwise gets out of the way. Use bindForm(sel,…)
+// when you have a selector, onSubmit(formEl,…) when you already have the
+// element.
+export function onSubmit(form, handler) {
+  if (!form) return;
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    try { await handler(new FormData(form), form); }
+    catch (err) { alert(err.message); }
+  });
+}
+
+export function bindForm(selector, handler) {
+  onSubmit(document.querySelector(selector), handler);
+}
+
 // Preferences page (shared between admin and employee shells).
 export async function renderPreferencesPage(main) {
   main.innerHTML = '<p class="empty">Loading…</p>';
@@ -203,17 +220,13 @@ function bindPrefs(main) {
   const form = main.querySelector('#add-passkey-form');
   if (tg && form) tg.addEventListener('click', () => { form.hidden = !form.hidden; });
 
-  const submit = main.querySelector('#form-add-passkey');
-  if (submit) submit.addEventListener('submit', async e => {
-    e.preventDefault();
-    const label = new FormData(submit).get('label') || navigator.platform || 'Device';
-    try {
-      const { startRegistration } = await import('https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11/+esm');
-      const options = await api('POST', '/api/webauthn/register/start', {});
-      const attestation = await startRegistration({ optionsJSON: options });
-      await api('POST', '/api/webauthn/register/finish', { attestation, label });
-      await refreshPrefs(main);
-    } catch (err) { alert(err.message); }
+  onSubmit(main.querySelector('#form-add-passkey'), async fd => {
+    const label = fd.get('label') || navigator.platform || 'Device';
+    const { startRegistration } = await import('https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11/+esm');
+    const options = await api('POST', '/api/webauthn/register/start', {});
+    const attestation = await startRegistration({ optionsJSON: options });
+    await api('POST', '/api/webauthn/register/finish', { attestation, label });
+    await refreshPrefs(main);
   });
 
   main.querySelectorAll('[data-cred-remove]').forEach(btn => {

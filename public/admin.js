@@ -1,6 +1,7 @@
 import { api, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
-         wireActivityDetails, wireJwtDownloads, renderPreferencesPage } from './api.js';
+         wireActivityDetails, wireJwtDownloads, renderPreferencesPage,
+         bindForm, onSubmit } from './api.js';
 
 const state = {
   me: null,
@@ -57,7 +58,7 @@ function shell() {
     <header>
       <h1>Precision <strong>SR&amp;ED</strong></h1>
       <div class="user">
-        <strong><a href="#preferences" style="color:#fff; text-decoration:none">${esc(state.me.user.name)}</a></strong>
+        <strong><a href="#preferences" class="header-link">${esc(state.me.user.name)}</a></strong>
         <span class="role">admin</span>
         <button class="secondary small" id="signout">Sign out</button>
       </div>
@@ -548,14 +549,14 @@ function renderAttachmentEditor(a) {
     `<li>${esc(r.effective_from)} · ${esc(r.comp_type)} · ${cents(r.amount_cents)} (${r.hours_per_year} h/yr)</li>`
   ).join('');
   return `
-    <div class="card" style="background: #f8fafc; padding: 0.75rem 1rem; margin: 0.5rem 0">
+    <div class="sub-card">
       <form data-form="uc-fields" data-uc="${a.id}">
         <div class="row" style="gap:0.6rem; align-items:flex-end; flex-wrap:wrap">
-          <div style="flex:1; min-width:14rem">
+          <div class="input-grow">
             <label>${esc(a.claimant_name)} · attachment ${a.id}</label>
             <input name="title" placeholder="Title" value="${esc(a.title ?? '')}">
           </div>
-          <div><label style="display:flex; align-items:center; gap:0.4rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_specified_employee" style="width:auto" ${a.is_specified_employee ? 'checked' : ''}> Specified</label></div>
+          <div><label class="checkbox-label"><input type="checkbox" name="is_specified_employee" ${a.is_specified_employee ? 'checked' : ''}> Specified</label></div>
           <div><label>Status</label>
             <select name="status">
               <option ${a.status === 'active' ? 'selected' : ''}>active</option>
@@ -582,75 +583,51 @@ function renderAttachmentEditor(a) {
 }
 
 function bindUserEditForm(bundle, row) {
-  row.querySelector('[data-form="user-fields"]').addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    try {
-      await api('PATCH', `/api/users/${bundle.id}`, {
-        name: fd.get('name'),
-        role: fd.get('role') || undefined,   // disabled-on-self → null → not sent
-      });
-      allUsers = (await api('GET', '/api/users')).items;
-      redrawAllUsers();
-    } catch (err) { alert(err.message); }
-  });
+  const reRender = async () => {
+    const fresh = await api('GET', `/api/users/${bundle.id}`);
+    row.querySelector('td').innerHTML = renderUserEditForm(fresh);
+    bindUserEditForm(fresh, row);
+  };
 
-  row.querySelectorAll('[data-form="uc-fields"]').forEach(form => {
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const fd = new FormData(form);
-      const ucId = form.dataset.uc;
-      try {
-        await api('PATCH', `/api/user-claimants/${ucId}`, {
-          title: fd.get('title') || null,
-          is_specified_employee: fd.get('is_specified_employee') === 'on',
-          status: fd.get('status'),
-        });
-        // Re-render the form with fresh data
-        const fresh = await api('GET', `/api/users/${bundle.id}`);
-        row.querySelector('td').innerHTML = renderUserEditForm(fresh);
-        bindUserEditForm(fresh, row);
-      } catch (err) { alert(err.message); }
+  onSubmit(row.querySelector('[data-form="user-fields"]'), async fd => {
+    await api('PATCH', `/api/users/${bundle.id}`, {
+      name: fd.get('name'),
+      role: fd.get('role') || undefined,   // disabled-on-self → null → not sent
     });
+    allUsers = (await api('GET', '/api/users')).items;
+    redrawAllUsers();
   });
 
-  row.querySelectorAll('[data-form="add-comp"]').forEach(form => {
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const fd = new FormData(form);
-      const ucId = form.dataset.uc;
-      try {
-        await api('POST', `/api/user-claimants/${ucId}/compensation`, {
-          comp_type: fd.get('comp_type'),
-          amount_cents: Number(fd.get('amount_cents')),
-          effective_from: fd.get('effective_from'),
-        });
-        const fresh = await api('GET', `/api/users/${bundle.id}`);
-        row.querySelector('td').innerHTML = renderUserEditForm(fresh);
-        bindUserEditForm(fresh, row);
-      } catch (err) { alert(err.message); }
+  row.querySelectorAll('[data-form="uc-fields"]').forEach(form => onSubmit(form, async fd => {
+    await api('PATCH', `/api/user-claimants/${form.dataset.uc}`, {
+      title: fd.get('title') || null,
+      is_specified_employee: fd.get('is_specified_employee') === 'on',
+      status: fd.get('status'),
     });
-  });
+    await reRender();
+  }));
 
-  const addAttach = row.querySelector('[data-form="add-attachment"]');
-  if (addAttach) addAttach.addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(addAttach);
-    try {
-      await api('POST', `/api/users/${bundle.id}/attachments`, {
-        claimant_id: Number(fd.get('claimant_id')),
-        title: fd.get('title') || null,
-        is_specified_employee: fd.get('is_specified_employee') === 'on',
-        compensation: {
-          comp_type: fd.get('comp_type'),
-          amount_cents: Number(fd.get('amount_cents')),
-          effective_from: fd.get('effective_from'),
-        },
-      });
-      const fresh = await api('GET', `/api/users/${bundle.id}`);
-      row.querySelector('td').innerHTML = renderUserEditForm(fresh);
-      bindUserEditForm(fresh, row);
-    } catch (err) { alert(err.message); }
+  row.querySelectorAll('[data-form="add-comp"]').forEach(form => onSubmit(form, async fd => {
+    await api('POST', `/api/user-claimants/${form.dataset.uc}/compensation`, {
+      comp_type: fd.get('comp_type'),
+      amount_cents: Number(fd.get('amount_cents')),
+      effective_from: fd.get('effective_from'),
+    });
+    await reRender();
+  }));
+
+  onSubmit(row.querySelector('[data-form="add-attachment"]'), async fd => {
+    await api('POST', `/api/users/${bundle.id}/attachments`, {
+      claimant_id: Number(fd.get('claimant_id')),
+      title: fd.get('title') || null,
+      is_specified_employee: fd.get('is_specified_employee') === 'on',
+      compensation: {
+        comp_type: fd.get('comp_type'),
+        amount_cents: Number(fd.get('amount_cents')),
+        effective_from: fd.get('effective_from'),
+      },
+    });
+    await reRender();
   });
 }
 
@@ -676,8 +653,8 @@ async function renderUserDetail(main) {
           <span class="pill ${statusPillClass}">${esc(bundle.status)}</span>
         </div>
       </div>
-      <div class="row" style="gap:1rem; color: var(--text-muted); font-size: 0.9rem">
-        <span><strong style="color:var(--text)">${esc(bundle.email)}</strong></span>
+      <div class="row meta-strip">
+        <span><strong>${esc(bundle.email)}</strong></span>
         <span>Created ${esc(bundle.created_at)}</span>
         <span>${bundle.attachments.length} attachment${bundle.attachments.length === 1 ? '' : 's'}</span>
         <span>${bundle.projects.length} active project${bundle.projects.length === 1 ? '' : 's'}</span>
@@ -758,13 +735,13 @@ async function renderProjectDetail(main) {
           <span class="pill">${esc(project.status)}</span>
         </div>
       </div>
-      <div class="row" style="gap:1rem; color: var(--text-muted); font-size: 0.9rem">
-        <span><strong style="color:var(--text)">${esc(claimant?.legal_name ?? '')}</strong></span>
+      <div class="row meta-strip">
+        <span><strong>${esc(claimant?.legal_name ?? '')}</strong></span>
         <span class="pill kind-${esc(project.type)}">${esc(TYPE_LABEL[project.type] ?? project.type)}</span>
         <span class="pill phase-${esc(project.phase)}">${esc(PHASE_LABEL[project.phase] ?? project.phase)}</span>
         <span>${esc(project.field_of_science ?? '—')}</span>
         <span>Started ${esc(project.start_date)}${project.end_date ? ` → ${esc(project.end_date)}` : ''}</span>
-        <span>Manager: <strong style="color:var(--text)">${project.manager ? esc(project.manager.name) : '—'}</strong></span>
+        <span>Manager: <strong>${project.manager ? esc(project.manager.name) : '—'}</strong></span>
       </div>
     </div>
 
@@ -825,16 +802,11 @@ function bindAssignmentForm(project) {
   const form = document.getElementById('assign-form');
   if (tg && form) tg.addEventListener('click', () => { form.hidden = !form.hidden; });
 
-  const submitForm = document.getElementById('form-assign');
-  if (submitForm) submitForm.addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(submitForm);
-    try {
-      await api('POST', `/api/projects/${project.id}/assignments`, {
-        user_claimant_id: Number(fd.get('user_claimant_id')),
-      });
-      render();
-    } catch (err) { alert(err.message); }
+  onSubmit(document.getElementById('form-assign'), async fd => {
+    await api('POST', `/api/projects/${project.id}/assignments`, {
+      user_claimant_id: Number(fd.get('user_claimant_id')),
+    });
+    render();
   });
 
   document.querySelectorAll('[data-unassign]').forEach(btn => {
@@ -893,7 +865,7 @@ function renderAssignForm(project) {
   }
   return `<div id="assign-form" hidden style="margin-bottom:0.6rem">
     <form id="form-assign" class="row" style="gap:0.5rem; align-items:flex-end">
-      <div style="flex:1; min-width:14rem"><label>Employee</label>
+      <div class="input-grow"><label>Employee</label>
         <select name="user_claimant_id" required>
           ${candidates.map(u =>
             `<option value="${u.user_claimant_id}">${esc(u.name)} (${esc(u.role)})</option>`).join('')}
@@ -1007,30 +979,24 @@ function bindEditProjectForm(project) {
   });
   if (cancel) cancel.addEventListener('click', () => { card.hidden = true; });
 
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(form);
+  onSubmit(form, async fd => {
     const managerRaw = fd.get('manager_user_id');
     const endDate = fd.get('end_date');
-    try {
-      await api('PATCH', `/api/projects/${project.id}`, {
-        title: fd.get('title'),
-        field_of_science: fd.get('field_of_science') || null,
-        start_date: fd.get('start_date'),
-        end_date: endDate || null,
-        status: fd.get('status'),
-        type: fd.get('type'),
-        phase: fd.get('phase'),
-        manager_user_id: managerRaw ? Number(managerRaw) : null,
-        advancement_sought: fd.get('advancement_sought') || null,
-        uncertainties: fd.get('uncertainties') || null,
-        work_performed: fd.get('work_performed') || null,
-      });
-      // Refresh state.projects too so the list view (when user goes back) is current.
-      await reloadAll();
-    } catch (err) {
-      alert(err.message);
-    }
+    await api('PATCH', `/api/projects/${project.id}`, {
+      title: fd.get('title'),
+      field_of_science: fd.get('field_of_science') || null,
+      start_date: fd.get('start_date'),
+      end_date: endDate || null,
+      status: fd.get('status'),
+      type: fd.get('type'),
+      phase: fd.get('phase'),
+      manager_user_id: managerRaw ? Number(managerRaw) : null,
+      advancement_sought: fd.get('advancement_sought') || null,
+      uncertainties: fd.get('uncertainties') || null,
+      work_performed: fd.get('work_performed') || null,
+    });
+    // Refresh state.projects too so the list view (when user goes back) is current.
+    await reloadAll();
   });
 }
 
@@ -1057,11 +1023,11 @@ function renderLogOnBehalfCards(project, claimant) {
               </div>
               <div><label>Date</label><input type="date" name="work_date" required></div>
               <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" required></div>
-              <div><label>&nbsp;</label><label style="display:flex; align-items:center; gap:0.4rem; font-size:0.92rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_overtime" style="width:auto"> Overtime</label></div>
+              <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime"> Overtime</label></div>
               <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
             </div>
             <details style="margin-top:0.5rem">
-              <summary style="cursor:pointer; font-size:0.85rem; color:var(--brand); font-weight:600">＋ Attach evidence (optional)</summary>
+              <summary class="summary-link">＋ Attach evidence (optional)</summary>
               <div class="grid" style="margin-top:0.5rem">
                 <div><label>Kind</label>
                   <select name="ev_kind" class="ev-kind">
@@ -1105,7 +1071,7 @@ function renderLogOnBehalfCards(project, claimant) {
               <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
             </div>
             <details style="margin-top:0.5rem" open>
-              <summary style="cursor:pointer; font-size:0.85rem; color:var(--brand); font-weight:600">＋ Attach receipt (optional, strongly encouraged)</summary>
+              <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
               <div class="grid" style="margin-top:0.5rem">
                 <div style="flex:1"><label>Caption</label><input name="receipt_caption" placeholder="e.g. Invoice #INV-..."></div>
                 <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
@@ -1130,28 +1096,21 @@ function bindLogOnBehalfForms(project) {
   const labourFormEl = document.getElementById('form-behalf-labour');
   if (labourFormEl) {
     bindEvidenceKindToggle(labourFormEl);
-    labourFormEl.addEventListener('submit', async e => {
-      e.preventDefault();
-      const fd = new FormData(labourFormEl);
-      try {
-        const entry = await api('POST', '/api/labour', {
-          project_id: project.id,
-          user_claimant_id: Number(fd.get('user_claimant_id')),
-          work_date: fd.get('work_date'),
-          hours: Number(fd.get('hours')),
-          description: fd.get('description'),
-          is_overtime: fd.get('is_overtime') === 'on',
-        });
-        await attachInlineEvidence(fd, { project_id: entry.project_id, labour_entry_id: entry.id, evidence_date: entry.work_date });
-        render();
-      } catch (err) { alert(err.message); }
+    onSubmit(labourFormEl, async fd => {
+      const entry = await api('POST', '/api/labour', {
+        project_id: project.id,
+        user_claimant_id: Number(fd.get('user_claimant_id')),
+        work_date: fd.get('work_date'),
+        hours: Number(fd.get('hours')),
+        description: fd.get('description'),
+        is_overtime: fd.get('is_overtime') === 'on',
+      });
+      await attachInlineEvidence(fd, { project_id: entry.project_id, labour_entry_id: entry.id, evidence_date: entry.work_date });
+      render();
     });
   }
 
-  const expenseFormEl = document.getElementById('form-behalf-expense');
-  if (expenseFormEl) expenseFormEl.addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(expenseFormEl);
+  onSubmit(document.getElementById('form-behalf-expense'), async fd => {
     const body = {
       project_id: project.id,
       user_claimant_id: Number(fd.get('user_claimant_id')),
@@ -1163,11 +1122,9 @@ function bindLogOnBehalfForms(project) {
     };
     const fx = fd.get('fx_rate');
     if (fx) body.fx_rate = Number(fx);
-    try {
-      const entry = await api('POST', '/api/expenses', body);
-      await attachInlineReceipt(fd, { project_id: entry.project_id, expense_id: entry.id, evidence_date: entry.expense_date });
-      render();
-    } catch (err) { alert(err.message); }
+    const entry = await api('POST', '/api/expenses', body);
+    await attachInlineReceipt(fd, { project_id: entry.project_id, expense_id: entry.id, evidence_date: entry.expense_date });
+    render();
   });
 }
 
@@ -1550,12 +1507,3 @@ function bindCommon() {
   wireJwtDownloads(document);
 }
 
-function bindForm(selector, handler) {
-  const form = document.querySelector(selector);
-  if (!form) return;
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    try { await handler(new FormData(form), form); }
-    catch (err) { alert(err.message); }
-  });
-}
