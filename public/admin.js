@@ -616,7 +616,7 @@ async function renderProjectDetail(main) {
 
     <div class="card">
       <h2>Recent activity</h2>
-      ${activityHtml(activity.items, { showActor: true })}
+      ${activityHtml(activity.items, { showActor: true, showProject: false })}
     </div>
   `;
   document.getElementById('back-to-projects').addEventListener('click', e => {

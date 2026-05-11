@@ -187,25 +187,26 @@ export function weekBars(entries, days) {
   }));
 }
 
-export function activityHtml(items, { showActor = true } = {}) {
+export function activityHtml(items, { showActor = true, showProject = true } = {}) {
   if (!items.length) return '<p class="empty">No activity yet.</p>';
   return `<table class="activity">
     <thead><tr>
-      <th>When</th><th>Type</th>${showActor ? '<th>Who</th>' : ''}<th>Project</th><th>Details</th>
+      <th>When</th><th>Type</th>${showActor ? '<th>Who</th>' : ''}${showProject ? '<th>Project</th>' : ''}<th>Details</th>
     </tr></thead>
-    <tbody>${items.map(it => activityRow(it, showActor)).join('')}</tbody>
+    <tbody>${items.map(it => activityRow(it, showActor, showProject)).join('')}</tbody>
   </table>`;
 }
 
-function activityRow(it, showActor) {
+function activityRow(it, showActor, showProject) {
   const when = String(it.created_at).slice(0, 16).replace('T', ' ');
   const typePill = `<span class="pill type-${it.type}">${it.type}</span>`;
   const actor = showActor ? `<td>${esc(it.actor_name)}</td>` : '';
+  const project = showProject ? `<td>${esc(it.project_title)}</td>` : '';
   return `<tr>
     <td class="when">${esc(when)}</td>
     <td>${typePill}</td>
     ${actor}
-    <td>${esc(it.project_title)}</td>
+    ${project}
     <td>${activityDetails(it)}</td>
   </tr>`;
 }

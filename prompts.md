@@ -746,3 +746,17 @@ go ahead with that
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can you remove the Project column from the Recend activity card on the project page?
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+
