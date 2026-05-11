@@ -1,4 +1,4 @@
-import { api, $, esc, cents, currentWeek, weekBars, chartHtml } from './api.js';
+import { api, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml } from './api.js';
 
 const state = {
   me: null,
@@ -80,10 +80,11 @@ function render() {
 async function renderOverviewTab(main) {
   main.innerHTML = '<p class="empty">Loading overview…</p>';
   const week = currentWeek();
-  const [weekLabour, pendingLab, pendingExp] = await Promise.all([
+  const [weekLabour, pendingLab, pendingExp, activity] = await Promise.all([
     api('GET', `/api/labour?from=${week.from}&to=${week.to}`),
     api('GET', '/api/labour?status=pending'),
     api('GET', '/api/expenses?status=pending'),
+    api('GET', '/api/activity?limit=15'),
   ]);
   const nonRejected = weekLabour.items.filter(l => l.status !== 'rejected');
   const totalHours = nonRejected.reduce((s, e) => s + e.hours, 0);
@@ -100,6 +101,10 @@ async function renderOverviewTab(main) {
       </div>
       ${chartHtml(bars)}
       <p class="muted" style="margin-top:0.75rem">Hover a bar for the exact total. Rejected entries are excluded.</p>
+    </div>
+    <div class="card">
+      <h2>Recent activity</h2>
+      ${activityHtml(activity.items, { showActor: true })}
     </div>
   `;
 }

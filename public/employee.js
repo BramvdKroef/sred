@@ -1,4 +1,4 @@
-import { api, apiUpload, $, esc, cents, currentWeek, weekBars, chartHtml } from './api.js';
+import { api, apiUpload, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml } from './api.js';
 
 const state = {
   me: null,
@@ -8,6 +8,7 @@ const state = {
   labour: [],
   expenses: [],
   evidence: [],
+  activity: [],
 };
 
 export async function renderEmployee(ctx) {
@@ -46,16 +47,18 @@ const tabBtn = (key, label) =>
   `<button data-tab="${key}" class="${state.tab === key ? 'active' : ''}">${esc(label)}</button>`;
 
 async function reload() {
-  const [projects, labour, expenses, evidence] = await Promise.all([
+  const [projects, labour, expenses, evidence, activity] = await Promise.all([
     api('GET', '/api/me/projects'),
     api('GET', '/api/labour'),
     api('GET', '/api/expenses'),
     api('GET', '/api/evidence'),
+    api('GET', '/api/activity?limit=15'),
   ]);
   state.projects = projects.items;
   state.labour = labour.items;
   state.expenses = expenses.items;
   state.evidence = evidence.items;
+  state.activity = activity.items;
   render();
 }
 
@@ -93,6 +96,10 @@ function renderOverview() {
       </div>
       ${chartHtml(bars)}
       <p class="muted" style="margin-top:0.75rem">Use “Log labour” to add to today, or jump to “My activity” to review history.</p>
+    </div>
+    <div class="card">
+      <h2>Recent activity</h2>
+      ${activityHtml(state.activity, { showActor: false })}
     </div>
   `;
 }

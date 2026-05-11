@@ -73,6 +73,46 @@ export function weekBars(entries, days) {
   }));
 }
 
+export function activityHtml(items, { showActor = true } = {}) {
+  if (!items.length) return '<p class="empty">No activity yet.</p>';
+  return `<table class="activity">
+    <thead><tr>
+      <th>When</th><th>Type</th>${showActor ? '<th>Who</th>' : ''}<th>Project</th><th>Details</th>
+    </tr></thead>
+    <tbody>${items.map(it => activityRow(it, showActor)).join('')}</tbody>
+  </table>`;
+}
+
+function activityRow(it, showActor) {
+  const when = String(it.created_at).slice(0, 16).replace('T', ' ');
+  const typePill = `<span class="pill type-${it.type}">${it.type}</span>`;
+  const actor = showActor ? `<td>${esc(it.actor_name)}</td>` : '';
+  return `<tr>
+    <td class="when">${esc(when)}</td>
+    <td>${typePill}</td>
+    ${actor}
+    <td>${esc(it.project_title)}</td>
+    <td>${activityDetails(it)}</td>
+  </tr>`;
+}
+
+function activityDetails(it) {
+  if (it.type === 'labour') {
+    return `<strong>${it.hours}h</strong> — ${esc(it.description)} `
+      + `<span class="pill ${it.status}">${esc(it.status)}</span>`;
+  }
+  if (it.type === 'expense') {
+    const fx = it.fx_rate ? ` @ ${it.fx_rate}` : '';
+    return `<strong>${cents(it.amount_cents)} ${esc(it.currency)}${fx}</strong> `
+      + `<span class="pill type-${it.type}">${esc(it.category)}</span> — ${esc(it.description)} `
+      + `<span class="pill ${it.status}">${esc(it.status)}</span>`;
+  }
+  if (it.type === 'evidence') {
+    return `<strong>${esc(it.evidence_kind)}</strong> — ${esc(it.caption)}`;
+  }
+  return '';
+}
+
 export function chartHtml(bars) {
   return `
     <div class="chart">

@@ -445,3 +445,17 @@ Can you add fixtures for labour/expense/evidence to the projects?
 Yes.
 ~~~
 
+
+## Prompt
+
+~~~
+Add a table to the Overview page with the recent activity.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

@@ -117,6 +117,58 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user, attachments });
 });
 
+router.get('/activity', requireAuth, (req, res) => {
+  const limit = Math.min(Number(req.query.limit || 20), 100);
+  const isAdmin = req.user.role === 'admin';
+  const userFilter = isAdmin ? '' : 'AND uc.user_id = ?';
+  const userParam = isAdmin ? [] : [req.user.id];
+  const evFilter = isAdmin ? '' : 'AND ei.uploaded_by_user_id = ?';
+  const evParam = isAdmin ? [] : [req.user.id];
+
+  const labour = db.prepare(`
+    SELECT 'labour' AS type, le.id, le.created_at, le.work_date AS event_date,
+           le.project_id, p.title AS project_title,
+           le.hours, le.description, le.status,
+           u.name AS actor_name
+      FROM labour_entries le
+      JOIN user_claimants uc ON uc.id = le.user_claimant_id
+      JOIN users u           ON u.id  = uc.user_id
+      JOIN projects p        ON p.id  = le.project_id
+     WHERE 1=1 ${userFilter}
+     ORDER BY le.created_at DESC LIMIT ?
+  `).all(...userParam, limit);
+
+  const expenses = db.prepare(`
+    SELECT 'expense' AS type, e.id, e.created_at, e.expense_date AS event_date,
+           e.project_id, p.title AS project_title,
+           e.amount_cents, e.currency, e.fx_rate, e.category, e.description, e.status,
+           u.name AS actor_name
+      FROM expenses e
+      JOIN user_claimants uc ON uc.id = e.user_claimant_id
+      JOIN users u           ON u.id  = uc.user_id
+      JOIN projects p        ON p.id  = e.project_id
+     WHERE 1=1 ${userFilter}
+     ORDER BY e.created_at DESC LIMIT ?
+  `).all(...userParam, limit);
+
+  const evidence = db.prepare(`
+    SELECT 'evidence' AS type, ei.id, ei.created_at, ei.evidence_date AS event_date,
+           ei.project_id, p.title AS project_title,
+           ei.kind AS evidence_kind, ei.caption,
+           u.name AS actor_name
+      FROM evidence_items ei
+      JOIN users u    ON u.id = ei.uploaded_by_user_id
+      JOIN projects p ON p.id = ei.project_id
+     WHERE 1=1 ${evFilter}
+     ORDER BY ei.created_at DESC LIMIT ?
+  `).all(...evParam, limit);
+
+  const items = [...labour, ...expenses, ...evidence]
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .slice(0, limit);
+  res.json({ items });
+});
+
 router.get('/me/projects', requireAuth, (req, res) => {
   const items = db.prepare(`
     SELECT p.*, uc.id AS user_claimant_id, uc.claimant_id, c.legal_name AS claimant_name
