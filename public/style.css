@@ -295,6 +295,8 @@ td.actions { white-space: nowrap; }
 .pill.phase-development{ background: #d9e8ff;           color: #1a3a8a;       border: 1px solid #b6cdef; }
 .pill.phase-complete   { background: #d9efe1;           color: #1c6a3e;       border: 1px solid #b6dec5; }
 
+.pill.overtime { background: #ffe4cc; color: #8a4400; border: 1px solid #f5c79b; }
+
 table.activity td.when {
   white-space: nowrap;
   color: var(--text-muted);

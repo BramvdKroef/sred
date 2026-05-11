@@ -151,7 +151,7 @@ router.get('/activity', requireAuth, (req, res) => {
   const labour = db.prepare(`
     SELECT 'labour' AS type, le.id, le.created_at, le.work_date AS event_date,
            le.project_id, p.title AS project_title,
-           le.hours, le.description, le.status,
+           le.hours, le.description, le.status, le.is_overtime,
            u.name AS actor_name
       FROM labour_entries le
       JOIN user_claimants uc ON uc.id = le.user_claimant_id

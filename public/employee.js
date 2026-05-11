@@ -143,7 +143,7 @@ function renderActivity() {
           <tr>
             <td>${esc(e.work_date)}</td>
             <td>${esc(projTitle(e.project_id))}</td>
-            <td>${e.hours}</td>
+            <td>${e.hours}${e.is_overtime ? ' <span class="pill overtime">OT</span>' : ''}</td>
             <td>${esc(e.description)}</td>
             <td><span class="pill ${e.status}">${esc(e.status)}</span>${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
           </tr>`).join('')}
@@ -204,6 +204,7 @@ function renderLabourForm() {
         <div><label>Project</label>${projectSelect()}</div>
         <div><label>Date</label><input type="date" name="work_date" required></div>
         <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" required></div>
+        <div><label>&nbsp;</label><label style="display:flex; align-items:center; gap:0.4rem; font-size:0.92rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_overtime" style="width:auto"> Overtime</label></div>
         <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
       </div>
       <div class="actions"><button>Save</button></div>
@@ -273,6 +274,7 @@ function bind() {
       work_date: fd.get('work_date'),
       hours: Number(fd.get('hours')),
       description: fd.get('description'),
+      is_overtime: fd.get('is_overtime') === 'on',
     });
     state.tab = 'activity'; await reload();
   });

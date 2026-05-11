@@ -157,7 +157,8 @@ function activityRow(it, showActor) {
 
 function activityDetails(it) {
   if (it.type === 'labour') {
-    return `<strong>${it.hours}h</strong> — ${esc(it.description)} `
+    const ot = it.is_overtime ? ' <span class="pill overtime">OT</span>' : '';
+    return `<strong>${it.hours}h</strong>${ot} — ${esc(it.description)} `
       + `<span class="pill ${it.status}">${esc(it.status)}</span>`;
   }
   if (it.type === 'expense') {

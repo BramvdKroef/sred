@@ -104,12 +104,14 @@ router.get('/', (req, res, next) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { project_id, work_date, hours, description, user_claimant_id } = req.body ?? {};
+    const { project_id, work_date, hours, description, user_claimant_id, is_overtime } = req.body ?? {};
     if (!Number.isInteger(project_id)) throw badRequest('project_id required');
     if (!work_date) throw badRequest('work_date required');
     if (typeof hours !== 'number' || hours <= 0 || hours > 24)
       throw badRequest('hours must be a number in (0, 24]');
     if (!description || typeof description !== 'string') throw badRequest('description required');
+    if (is_overtime !== undefined && typeof is_overtime !== 'boolean')
+      throw badRequest('is_overtime must be boolean');
 
     const project = getProjectOrThrow(project_id);
     const uc = resolveUserClaimant({ user: req.user, project, requestedUcId: user_claimant_id });
@@ -117,9 +119,9 @@ router.post('/', (req, res, next) => {
 
     const info = db.prepare(`
       INSERT INTO labour_entries
-        (project_id, user_claimant_id, fiscal_period_id, work_date, hours, description)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(project.id, uc.id, period.id, work_date, hours, description);
+        (project_id, user_claimant_id, fiscal_period_id, work_date, hours, description, is_overtime)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(project.id, uc.id, period.id, work_date, hours, description, is_overtime ? 1 : 0);
 
     const entry = getEntryOrThrow(info.lastInsertRowid);
     audit(req.user.id, 'create', 'labour_entry', entry.id, undefined, entry);
@@ -141,7 +143,7 @@ router.patch('/:id', (req, res, next) => {
     if (!canSeeEntry(req.user, before)) throw forbidden();
     assertEditable(before);
 
-    const { work_date, hours, description } = req.body ?? {};
+    const { work_date, hours, description, is_overtime } = req.body ?? {};
     const updates = {};
     if (work_date !== undefined) updates.work_date = work_date;
     if (hours !== undefined) {
@@ -152,6 +154,10 @@ router.patch('/:id', (req, res, next) => {
     if (description !== undefined) {
       if (!description) throw badRequest('description cannot be empty');
       updates.description = description;
+    }
+    if (is_overtime !== undefined) {
+      if (typeof is_overtime !== 'boolean') throw badRequest('is_overtime must be boolean');
+      updates.is_overtime = is_overtime ? 1 : 0;
     }
 
     const keys = Object.keys(updates);
