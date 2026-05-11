@@ -18,7 +18,13 @@ export async function renderEmployee(ctx) {
   await reload();
 }
 
+const ALLOWED_TABS = ['overview', 'activity', 'labour', 'evidence', 'expense'];
+
 function shell() {
+  const initial = location.hash.slice(1);
+  if (ALLOWED_TABS.includes(initial)) state.tab = initial;
+  else location.hash = state.tab;
+
   $('#app').innerHTML = `
     <header>
       <h1>Precision <strong>SR&amp;ED</strong></h1>
@@ -39,8 +45,17 @@ function shell() {
   `;
   $('#signout').addEventListener('click', state.signOut);
   document.querySelectorAll('nav.tabs button').forEach(b => {
-    b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); });
+    b.addEventListener('click', () => { location.hash = b.dataset.tab; });
   });
+  window.addEventListener('hashchange', onHashChange);
+}
+
+function onHashChange() {
+  const tab = location.hash.slice(1);
+  if (ALLOWED_TABS.includes(tab) && tab !== state.tab) {
+    state.tab = tab;
+    render();
+  }
 }
 
 const tabBtn = (key, label) =>

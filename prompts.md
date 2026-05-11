@@ -515,3 +515,17 @@ On the Employees tab, sort by status with pending first.
 commit it.
 ~~~
 
+
+## Prompt
+
+~~~
+Update the location when I click on a tab so that when I refresh I stay on the same tab.
+~~~
+
+
+## Prompt
+
+~~~
+commit it, and then also persist the open project.
+~~~
+
