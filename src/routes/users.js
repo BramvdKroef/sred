@@ -169,6 +169,41 @@ router.patch('/:id', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.post('/:id/deactivate', (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    const before = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
+    if (!before) throw notFound('user not found');
+    if (before.id === req.user.id) throw badRequest("you can't deactivate your own account");
+    if (before.status === 'disabled') return res.json(before);
+
+    const tx = db.transaction(() => {
+      db.prepare(`UPDATE users SET status = 'disabled' WHERE id = ?`).run(userId);
+      db.prepare(`UPDATE user_claimants SET status = 'inactive' WHERE user_id = ?`).run(userId);
+    });
+    tx();
+
+    const after = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
+    audit(req.user.id, 'deactivate', 'user', userId, before, after);
+    res.json(after);
+  } catch (e) { next(e); }
+});
+
+router.post('/:id/reactivate', (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    const before = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
+    if (!before) throw notFound('user not found');
+    if (before.status === 'active') return res.json(before);
+
+    db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).run(userId);
+
+    const after = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
+    audit(req.user.id, 'reactivate', 'user', userId, before, after);
+    res.json(after);
+  } catch (e) { next(e); }
+});
+
 router.post('/:id/invite', (req, res, next) => {
   try {
     const userId = Number(req.params.id);

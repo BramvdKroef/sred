@@ -403,3 +403,17 @@ The help text says "Use “Enroll” in the table below" while the button says "
 commit it.
 ~~~
 
+
+## Prompt
+
+~~~
+We also need to be able to deactivate an employee.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

@@ -279,8 +279,11 @@ function redrawAllUsers() {
           <td><span class="pill ${u.status === 'active' ? 'open' : (u.status === 'pending' ? 'pending' : 'closed')}">${esc(u.status)}</span></td>
           <td class="actions">
             ${u.status === 'disabled'
-              ? '<span class="muted">—</span>'
-              : `<button class="small secondary" data-enroll="${u.id}">${u.status === 'pending' ? 'Send invite' : 'Add device'}</button>`}
+              ? `<button class="small secondary" data-act-user="reactivate" data-id="${u.id}">Reactivate</button>`
+              : `<button class="small secondary" data-enroll="${u.id}">${u.status === 'pending' ? 'Send invite' : 'Add device'}</button>
+                 ${u.id === state.me.user.id
+                   ? ''
+                   : `<button class="small danger" data-act-user="deactivate" data-id="${u.id}" data-name="${esc(u.name)}">Deactivate</button>`}`}
           </td>
         </tr>`).join('')}
       </tbody>
@@ -292,6 +295,28 @@ function redrawAllUsers() {
       try {
         const r = await api('POST', `/api/users/${id}/invite`);
         alert(`Magic link (also emailed):\n\n${r.magic_link}\n\nPurpose: ${r.purpose}\nExpires: ${r.expires_at}`);
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+  el.querySelectorAll('[data-act-user]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const act = btn.dataset.actUser;
+      if (act === 'deactivate') {
+        const name = btn.dataset.name || 'this user';
+        if (!confirm(`Deactivate ${name}? They will be blocked from signing in and removed from all claimant rosters. Historical labour/expense/evidence rows remain.`)) return;
+      }
+      btn.disabled = true;
+      try {
+        await api('POST', `/api/users/${id}/${act}`);
+        allUsers = (await api('GET', '/api/users')).items;
+        redrawAllUsers();
+        // Also refresh the per-claimant attached-users panel if visible.
+        if (state.tab === 'users') await reloadAll();
       } catch (e) {
         alert(e.message);
       } finally {
