@@ -20,7 +20,7 @@ async function main() {
 function renderLogin() {
   $('#app').innerHTML = `
     <div class="card center">
-      <h1>SR&amp;ED Tracker</h1>
+      <h1>Precision <strong>SR&amp;ED</strong></h1>
       <p class="muted">Sign in with your passkey.</p>
       <label for="email">Email</label>
       <input id="email" type="email" autocomplete="username webauthn" style="width: 100%">
@@ -69,8 +69,8 @@ async function requestRecovery() {
 function renderEnroll(token) {
   $('#app').innerHTML = `
     <div class="card center">
-      <h1>Welcome</h1>
-      <p>Set up your passkey to access the SR&amp;ED tracker.</p>
+      <h1>Welcome to Precision <strong>SR&amp;ED</strong></h1>
+      <p class="muted">Set up your passkey to access the tracker.</p>
       <p class="actions"><button id="enroll-btn">Set up passkey</button></p>
       <p class="error" id="enroll-error"></p>
     </div>

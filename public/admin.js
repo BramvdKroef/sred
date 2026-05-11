@@ -24,9 +24,10 @@ export function renderAdmin(ctx) {
 function shell() {
   $('#app').innerHTML = `
     <header>
-      <h1>SR&amp;ED Tracker — admin</h1>
+      <h1>Precision <strong>SR&amp;ED</strong></h1>
       <div class="user">
-        ${esc(state.me.user.name)} (${esc(state.me.user.email)})
+        <strong>${esc(state.me.user.name)}</strong>
+        <span class="role">admin</span>
         <button class="secondary small" id="signout">Sign out</button>
       </div>
     </header>

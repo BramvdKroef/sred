@@ -327,3 +327,24 @@ The first thing a user sees after logging in is an overview of the activity of t
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can you look up Extreme Technology Corporation from Ontario, Canada and come up with a ui style that fits their brand?
+~~~
+
+
+## Prompt
+
+~~~
+Apply it, but the title should be "Precision SR&ED"
+~~~
+
+
+## Prompt
+
+~~~
+commit it. We definately need more visual punch. Anything you can do to make the page stand out more would be great.
+~~~
+
