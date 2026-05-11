@@ -54,7 +54,17 @@ function loadUserBundle(userId) {
        ORDER BY effective_from DESC, id DESC
     `).all(a.id);
   }
-  return { ...user, attachments };
+  const projects = db.prepare(`
+    SELECT DISTINCT p.id, p.title, p.claimant_id, c.legal_name AS claimant_name,
+           p.type, p.phase, p.status
+      FROM projects p
+      JOIN project_assignments pa ON pa.project_id = p.id AND pa.status = 'active'
+      JOIN user_claimants uc      ON uc.id = pa.user_claimant_id AND uc.status = 'active'
+      JOIN claimants c            ON c.id = p.claimant_id
+     WHERE uc.user_id = ?
+     ORDER BY p.title
+  `).all(userId);
+  return { ...user, attachments, projects };
 }
 
 function insertAttachment(userId, a, actorUserId) {

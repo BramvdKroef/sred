@@ -16,6 +16,7 @@ const state = {
   pendingExpenses: [],
   exports: [],
   viewingProjectId: null,
+  viewingUserId: null,
 };
 
 export function renderAdmin(ctx) {
@@ -33,15 +34,21 @@ const PHASE_LABEL = { concept: 'Concept', development: 'Development', complete: 
 function parseHash() {
   const raw = location.hash.slice(1);
   const [tab, ...rest] = raw.split('/');
-  const projectId = rest[0] ? Number(rest[0]) : null;
-  return { tab, projectId: Number.isInteger(projectId) ? projectId : null };
+  const id = rest[0] ? Number(rest[0]) : null;
+  const numId = Number.isInteger(id) ? id : null;
+  return {
+    tab,
+    projectId: tab === 'claimants' ? numId : null,
+    userId:    tab === 'users'     ? numId : null,
+  };
 }
 
 function shell() {
-  const { tab, projectId } = parseHash();
+  const { tab, projectId, userId } = parseHash();
   if (ALLOWED_TABS.includes(tab)) {
     state.tab = tab;
     state.viewingProjectId = (tab === 'claimants') ? projectId : null;
+    state.viewingUserId    = (tab === 'users')     ? userId    : null;
   } else {
     location.hash = state.tab;   // canonicalize URL to match the default
   }
@@ -135,12 +142,14 @@ async function selectProject({ id, claimant_id }) {
 }
 
 function onHashChange() {
-  const { tab, projectId } = parseHash();
+  const { tab, projectId, userId } = parseHash();
   if (!ALLOWED_TABS.includes(tab)) return;
   const nextProject = (tab === 'claimants') ? projectId : null;
-  if (tab === state.tab && nextProject === state.viewingProjectId) return;
+  const nextUser    = (tab === 'users')     ? userId    : null;
+  if (tab === state.tab && nextProject === state.viewingProjectId && nextUser === state.viewingUserId) return;
   state.tab = tab;
   state.viewingProjectId = nextProject;
+  state.viewingUserId    = nextUser;
   render();
 }
 
@@ -168,6 +177,7 @@ function render() {
   const main = $('#main');
   if (state.tab === 'overview') return renderOverviewTab(main);
   if (state.tab === 'claimants' && state.viewingProjectId) return renderProjectDetail(main);
+  if (state.tab === 'users' && state.viewingUserId) return renderUserDetail(main);
   if (state.tab === 'claimants') main.innerHTML = renderClaimantsTab();
   else if (state.tab === 'users') main.innerHTML = renderUsersTab();
   else if (state.tab === 'review') return renderReviewTab(main);
@@ -613,6 +623,88 @@ function bindUserEditForm(bundle, row) {
       row.querySelector('td').innerHTML = renderUserEditForm(fresh);
       bindUserEditForm(fresh, row);
     } catch (err) { alert(err.message); }
+  });
+}
+
+// --- User detail subview ---------------------------------------------------
+
+async function renderUserDetail(main) {
+  main.innerHTML = '<p class="empty">Loading employee…</p>';
+  const userId = state.viewingUserId;
+  const [bundle, activity] = await Promise.all([
+    api('GET', `/api/users/${userId}`),
+    api('GET', `/api/activity?user_id=${userId}&limit=25`),
+  ]);
+  const statusPillClass = bundle.status === 'active' ? 'open' : bundle.status === 'pending' ? 'pending' : 'closed';
+  main.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2>
+          <a href="#users" class="muted" style="text-decoration:none">← Employees</a>
+          &nbsp;/&nbsp; ${esc(bundle.name)}
+        </h2>
+        <div class="row" style="gap:0.4rem">
+          <span class="role">${esc(bundle.role)}</span>
+          <span class="pill ${statusPillClass}">${esc(bundle.status)}</span>
+        </div>
+      </div>
+      <div class="row" style="gap:1rem; color: var(--text-muted); font-size: 0.9rem">
+        <span><strong style="color:var(--text)">${esc(bundle.email)}</strong></span>
+        <span>Created ${esc(bundle.created_at)}</span>
+        <span>${bundle.attachments.length} attachment${bundle.attachments.length === 1 ? '' : 's'}</span>
+        <span>${bundle.projects.length} active project${bundle.projects.length === 1 ? '' : 's'}</span>
+      </div>
+    </div>
+
+    <div class="card compact">
+      <h2>Claimant attachments</h2>
+      ${bundle.attachments.length === 0
+        ? '<p class="empty">Not attached to any claimant.</p>'
+        : `<table>
+            <thead><tr><th>Claimant</th><th>Title</th><th>Specified</th><th>Status</th><th>Latest compensation</th></tr></thead>
+            <tbody>${bundle.attachments.map(a => {
+              const latest = (a.compensation_history ?? [])[0];
+              const compStr = latest
+                ? `${cents(latest.amount_cents)} ${latest.comp_type === 'salary' ? '/yr' : '/hr'}  <span class="muted">from ${esc(latest.effective_from)}</span>`
+                : '<span class="muted">none</span>';
+              return `<tr>
+                <td>${esc(a.claimant_name)}</td>
+                <td>${esc(a.title ?? '—')}</td>
+                <td>${a.is_specified_employee ? '✓' : ''}</td>
+                <td><span class="pill ${a.status === 'active' ? 'open' : 'closed'}">${esc(a.status)}</span></td>
+                <td>${compStr}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>`}
+    </div>
+
+    <div class="card compact">
+      <h2>Active project assignments (${bundle.projects.length})</h2>
+      ${bundle.projects.length === 0
+        ? '<p class="empty">Not assigned to any active projects.</p>'
+        : `<table class="rows-clickable">
+            <thead><tr><th>Project</th><th>Claimant</th><th>Type</th><th>Phase</th><th>Status</th></tr></thead>
+            <tbody>${bundle.projects.map(p => `
+              <tr data-open-project="${p.id}" data-cid="${p.claimant_id}">
+                <td><strong>${esc(p.title)}</strong></td>
+                <td>${esc(p.claimant_name)}</td>
+                <td><span class="pill kind-${esc(p.type)}">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></td>
+                <td><span class="pill phase-${esc(p.phase)}">${esc(PHASE_LABEL[p.phase] ?? p.phase)}</span></td>
+                <td><span class="pill">${esc(p.status)}</span></td>
+              </tr>`).join('')}</tbody>
+          </table>`}
+    </div>
+
+    <div class="card">
+      <h2>Recent activity</h2>
+      ${activityHtml(activity.items, { showActor: false, showProject: true, showOpen: true })}
+    </div>
+  `;
+  wireActivityDetails(main);
+  document.querySelectorAll('[data-open-project]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      selectProject({ id: Number(tr.dataset.openProject), claimant_id: Number(tr.dataset.cid) });
+    });
   });
 }
 
@@ -1108,7 +1200,7 @@ function redrawAllUsers() {
         <tr>
           <td>${u.id}</td>
           <td>${esc(u.email)}</td>
-          <td>${esc(u.name)}</td>
+          <td><a href="#users/${u.id}"><strong>${esc(u.name)}</strong></a></td>
           <td>${esc(u.role)}</td>
           <td><span class="pill ${u.status === 'active' ? 'open' : (u.status === 'pending' ? 'pending' : 'closed')}">${esc(u.status)}</span></td>
           <td class="actions">

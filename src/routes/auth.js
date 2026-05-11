@@ -138,11 +138,15 @@ router.get('/activity', requireAuth, (req, res) => {
   const limit = Math.min(Number(req.query.limit || 20), 100);
   const projectId = req.query.project_id ? Number(req.query.project_id) : null;
   const isAdmin = req.user.role === 'admin';
+  // Admins can scope to a specific user; employees are auto-scoped to themselves.
+  const targetUserId = isAdmin
+    ? (req.query.user_id ? Number(req.query.user_id) : null)
+    : req.user.id;
 
-  const userFilter    = isAdmin   ? '' : 'AND uc.user_id = ?';
-  const userParam     = isAdmin   ? [] : [req.user.id];
-  const evUserFilter  = isAdmin   ? '' : 'AND ei.uploaded_by_user_id = ?';
-  const evUserParam   = isAdmin   ? [] : [req.user.id];
+  const userFilter    = targetUserId ? 'AND uc.user_id = ?' : '';
+  const userParam     = targetUserId ? [targetUserId] : [];
+  const evUserFilter  = targetUserId ? 'AND ei.uploaded_by_user_id = ?' : '';
+  const evUserParam   = targetUserId ? [targetUserId] : [];
   const projFilterLE  = projectId ? 'AND le.project_id = ?' : '';
   const projFilterEX  = projectId ? 'AND e.project_id = ?'  : '';
   const projFilterEV  = projectId ? 'AND ei.project_id = ?' : '';
