@@ -676,3 +676,17 @@ I would like for admins to be able to edit claimant details.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+If we know the fiscal year end could we prefill the date fields in the Add fiscal period form?
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

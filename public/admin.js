@@ -184,14 +184,18 @@ function renderClaimantsTab() {
           ${state.claimantId ? '<button id="new-period-toggle" class="secondary small">＋ Add</button>' : ''}
         </div>
         ${state.claimantId
-          ? renderPeriodsTable() + `
+          ? renderPeriodsTable() + (() => {
+              const c = state.claimants.find(c => c.id === state.claimantId);
+              const { start, end } = suggestPeriodDates(c, state.periods);
+              return `
               <div id="new-period-form" hidden style="margin-top: 0.6rem">
                 <form id="period-form" class="row">
-                  <input type="date" name="start_date" required>
-                  <input type="date" name="end_date" required>
+                  <input type="date" name="start_date" required value="${start}">
+                  <input type="date" name="end_date" required value="${end}">
                   <button class="small">Add period</button>
                 </form>
-              </div>`
+              </div>`;
+            })()
           : '<p class="empty">Pick a claimant.</p>'}
       </div>
     </div>
@@ -378,6 +382,26 @@ async function renderProjectDetail(main) {
   });
   bindEditProjectForm(project);
   bindLogOnBehalfForms(project);
+}
+
+// Smart defaults for the "Add period" form. If the claimant already has
+// periods, suggest the next one in sequence (start = last_end + 1 day,
+// end = +1 year). Otherwise use the next fiscal-year-end on or after today.
+function suggestPeriodDates(claimant, periods) {
+  if (!claimant) return { start: '', end: '' };
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  if (periods && periods.length) {
+    const latest = periods.reduce((a, b) => (a.end_date > b.end_date ? a : b));
+    const prev = new Date(latest.end_date + 'T12:00:00');
+    const start = new Date(prev); start.setDate(start.getDate() + 1);
+    const end   = new Date(start); end.setFullYear(end.getFullYear() + 1); end.setDate(end.getDate() - 1);
+    return { start: fmt(start), end: fmt(end) };
+  }
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  let end = new Date(today.getFullYear(), claimant.fiscal_year_end_month - 1, claimant.fiscal_year_end_day);
+  if (end < today) end = new Date(today.getFullYear() + 1, claimant.fiscal_year_end_month - 1, claimant.fiscal_year_end_day);
+  const start = new Date(end); start.setFullYear(start.getFullYear() - 1); start.setDate(start.getDate() + 1);
+  return { start: fmt(start), end: fmt(end) };
 }
 
 function renderEditClaimantForm(c) {
