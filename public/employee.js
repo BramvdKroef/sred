@@ -1,4 +1,5 @@
-import { api, apiUpload, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml } from './api.js';
+import { api, apiUpload, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
+         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle } from './api.js';
 
 const state = {
   me: null,
@@ -259,7 +260,22 @@ function renderLabourForm() {
         <div><label>&nbsp;</label><label style="display:flex; align-items:center; gap:0.4rem; font-size:0.92rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_overtime" style="width:auto"> Overtime</label></div>
         <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
       </div>
-      <div class="actions"><button>Save</button></div>
+      <details class="attach-block" style="margin-top:0.6rem">
+        <summary style="cursor:pointer; font-size:0.9rem; color:var(--brand); font-weight:600">＋ Attach evidence (optional)</summary>
+        <div class="grid" style="margin-top:0.6rem">
+          <div><label>Kind</label>
+            <select name="ev_kind" class="ev-kind">
+              <option value="">— none —</option>
+              <option value="file">File</option>
+              <option value="link">Link</option>
+            </select>
+          </div>
+          <div style="flex:1"><label>Caption</label><input name="ev_caption" placeholder="What this evidence shows"></div>
+          <div class="full ev-file" hidden><label>File</label><input type="file" name="ev_file"></div>
+          <div class="full ev-url"  hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
+        </div>
+      </details>
+      <div class="actions" style="margin-top:0.8rem"><button>Save</button></div>
     </form>
   </div>`;
 }
@@ -312,7 +328,14 @@ function renderExpenseForm() {
         <div><label>FX rate (if not reporting currency)</label><input type="number" step="0.0001" name="fx_rate"></div>
         <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
       </div>
-      <div class="actions"><button>Save</button></div>
+      <details class="attach-block" style="margin-top:0.6rem" open>
+        <summary style="cursor:pointer; font-size:0.9rem; color:var(--brand); font-weight:600">＋ Attach receipt (optional, strongly encouraged)</summary>
+        <div class="grid" style="margin-top:0.6rem">
+          <div style="flex:1"><label>Caption</label><input name="receipt_caption" placeholder="e.g. Invoice #INV-2026-0312"></div>
+          <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
+        </div>
+      </details>
+      <div class="actions" style="margin-top:0.8rem"><button>Save</button></div>
     </form>
   </div>`;
 }
@@ -321,13 +344,14 @@ function renderExpenseForm() {
 
 function bind() {
   bindForm('#labour-form', async fd => {
-    await api('POST', '/api/labour', {
+    const entry = await api('POST', '/api/labour', {
       project_id: Number(fd.get('project_id')),
       work_date: fd.get('work_date'),
       hours: Number(fd.get('hours')),
       description: fd.get('description'),
       is_overtime: fd.get('is_overtime') === 'on',
     });
+    await attachInlineEvidence(fd, { project_id: entry.project_id, labour_entry_id: entry.id, evidence_date: entry.work_date });
     state.tab = 'activity'; await reload();
   });
 
@@ -342,9 +366,13 @@ function bind() {
     };
     const fx = fd.get('fx_rate');
     if (fx) body.fx_rate = Number(fx);
-    await api('POST', '/api/expenses', body);
+    const entry = await api('POST', '/api/expenses', body);
+    await attachInlineReceipt(fd, { project_id: entry.project_id, expense_id: entry.id, evidence_date: entry.expense_date });
     state.tab = 'activity'; await reload();
   });
+
+  // ev_kind change toggles file vs url input on each form that has the section.
+  document.querySelectorAll('form').forEach(bindEvidenceKindToggle);
 
   const evKind = document.getElementById('ev-kind');
   if (evKind) evKind.addEventListener('change', () => {

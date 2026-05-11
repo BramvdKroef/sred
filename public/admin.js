@@ -1,4 +1,5 @@
-import { api, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml } from './api.js';
+import { api, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
+         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle } from './api.js';
 
 const state = {
   me: null,
@@ -802,7 +803,22 @@ function renderLogOnBehalfCards(project, claimant) {
               <div><label>&nbsp;</label><label style="display:flex; align-items:center; gap:0.4rem; font-size:0.92rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_overtime" style="width:auto"> Overtime</label></div>
               <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
             </div>
-            <div class="actions"><button class="small">Save labour</button></div>
+            <details style="margin-top:0.5rem">
+              <summary style="cursor:pointer; font-size:0.85rem; color:var(--brand); font-weight:600">＋ Attach evidence (optional)</summary>
+              <div class="grid" style="margin-top:0.5rem">
+                <div><label>Kind</label>
+                  <select name="ev_kind" class="ev-kind">
+                    <option value="">— none —</option>
+                    <option value="file">File</option>
+                    <option value="link">Link</option>
+                  </select>
+                </div>
+                <div style="flex:1"><label>Caption</label><input name="ev_caption"></div>
+                <div class="full ev-file" hidden><label>File</label><input type="file" name="ev_file"></div>
+                <div class="full ev-url"  hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
+              </div>
+            </details>
+            <div class="actions" style="margin-top:0.6rem"><button class="small">Save labour</button></div>
           </form>
         </div>
       </div>
@@ -831,7 +847,14 @@ function renderLogOnBehalfCards(project, claimant) {
               <div><label>FX rate (if not ${esc(reportingCcy)})</label><input type="number" step="0.0001" name="fx_rate"></div>
               <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
             </div>
-            <div class="actions"><button class="small">Save expense</button></div>
+            <details style="margin-top:0.5rem" open>
+              <summary style="cursor:pointer; font-size:0.85rem; color:var(--brand); font-weight:600">＋ Attach receipt (optional, strongly encouraged)</summary>
+              <div class="grid" style="margin-top:0.5rem">
+                <div style="flex:1"><label>Caption</label><input name="receipt_caption" placeholder="e.g. Invoice #INV-..."></div>
+                <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
+              </div>
+            </details>
+            <div class="actions" style="margin-top:0.6rem"><button class="small">Save expense</button></div>
           </form>
         </div>
       </div>
@@ -848,21 +871,25 @@ function bindLogOnBehalfForms(project) {
   if (eTog && eForm) eTog.addEventListener('click', () => { eForm.hidden = !eForm.hidden; });
 
   const labourFormEl = document.getElementById('form-behalf-labour');
-  if (labourFormEl) labourFormEl.addEventListener('submit', async e => {
-    e.preventDefault();
-    const fd = new FormData(labourFormEl);
-    try {
-      await api('POST', '/api/labour', {
-        project_id: project.id,
-        user_claimant_id: Number(fd.get('user_claimant_id')),
-        work_date: fd.get('work_date'),
-        hours: Number(fd.get('hours')),
-        description: fd.get('description'),
-        is_overtime: fd.get('is_overtime') === 'on',
-      });
-      render();   // re-fetch project detail
-    } catch (err) { alert(err.message); }
-  });
+  if (labourFormEl) {
+    bindEvidenceKindToggle(labourFormEl);
+    labourFormEl.addEventListener('submit', async e => {
+      e.preventDefault();
+      const fd = new FormData(labourFormEl);
+      try {
+        const entry = await api('POST', '/api/labour', {
+          project_id: project.id,
+          user_claimant_id: Number(fd.get('user_claimant_id')),
+          work_date: fd.get('work_date'),
+          hours: Number(fd.get('hours')),
+          description: fd.get('description'),
+          is_overtime: fd.get('is_overtime') === 'on',
+        });
+        await attachInlineEvidence(fd, { project_id: entry.project_id, labour_entry_id: entry.id, evidence_date: entry.work_date });
+        render();
+      } catch (err) { alert(err.message); }
+    });
+  }
 
   const expenseFormEl = document.getElementById('form-behalf-expense');
   if (expenseFormEl) expenseFormEl.addEventListener('submit', async e => {
@@ -880,7 +907,8 @@ function bindLogOnBehalfForms(project) {
     const fx = fd.get('fx_rate');
     if (fx) body.fx_rate = Number(fx);
     try {
-      await api('POST', '/api/expenses', body);
+      const entry = await api('POST', '/api/expenses', body);
+      await attachInlineReceipt(fd, { project_id: entry.project_id, expense_id: entry.id, evidence_date: entry.expense_date });
       render();
     } catch (err) { alert(err.message); }
   });

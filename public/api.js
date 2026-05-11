@@ -86,6 +86,61 @@ export async function apiUpload(path, formData, { _retry = false } = {}) {
   return data;
 }
 
+// After creating a labour entry, attach optional evidence (file or link)
+// from the same form. Reads fd['ev_kind' | 'ev_file' | 'ev_url' | 'ev_caption'].
+export async function attachInlineEvidence(fd, { project_id, labour_entry_id, evidence_date }) {
+  const kind = fd.get('ev_kind');
+  const caption = fd.get('ev_caption');
+  if (kind === 'file') {
+    const file = fd.get('ev_file');
+    if (file && file.size > 0) {
+      const ef = new FormData();
+      ef.append('project_id', String(project_id));
+      ef.append('labour_entry_id', String(labour_entry_id));
+      ef.append('kind', 'file');
+      ef.append('caption', caption || file.name);
+      ef.append('evidence_date', evidence_date);
+      ef.append('file', file);
+      await apiUpload('/api/evidence', ef);
+    }
+  } else if (kind === 'link') {
+    const url = fd.get('ev_url');
+    if (url) {
+      await api('POST', '/api/evidence', {
+        project_id, labour_entry_id, kind: 'link',
+        caption: caption || url, evidence_date, url,
+      });
+    }
+  }
+}
+
+// After creating an expense, attach an optional receipt (always file).
+export async function attachInlineReceipt(fd, { project_id, expense_id, evidence_date }) {
+  const file = fd.get('receipt_file');
+  if (!file || !file.size) return;
+  const caption = fd.get('receipt_caption') || file.name;
+  const ef = new FormData();
+  ef.append('project_id', String(project_id));
+  ef.append('expense_id', String(expense_id));
+  ef.append('kind', 'file');
+  ef.append('caption', caption);
+  ef.append('evidence_date', evidence_date);
+  ef.append('file', file);
+  await apiUpload('/api/evidence', ef);
+}
+
+// Wire the ev-kind toggle on a form (shows file vs url input).
+export function bindEvidenceKindToggle(form) {
+  const sel = form.querySelector('select.ev-kind');
+  if (!sel) return;
+  const update = () => {
+    const f = form.querySelector('.ev-file'); if (f) f.hidden = sel.value !== 'file';
+    const u = form.querySelector('.ev-url');  if (u) u.hidden = sel.value !== 'link';
+  };
+  sel.addEventListener('change', update);
+  update();
+}
+
 // Tiny DOM helpers.
 export const esc = s => s == null ? '' : String(s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
