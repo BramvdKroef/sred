@@ -935,3 +935,17 @@ now split admin.js
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+split employee.js too
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+
