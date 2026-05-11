@@ -70,8 +70,8 @@ export async function finishRegistration({ user, response, label }) {
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(
     user.id,
-    Buffer.from(credential.id),
-    Buffer.from(credential.publicKey),
+    credential.id,                         // base64url string per SimpleWebAuthn v11
+    Buffer.from(credential.publicKey),     // Uint8Array → BLOB
     credential.counter,
     response.response.transports ? JSON.stringify(response.response.transports) : null,
     label ?? null,
@@ -97,9 +97,8 @@ export async function startLogin({ user }) {
 }
 
 export async function finishLogin({ response }) {
-  // Look up credential by id, then verify.
-  const credId = Buffer.from(response.id, 'base64url');
-  const credRow = db.prepare(`SELECT * FROM credentials WHERE credential_id = ?`).get(credId);
+  // Look up credential by base64url id (string) — same shape stored on registration.
+  const credRow = db.prepare(`SELECT * FROM credentials WHERE credential_id = ?`).get(response.id);
   if (!credRow) throw unauthorized('unknown credential');
   const { challenge } = consumeChallenge({ userId: credRow.user_id, kind: 'login' });
   const verification = await verifyAuthenticationResponse({
