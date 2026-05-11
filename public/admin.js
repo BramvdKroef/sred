@@ -35,7 +35,7 @@ function shell() {
     <nav class="tabs">
       ${tabBtn('overview', 'Overview')}
       ${tabBtn('claimants', 'Projects')}
-      ${tabBtn('users', 'Users')}
+      ${tabBtn('users', 'Employees')}
       ${tabBtn('review', 'Review queue')}
       ${tabBtn('exports', 'T661 exports')}
     </nav>
@@ -194,7 +194,7 @@ function renderProjectsAndUsers() {
       </div>
     </div>
     <div class="card compact">
-      <h2>Attached users</h2>
+      <h2>Attached employees</h2>
       ${renderUsersUnderClaimantTable()}
     </div>
   `;
@@ -338,7 +338,7 @@ function renderUsersTab() {
       </form>
     </div>
     <div class="card">
-      <h2>All users</h2>
+      <h2>All employees</h2>
       ${renderAllUsersTable()}
     </div>
   `;

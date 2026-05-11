@@ -494,3 +494,10 @@ commit it. Then can you clean up the New Project form? The fields overlap and th
 commit it. Then rename the "Attached users" section title to "Attached employees", and "All users" to "All employees". And rename the "Users" tab to "Employees".
 ~~~
 
+
+## Prompt
+
+~~~
+commit it.
+~~~
+
