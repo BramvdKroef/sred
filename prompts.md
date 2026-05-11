@@ -417,3 +417,17 @@ We also need to be able to deactivate an employee.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Now the form needs a password manager hint for the email field.
+~~~
+
+
+## Prompt
+
+~~~
+commit it. At this point can you keep the server running and restart it each time you make a change?
+~~~
+

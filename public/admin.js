@@ -236,8 +236,10 @@ function renderUsersTab() {
       <h2>Add employee</h2>
       <form id="add-employee-form">
         <div class="grid">
-          <div><label>Email</label><input name="email" type="email" required></div>
-          <div><label>Name</label><input name="name" required></div>
+          <div><label>Email</label><input name="email" type="email" required
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
+          <div><label>Name</label><input name="name" required
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
           <div><label>Claimant</label><select name="claimant_id">${claimantOpts}</select></div>
           <div><label>Comp type</label>
             <select name="comp_type"><option>salary</option><option>hourly</option></select>
