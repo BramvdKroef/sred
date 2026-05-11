@@ -117,4 +117,17 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user, attachments });
 });
 
+router.get('/me/projects', requireAuth, (req, res) => {
+  const items = db.prepare(`
+    SELECT p.*, uc.id AS user_claimant_id, uc.claimant_id, c.legal_name AS claimant_name
+      FROM projects p
+      JOIN project_assignments pa ON pa.project_id = p.id AND pa.status = 'active'
+      JOIN user_claimants uc ON uc.id = pa.user_claimant_id AND uc.status = 'active'
+      JOIN claimants c ON c.id = uc.claimant_id
+     WHERE uc.user_id = ?
+     ORDER BY p.id
+  `).all(req.user.id);
+  res.json({ items });
+});
+
 export default router;

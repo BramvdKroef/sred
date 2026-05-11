@@ -1,62 +1,108 @@
-// Minimal client glue. WebAuthn ceremony helpers come from @simplewebauthn/browser
-// which is loaded from a CDN here to avoid a bundler in the scaffold.
-import { startRegistration, startAuthentication } from 'https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11/+esm';
+import { startRegistration, startAuthentication }
+  from 'https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11/+esm';
+import { api, getJwt, setJwt, clearJwt, $, esc } from './api.js';
+import { renderAdmin } from './admin.js';
+import { renderEmployee } from './employee.js';
 
-const out = (id, value) => {
-  document.getElementById(id).textContent =
-    typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-};
+window.addEventListener('DOMContentLoaded', main);
 
-document.getElementById('ping').addEventListener('click', async () => {
-  const r = await fetch('/api/health').then(r => r.json());
-  out('health-out', r);
-});
+async function main() {
+  const params = new URLSearchParams(location.search);
+  const enrollToken = params.get('token');
+  if (enrollToken) return renderEnroll(enrollToken);
+  if (getJwt()) {
+    try { return await loadDashboard(); }
+    catch { clearJwt(); }
+  }
+  renderLogin();
+}
 
-// Enrollment path — triggered when the page is opened with ?token=...
-// (Surfaced as a button because WebAuthn ceremonies need a user gesture.)
-const params = new URLSearchParams(location.search);
-const enrollToken = params.get('token');
-if (enrollToken) {
-  const btn = document.createElement('button');
-  btn.textContent = 'Enroll passkey';
-  btn.addEventListener('click', () => enroll(enrollToken).catch(err => out('login-out', String(err))));
-  document.getElementById('login').prepend(btn);
+function renderLogin() {
+  $('#app').innerHTML = `
+    <div class="card center">
+      <h1>SR&amp;ED Tracker</h1>
+      <p class="muted">Sign in with your passkey.</p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username webauthn" style="width: 100%">
+      <p class="actions">
+        <button id="login-btn">Sign in with passkey</button>
+      </p>
+      <p class="error" id="login-error"></p>
+      <p class="muted">
+        <a href="#" id="recover-link">Lost your passkey?</a>
+      </p>
+    </div>
+  `;
+  $('#login-btn').addEventListener('click', login);
+  $('#recover-link').addEventListener('click', e => { e.preventDefault(); requestRecovery(); });
+  $('#email').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+}
+
+async function login() {
+  const email = $('#email').value.trim();
+  const errEl = $('#login-error');
+  errEl.textContent = '';
+  try {
+    const opts = await api('POST', '/api/webauthn/login/start', { email });
+    const assertion = await startAuthentication({ optionsJSON: opts });
+    const { token } = await api('POST', '/api/webauthn/login/finish', { assertion });
+    setJwt(token);
+    await loadDashboard();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function requestRecovery() {
+  const email = $('#email').value.trim();
+  if (!email) { $('#login-error').textContent = 'Enter your email above first.'; return; }
+  try {
+    await api('POST', '/api/recovery', { email });
+    $('#login-error').textContent = '';
+    $('#app').querySelector('.center').innerHTML +=
+      `<p class="muted" style="margin-top:1rem">If <strong>${esc(email)}</strong> is registered, a recovery link has been emailed.</p>`;
+  } catch (e) {
+    $('#login-error').textContent = e.message;
+  }
+}
+
+function renderEnroll(token) {
+  $('#app').innerHTML = `
+    <div class="card center">
+      <h1>Welcome</h1>
+      <p>Set up your passkey to access the SR&amp;ED tracker.</p>
+      <p class="actions"><button id="enroll-btn">Set up passkey</button></p>
+      <p class="error" id="enroll-error"></p>
+    </div>
+  `;
+  $('#enroll-btn').addEventListener('click', () => enroll(token));
 }
 
 async function enroll(token) {
-  const opts = await api('/api/webauthn/register/start', { token });
-  const attestation = await startRegistration({ optionsJSON: opts });
-  const { user, token: jwt } = await api('/api/webauthn/register/finish', {
-    token, attestation, label: navigator.platform,
-  });
-  sessionStorage.setItem('jwt', jwt);
-  out('login-out', { enrolled: user });
-  history.replaceState(null, '', location.pathname);
+  const errEl = $('#enroll-error');
+  errEl.textContent = '';
+  try {
+    const opts = await api('POST', '/api/webauthn/register/start', { token });
+    const attestation = await startRegistration({ optionsJSON: opts });
+    const { token: jwt } = await api('POST', '/api/webauthn/register/finish', {
+      token, attestation, label: navigator.platform || 'Device',
+    });
+    setJwt(jwt);
+    history.replaceState(null, '', location.pathname);
+    await loadDashboard();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
 }
 
-document.getElementById('login-btn').addEventListener('click', async () => {
-  try {
-    const email = document.getElementById('email').value.trim();
-    const opts = await api('/api/webauthn/login/start', { email });
-    const assertion = await startAuthentication({ optionsJSON: opts });
-    const { user, token } = await api('/api/webauthn/login/finish', { assertion });
-    sessionStorage.setItem('jwt', token);
-    out('login-out', { signed_in_as: user });
-  } catch (e) {
-    out('login-out', String(e));
-  }
-});
+async function loadDashboard() {
+  const me = await api('GET', '/api/me');
+  const ctx = { me, signOut };
+  if (me.user.role === 'admin') renderAdmin(ctx);
+  else renderEmployee(ctx);
+}
 
-async function api(path, body) {
-  const jwt = sessionStorage.getItem('jwt');
-  const r = await fetch(path, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(jwt ? { authorization: `Bearer ${jwt}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error((await r.json()).error?.message || `HTTP ${r.status}`);
-  return r.json();
+function signOut() {
+  clearJwt();
+  location.assign('/');
 }
