@@ -138,6 +138,49 @@ nav.tabs button:hover:not(.active) {
   color: var(--brand);
 }
 
+.project-search-wrap {
+  position: relative;
+  margin-left: auto;
+}
+.project-search-wrap input[type="search"] {
+  width: 18rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 5px;
+  font-size: 0.9rem;
+}
+.search-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  width: 26rem;
+  max-height: 22rem;
+  overflow-y: auto;
+  z-index: 20;
+}
+.search-results .item {
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.search-results .item:last-child { border-bottom: 0; }
+.search-results .item:hover { background: var(--brand-light); }
+.search-results .item .claimant {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-top: 0.15rem;
+}
+.search-results .empty-msg {
+  padding: 0.6rem 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
 /* --- Cards -------------------------------------------------------------- */
 
 .card {

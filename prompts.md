@@ -788,3 +788,17 @@ Allow admins to view labour/expenses/evidence details.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can you add a search bar next to the tabs that allow for quickly switching to projects? Typing in it should cause it to show a dropdown with partial name matches.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

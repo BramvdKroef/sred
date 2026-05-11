@@ -29,6 +29,26 @@ function getProjectOrThrow(id) {
   return p;
 }
 
+router.get('/', (req, res) => {
+  const q = (req.query.q ?? '').trim();
+  const limit = Math.min(Number(req.query.limit || 20), 100);
+  const where = [];
+  const params = [];
+  if (q) {
+    where.push('(p.title LIKE ? OR c.legal_name LIKE ?)');
+    params.push(`%${q}%`, `%${q}%`);
+  }
+  const sql = `
+    SELECT p.id, p.title, p.status, p.type, p.phase, p.claimant_id,
+           c.legal_name AS claimant_name
+      FROM projects p JOIN claimants c ON c.id = p.claimant_id
+     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+     ORDER BY p.title
+     LIMIT ?
+  `;
+  res.json({ items: db.prepare(sql).all(...params, limit) });
+});
+
 router.get('/:id', (req, res, next) => {
   try {
     const project = getProjectOrThrow(req.params.id);

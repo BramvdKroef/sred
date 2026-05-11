@@ -62,6 +62,10 @@ function shell() {
       ${tabBtn('review', 'Review queue')}
       ${tabBtn('exports', 'T661 exports')}
       ${tabBtn('audit', 'Audit log')}
+      <div class="project-search-wrap">
+        <input id="project-search" type="search" placeholder="Search projects…" autocomplete="off">
+        <div id="project-search-results" class="search-results" hidden></div>
+      </div>
     </nav>
     <main id="main"></main>
   `;
@@ -70,6 +74,64 @@ function shell() {
     b.addEventListener('click', () => { location.hash = b.dataset.tab; });
   });
   window.addEventListener('hashchange', onHashChange);
+  bindProjectSearch();
+}
+
+function bindProjectSearch() {
+  const input = document.getElementById('project-search');
+  const list  = document.getElementById('project-search-results');
+  if (!input || !list) return;
+  let timer = null;
+  let lastQuery = '';
+
+  const runSearch = async (q) => {
+    if (!q) { list.hidden = true; list.innerHTML = ''; return; }
+    const data = await api('GET', `/api/projects?q=${encodeURIComponent(q)}&limit=10`);
+    if (q !== lastQuery) return;  // stale
+    if (data.items.length === 0) {
+      list.innerHTML = '<div class="empty-msg">No projects match.</div>';
+    } else {
+      list.innerHTML = data.items.map(p => `
+        <div class="item" data-pid="${p.id}" data-cid="${p.claimant_id}">
+          <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)}" style="margin-left:0.3rem">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
+          <div class="claimant">${esc(p.claimant_name)}</div>
+        </div>
+      `).join('');
+      list.querySelectorAll('.item').forEach(el => {
+        el.addEventListener('click', () => {
+          selectProject({ id: Number(el.dataset.pid), claimant_id: Number(el.dataset.cid) });
+        });
+      });
+    }
+    list.hidden = false;
+  };
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    lastQuery = q;
+    clearTimeout(timer);
+    timer = setTimeout(() => runSearch(q), 180);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { input.value = ''; list.hidden = true; input.blur(); }
+  });
+  document.addEventListener('click', e => {
+    if (!list.contains(e.target) && e.target !== input) list.hidden = true;
+  });
+  input.addEventListener('focus', () => { if (list.innerHTML) list.hidden = false; });
+}
+
+async function selectProject({ id, claimant_id }) {
+  state.tab = 'claimants';
+  state.claimantId = claimant_id;
+  state.viewingProjectId = id;
+  history.replaceState(null, '', `#claimants/${id}`);
+  // Reset the search UI
+  const input = document.getElementById('project-search');
+  const list  = document.getElementById('project-search-results');
+  if (input) input.value = '';
+  if (list) { list.hidden = true; list.innerHTML = ''; }
+  await reloadAll();
 }
 
 function onHashChange() {
