@@ -355,3 +355,10 @@ commit it. We definately need more visual punch. Anything you can do to make the
 commit it. Can you change the Acme claimant name to "Extreme Technogoly Corp" and add some fixture projects that reflect the SaaS business?
 ~~~
 
+
+## Prompt
+
+~~~
+delete it and commit
+~~~
+
