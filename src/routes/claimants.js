@@ -90,6 +90,43 @@ router.patch('/:id', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Nested: list fiscal periods under a claimant
+router.get('/:id/periods', (req, res, next) => {
+  try {
+    const claimant = getClaimantOrThrow(req.params.id);
+    const items = db.prepare(
+      `SELECT * FROM fiscal_periods WHERE claimant_id = ? ORDER BY start_date DESC`
+    ).all(claimant.id);
+    res.json({ items });
+  } catch (e) { next(e); }
+});
+
+// Nested: create a fiscal period under a claimant
+router.post('/:id/periods', (req, res, next) => {
+  try {
+    const claimant = getClaimantOrThrow(req.params.id);
+    const { start_date, end_date } = req.body ?? {};
+    if (!start_date) throw badRequest('start_date required');
+    if (!end_date) throw badRequest('end_date required');
+    if (start_date >= end_date) throw badRequest('start_date must be before end_date');
+
+    try {
+      const info = db.prepare(`
+        INSERT INTO fiscal_periods (claimant_id, start_date, end_date)
+        VALUES (?, ?, ?)
+      `).run(claimant.id, start_date, end_date);
+      const period = db.prepare(`SELECT * FROM fiscal_periods WHERE id = ?`).get(info.lastInsertRowid);
+      audit(req.user.id, 'create', 'fiscal_period', period.id, undefined, period);
+      res.status(201).json(period);
+    } catch (err) {
+      if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw badRequest(`a period starting on ${start_date} already exists for this claimant`);
+      }
+      throw err;
+    }
+  } catch (e) { next(e); }
+});
+
 // Nested: list projects under a claimant
 router.get('/:id/projects', (req, res, next) => {
   try {
