@@ -578,3 +578,17 @@ commit it. Then add a Manager role to the user roles. Add a Manager field to pro
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can you handle jwt expiration on the client side so that the user is redirected to the login rather than the screen freezing?
+~~~
+
+
+## Prompt
+
+~~~
+commit it.
+~~~
+

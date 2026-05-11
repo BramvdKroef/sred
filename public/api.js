@@ -4,6 +4,18 @@ export const getJwt   = () => sessionStorage.getItem(JWT_KEY);
 export const setJwt   = t  => sessionStorage.setItem(JWT_KEY, t);
 export const clearJwt = () => sessionStorage.removeItem(JWT_KEY);
 
+// If a request we authenticated comes back 401, the JWT is dead (expired or
+// the user was disabled server-side). Clear it and bounce to login.
+function handleAuthFailure(jwt) {
+  if (!jwt || sessionEnded) return;
+  sessionEnded = true;
+  clearJwt();
+  // Drop the hash so login isn't immediately redirected back to a deep link
+  // that triggered the failure (e.g. #exports/12).
+  location.assign('/');
+}
+let sessionEnded = false;
+
 export async function api(method, path, body) {
   const headers = { 'content-type': 'application/json' };
   const jwt = getJwt();
@@ -11,6 +23,10 @@ export async function api(method, path, body) {
   const init = { method, headers };
   if (body !== undefined) init.body = JSON.stringify(body);
   const r = await fetch(path, init);
+  if (r.status === 401 && jwt) {
+    handleAuthFailure(jwt);
+    throw new Error('Session expired');
+  }
   if (r.status === 204) return null;
   let data; try { data = await r.json(); } catch { data = {}; }
   if (!r.ok) throw new Error(data.error?.message || `HTTP ${r.status}`);
@@ -22,6 +38,10 @@ export async function apiUpload(path, formData) {
   const jwt = getJwt();
   if (jwt) headers.authorization = `Bearer ${jwt}`;
   const r = await fetch(path, { method: 'POST', headers, body: formData });
+  if (r.status === 401 && jwt) {
+    handleAuthFailure(jwt);
+    throw new Error('Session expired');
+  }
   let data; try { data = await r.json(); } catch { data = {}; }
   if (!r.ok) throw new Error(data.error?.message || `HTTP ${r.status}`);
   return data;
