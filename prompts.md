@@ -257,3 +257,23 @@ commit it and wire up exports
 Commit the exports work. I have mailpit running locally. Kan you wire up emails to send there?
 ~~~
 
+
+## Prompt
+
+~~~
+<task-notification>
+<task-id>b06ytsfkj</task-id>
+<tool-use-id>toolu_01YPM1yZSb4eqLv9AEDsej6L</tool-use-id>
+<output-file>/tmp/claude-1000/-home-bram-src-sred/8104ef29-2536-4afe-b7c3-b2175650e04d/tasks/b06ytsfkj.output</output-file>
+<status>failed</status>
+<summary>Background command "Boot server" failed with exit code 143</summary>
+</task-notification>
+~~~
+
+
+## Prompt
+
+~~~
+commit it and wire up the frontend
+~~~
+

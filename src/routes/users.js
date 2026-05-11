@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { mintEmailToken, buildMagicLink } from '../auth/tokens.js';
+import { sendMagicLink } from '../lib/email.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -127,7 +128,8 @@ router.post('/', (req, res, next) => {
 
     const { raw } = mintEmailToken(userId, 'invite');
     const magicLink = buildMagicLink(raw);
-    console.log(`[invite] magic link for ${email}: ${magicLink}`);
+    sendMagicLink({ to: email, name, purpose: 'invite', link: magicLink })
+      .catch(err => console.warn('[invite] email send error:', err));
 
     res.status(201).json({ ...loadUserBundle(userId), magic_link: magicLink });
   } catch (e) { next(e); }

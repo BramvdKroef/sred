@@ -1,5 +1,6 @@
 import { db } from '../db/index.js';
 import { mintEmailToken, buildMagicLink } from '../auth/tokens.js';
+import { sendMagicLink } from '../lib/email.js';
 
 function getArg(flag) {
   for (let i = 2; i < process.argv.length; i++) {
@@ -30,5 +31,9 @@ if (!user) {
 }
 
 const { raw } = mintEmailToken(user.id, 'invite');
+const link = buildMagicLink(raw);
 console.log('\nmagic link (open in browser to enroll a passkey):');
-console.log(`  ${buildMagicLink(raw)}\n`);
+console.log(`  ${link}\n`);
+
+const result = await sendMagicLink({ to: email, name, purpose: 'invite', link });
+if (result.delivered) console.log(`emailed to ${email}.`);

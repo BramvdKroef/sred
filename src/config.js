@@ -28,4 +28,12 @@ export const config = {
   inviteTtlMinutes: Number(process.env.INVITE_TTL_MINUTES || 1440),
   recoveryTtlMinutes: Number(process.env.RECOVERY_TTL_MINUTES || 15),
   addDeviceTtlMinutes: Number(process.env.ADD_DEVICE_TTL_MINUTES || 30),
+
+  smtp: {
+    host: process.env.SMTP_HOST || '',          // empty = disabled, link still logs
+    port: Number(process.env.SMTP_PORT || 1025),
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.SMTP_FROM || 'SR&ED Tracker <no-reply@sred.local>',
+  },
 };

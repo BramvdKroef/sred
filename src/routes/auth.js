@@ -4,6 +4,7 @@ import { signSession } from '../auth/jwt.js';
 import { requireAuth } from '../auth/middleware.js';
 import { findValidEmailToken, consumeEmailToken, mintEmailToken, buildMagicLink } from '../auth/tokens.js';
 import { startRegistration, finishRegistration, startLogin, finishLogin } from '../auth/webauthn.js';
+import { sendMagicLink } from '../lib/email.js';
 import { badRequest, unauthorized } from '../lib/errors.js';
 
 const router = Router();
@@ -90,11 +91,12 @@ router.post('/recovery', (req, res, next) => {
   try {
     const { email } = req.body ?? {};
     if (!email) throw badRequest('email required');
-    const user = db.prepare(`SELECT id, status FROM users WHERE email = ?`).get(email);
+    const user = db.prepare(`SELECT id, name, email, status FROM users WHERE email = ?`).get(email);
     if (user && user.status === 'active') {
       const { raw } = mintEmailToken(user.id, 'recovery');
-      // TODO: send via SMTP. For now, log the link so it can be picked up in dev.
-      console.log(`[recovery] magic link for ${email}: ${buildMagicLink(raw)}`);
+      const link = buildMagicLink(raw);
+      sendMagicLink({ to: user.email, name: user.name, purpose: 'recovery', link })
+        .catch(err => console.warn('[recovery] email send error:', err));
     }
     // Always 200 to avoid account enumeration.
     res.json({ ok: true });
