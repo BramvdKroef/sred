@@ -1,5 +1,6 @@
 import { api, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
-         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle } from './api.js';
+         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
+         wireActivityDetails, wireJwtDownloads } from './api.js';
 
 const state = {
   me: null,
@@ -225,9 +226,10 @@ async function renderOverviewTab(main) {
     </div>
     <div class="card">
       <h2>Recent activity</h2>
-      ${activityHtml(activity.items, { showActor: true })}
+      ${activityHtml(activity.items, { showActor: true, showOpen: true })}
     </div>
   `;
+  wireActivityDetails(main);
 }
 
 // --- Claimants & projects tab ----------------------------------------------
@@ -616,9 +618,10 @@ async function renderProjectDetail(main) {
 
     <div class="card">
       <h2>Recent activity</h2>
-      ${activityHtml(activity.items, { showActor: true, showProject: false })}
+      ${activityHtml(activity.items, { showActor: true, showProject: false, showOpen: true })}
     </div>
   `;
+  wireActivityDetails(main);
   document.getElementById('back-to-projects').addEventListener('click', e => {
     e.preventDefault();
     location.hash = 'claimants';
@@ -1290,22 +1293,7 @@ function bindCommon() {
     });
   });
 
-  // JWT-authenticated downloads
-  document.querySelectorAll('[data-jwt-dl]').forEach(a => {
-    a.addEventListener('click', async e => {
-      e.preventDefault();
-      const r = await fetch(a.getAttribute('href'), { headers: { authorization: `Bearer ${sessionStorage.getItem('sred-jwt')}` } });
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const tmp = document.createElement('a');
-      tmp.href = url;
-      const cd = r.headers.get('content-disposition') || '';
-      const m = cd.match(/filename="([^"]+)"/);
-      tmp.download = m ? m[1] : 'download';
-      tmp.click();
-      URL.revokeObjectURL(url);
-    });
-  });
+  wireJwtDownloads(document);
 }
 
 function bindForm(selector, handler) {

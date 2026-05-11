@@ -774,3 +774,17 @@ When an admin adds labour/expenses they should automatically be approved.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Allow admins to view labour/expenses/evidence details.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

@@ -1,5 +1,6 @@
 import { api, apiUpload, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
-         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle } from './api.js';
+         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
+         wireJwtDownloads } from './api.js';
 
 const state = {
   me: null,
@@ -476,22 +477,7 @@ function bind() {
     });
   });
 
-  // JWT-authenticated downloads
-  document.querySelectorAll('[data-jwt-dl]').forEach(a => {
-    a.addEventListener('click', async e => {
-      e.preventDefault();
-      const r = await fetch(a.getAttribute('href'), { headers: { authorization: `Bearer ${sessionStorage.getItem('sred-jwt')}` } });
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const tmp = document.createElement('a');
-      tmp.href = url;
-      const cd = r.headers.get('content-disposition') || '';
-      const m = cd.match(/filename="([^"]+)"/);
-      tmp.download = m ? m[1] : 'download';
-      tmp.click();
-      URL.revokeObjectURL(url);
-    });
-  });
+  wireJwtDownloads(document);
 }
 
 function bindForm(selector, handler) {

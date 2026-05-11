@@ -187,28 +187,146 @@ export function weekBars(entries, days) {
   }));
 }
 
-export function activityHtml(items, { showActor = true, showProject = true } = {}) {
+export function activityHtml(items, { showActor = true, showProject = true, showOpen = false } = {}) {
   if (!items.length) return '<p class="empty">No activity yet.</p>';
   return `<table class="activity">
     <thead><tr>
-      <th>When</th><th>Type</th>${showActor ? '<th>Who</th>' : ''}${showProject ? '<th>Project</th>' : ''}<th>Details</th>
+      <th>When</th><th>Type</th>${showActor ? '<th>Who</th>' : ''}${showProject ? '<th>Project</th>' : ''}<th>Details</th>${showOpen ? '<th></th>' : ''}
     </tr></thead>
-    <tbody>${items.map(it => activityRow(it, showActor, showProject)).join('')}</tbody>
+    <tbody>${items.map(it => activityRow(it, { showActor, showProject, showOpen })).join('')}</tbody>
   </table>`;
 }
 
-function activityRow(it, showActor, showProject) {
+function activityRow(it, { showActor, showProject, showOpen }) {
   const when = String(it.created_at).slice(0, 16).replace('T', ' ');
   const typePill = `<span class="pill type-${it.type}">${it.type}</span>`;
   const actor = showActor ? `<td>${esc(it.actor_name)}</td>` : '';
   const project = showProject ? `<td>${esc(it.project_title)}</td>` : '';
+  const cols = 3 + (showActor ? 1 : 0) + (showProject ? 1 : 0) + (showOpen ? 1 : 0);
+  const openBtn = showOpen
+    ? `<td class="actions"><button class="small secondary" data-open-activity="${it.type}-${it.id}" data-act-type="${it.type}" data-act-id="${it.id}">Open</button></td>`
+    : '';
+  const expansion = showOpen
+    ? `<tr id="activity-detail-${it.type}-${it.id}" hidden><td colspan="${cols}"></td></tr>`
+    : '';
   return `<tr>
     <td class="when">${esc(when)}</td>
     <td>${typePill}</td>
     ${actor}
     ${project}
     <td>${activityDetails(it)}</td>
-  </tr>`;
+    ${openBtn}
+  </tr>${expansion}`;
+}
+
+// Wire Open buttons in any container that has activityHtml({ showOpen: true }).
+export function wireActivityDetails(root) {
+  root.querySelectorAll('[data-open-activity]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const type = btn.dataset.actType;
+      const id   = btn.dataset.actId;
+      const tr   = document.getElementById(`activity-detail-${type}-${id}`);
+      const cell = tr.querySelector('td');
+      if (!tr.hidden) { tr.hidden = true; btn.textContent = 'Open'; return; }
+      tr.hidden = false;
+      btn.textContent = 'Close';
+      cell.innerHTML = '<p class="muted">Loading…</p>';
+      try {
+        cell.innerHTML = await fetchActivityDetail(type, id);
+        wireJwtDownloads(cell);
+      } catch (e) {
+        cell.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+      }
+    });
+  });
+}
+
+async function fetchActivityDetail(type, id) {
+  const auditType = type === 'labour' ? 'labour_entry' : type === 'expense' ? 'expense' : 'evidence_item';
+  const entityUrl = type === 'labour' ? `/api/labour/${id}` : type === 'expense' ? `/api/expenses/${id}` : `/api/evidence/${id}`;
+  const linkedUrl = type === 'labour' ? `/api/evidence?labour_entry_id=${id}` : type === 'expense' ? `/api/evidence?expense_id=${id}` : null;
+  const tasks = [api('GET', entityUrl), api('GET', `/api/audit-log?entity_type=${auditType}&entity_id=${id}&limit=20`)];
+  if (linkedUrl) tasks.push(api('GET', linkedUrl));
+  const [entity, audit, linked] = await Promise.all(tasks);
+  return renderActivityDetail(type, entity, audit.items, (linked?.items ?? []));
+}
+
+function renderActivityDetail(type, e, auditItems, linkedEv) {
+  const head = `<div class="grid" style="gap:0.4rem; font-size:0.92rem">`;
+  let body = head;
+  if (type === 'labour') {
+    body += `
+      <div><strong>Work date:</strong> ${esc(e.work_date)}</div>
+      <div><strong>Hours:</strong> ${e.hours}${e.is_overtime ? ' <span class="pill overtime">OT</span>' : ''}</div>
+      <div><strong>Status:</strong> <span class="pill ${e.status}">${esc(e.status)}</span></div>
+      <div><strong>Period:</strong> #${e.fiscal_period_id}</div>
+      <div class="full"><strong>Description:</strong> ${esc(e.description)}</div>
+      ${e.reviewed_at ? `<div class="full muted"><strong>Reviewed</strong> ${esc(e.reviewed_at)} (user #${e.reviewed_by_user_id})</div>` : ''}
+      ${e.rejection_reason ? `<div class="full"><strong>Rejection reason:</strong> <span class="muted">${esc(e.rejection_reason)}</span></div>` : ''}
+    `;
+  } else if (type === 'expense') {
+    body += `
+      <div><strong>Date:</strong> ${esc(e.expense_date)}</div>
+      <div><strong>Category:</strong> ${esc(e.category)}</div>
+      <div><strong>Amount:</strong> ${(e.amount_cents/100).toFixed(2)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</div>
+      <div><strong>Status:</strong> <span class="pill ${e.status}">${esc(e.status)}</span></div>
+      <div class="full"><strong>Description:</strong> ${esc(e.description)}</div>
+      ${e.reviewed_at ? `<div class="full muted"><strong>Reviewed</strong> ${esc(e.reviewed_at)} (user #${e.reviewed_by_user_id})</div>` : ''}
+      ${e.rejection_reason ? `<div class="full"><strong>Rejection reason:</strong> <span class="muted">${esc(e.rejection_reason)}</span></div>` : ''}
+    `;
+  } else if (type === 'evidence') {
+    body += `
+      <div><strong>Date:</strong> ${esc(e.evidence_date)}</div>
+      <div><strong>Kind:</strong> ${esc(e.kind)}</div>
+      <div><strong>Uploaded by:</strong> user #${e.uploaded_by_user_id}</div>
+      <div class="full"><strong>Caption:</strong> ${esc(e.caption)}</div>
+      ${e.kind === 'file' ? `<div class="full"><strong>File:</strong> <a href="/api/evidence/${e.id}/download" data-jwt-dl>${esc(e.file_path)}</a> (${e.file_size ?? '?'} bytes, ${esc(e.file_mime ?? '')})</div>` : ''}
+      ${e.kind === 'link' ? `<div class="full"><strong>URL:</strong> <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a></div>` : ''}
+      ${e.kind === 'note' ? `<div class="full"><strong>Note:</strong> ${esc(e.note_text)}</div>` : ''}
+      ${e.labour_entry_id ? `<div><strong>Linked to:</strong> labour entry #${e.labour_entry_id}</div>` : ''}
+      ${e.expense_id ? `<div><strong>Linked to:</strong> expense #${e.expense_id}</div>` : ''}
+    `;
+  }
+  body += `</div>`;
+
+  if (linkedEv.length) {
+    body += `<h4 style="margin:0.8rem 0 0.3rem; font-size:0.92rem">Linked evidence (${linkedEv.length})</h4>
+      <ul style="font-size:0.88rem; margin:0; padding-left:1.2rem">${linkedEv.map(ev =>
+        `<li><span class="pill type-evidence">${esc(ev.kind)}</span> ${esc(ev.caption)} ${
+          ev.kind === 'file' ? `· <a href="/api/evidence/${ev.id}/download" data-jwt-dl>${esc(ev.file_path)}</a>` :
+          ev.kind === 'link' ? `· <a href="${esc(ev.url)}" target="_blank" rel="noopener">${esc(ev.url)}</a>` :
+          `· <span class="muted">${esc((ev.note_text ?? '').slice(0, 120))}</span>`
+        }</li>`).join('')}</ul>`;
+  }
+  if (auditItems.length) {
+    body += `<details style="margin-top:0.7rem"><summary class="muted" style="cursor:pointer; font-size:0.88rem">Audit log (${auditItems.length})</summary>
+      <ul style="font-size:0.85rem; margin:0.4rem 0 0 1.2rem">${auditItems.map(a =>
+        `<li>${esc(a.created_at)} · <strong>${esc(a.action)}</strong> by ${esc(a.actor_name ?? '(system)')}</li>`).join('')}</ul></details>`;
+  }
+  return `<div style="padding:0.7rem 0.9rem; background:#fafbfc; border:1px solid var(--border); border-radius:4px">${body}</div>`;
+}
+
+// JWT-authenticated download interceptor, reusable across shells.
+export function wireJwtDownloads(root) {
+  root.querySelectorAll('[data-jwt-dl]').forEach(a => {
+    if (a.dataset.jwtBound) return;
+    a.dataset.jwtBound = '1';
+    a.addEventListener('click', async e => {
+      e.preventDefault();
+      const r = await fetch(a.getAttribute('href'), {
+        headers: { authorization: `Bearer ${sessionStorage.getItem('sred-jwt')}` },
+      });
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const tmp = document.createElement('a');
+      tmp.href = url;
+      const cd = r.headers.get('content-disposition') || '';
+      const m = cd.match(/filename="([^"]+)"/);
+      tmp.download = m ? m[1] : 'download';
+      tmp.click();
+      URL.revokeObjectURL(url);
+    });
+  });
 }
 
 function activityDetails(it) {
