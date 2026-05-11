@@ -20,6 +20,7 @@ export const config = {
 
   jwtSecret: required('JWT_SECRET'),
   jwtTtlSeconds: Number(process.env.JWT_TTL_SECONDS || 3600),
+  refreshTtlDays: Number(process.env.REFRESH_TTL_DAYS || 30),
 
   rpName: process.env.RP_NAME || 'SR&ED Tracker',
   rpId: process.env.RP_ID || 'localhost',

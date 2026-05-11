@@ -4,6 +4,7 @@ import { signSession } from '../auth/jwt.js';
 import { requireAuth } from '../auth/middleware.js';
 import { findValidEmailToken, consumeEmailToken, mintEmailToken, buildMagicLink } from '../auth/tokens.js';
 import { startRegistration, finishRegistration, startLogin, finishLogin } from '../auth/webauthn.js';
+import { mintRefreshToken, consumeRefreshToken, revokeRefreshToken } from '../auth/refresh.js';
 import { sendMagicLink } from '../lib/email.js';
 import { badRequest, unauthorized } from '../lib/errors.js';
 
@@ -57,7 +58,8 @@ router.post('/webauthn/register/finish', async (req, res, next) => {
     }
     const fresh = db.prepare(`SELECT id, email, name, role, status FROM users WHERE id = ?`).get(user.id);
     const session = signSession(fresh);
-    res.json({ user: fresh, token: session });
+    const refresh = mintRefreshToken(fresh.id);
+    res.json({ user: fresh, token: session, refresh_token: refresh.raw, refresh_expires_at: refresh.expiresAt });
   } catch (e) { next(e); }
 });
 
@@ -81,7 +83,20 @@ router.post('/webauthn/login/finish', async (req, res, next) => {
     if (!assertion) throw badRequest('assertion required');
     const user = await finishLogin({ response: assertion });
     const session = signSession(user);
-    res.json({ user, token: session });
+    const refresh = mintRefreshToken(user.id);
+    res.json({ user, token: session, refresh_token: refresh.raw, refresh_expires_at: refresh.expiresAt });
+  } catch (e) { next(e); }
+});
+
+// --- Refresh ----------------------------------------------------------------
+
+router.post('/auth/refresh', (req, res, next) => {
+  try {
+    const { refresh_token } = req.body ?? {};
+    const user = consumeRefreshToken(refresh_token);  // also rotates (marks old revoked)
+    const session = signSession(user);
+    const next_ = mintRefreshToken(user.id);
+    res.json({ token: session, refresh_token: next_.raw, refresh_expires_at: next_.expiresAt });
   } catch (e) { next(e); }
 });
 
@@ -103,8 +118,10 @@ router.post('/recovery', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/logout', requireAuth, (_req, res) => {
-  // JWT is stateless; client discards. We could blocklist here if needed.
+router.post('/logout', requireAuth, (req, res) => {
+  // JWT is stateless; client discards. Refresh tokens are server-side state,
+  // so revoke the one the client presents (and quietly accept absence).
+  revokeRefreshToken(req.body?.refresh_token);
   res.json({ ok: true });
 });
 

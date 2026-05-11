@@ -1,30 +1,68 @@
-const JWT_KEY = 'sred-jwt';
+const JWT_KEY     = 'sred-jwt';
+const REFRESH_KEY = 'sred-refresh';
 
 export const getJwt   = () => sessionStorage.getItem(JWT_KEY);
 export const setJwt   = t  => sessionStorage.setItem(JWT_KEY, t);
 export const clearJwt = () => sessionStorage.removeItem(JWT_KEY);
 
-// If a request we authenticated comes back 401, the JWT is dead (expired or
-// the user was disabled server-side). Clear it and bounce to login.
-function handleAuthFailure(jwt) {
-  if (!jwt || sessionEnded) return;
-  sessionEnded = true;
+// Refresh token persists across tabs and browser restarts (localStorage).
+export const getRefresh   = () => localStorage.getItem(REFRESH_KEY);
+export const setRefresh   = t  => localStorage.setItem(REFRESH_KEY, t);
+export const clearRefresh = () => localStorage.removeItem(REFRESH_KEY);
+
+// Store both halves of a session in one shot.
+export function setSession({ token, refresh_token }) {
+  setJwt(token);
+  if (refresh_token) setRefresh(refresh_token);
+}
+export function clearSession() {
   clearJwt();
+  clearRefresh();
+}
+
+let sessionEnded = false;
+let refreshInflight = null;
+
+// Attempt to swap the dead JWT for a fresh pair using the stored refresh
+// token. Coalesces concurrent attempts so a Promise.all of 401s only fires
+// one /refresh call.
+async function tryRefresh() {
+  const rt = getRefresh();
+  if (!rt) return false;
+  if (!refreshInflight) {
+    refreshInflight = fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refresh_token: rt }),
+    }).then(async r => {
+      if (!r.ok) return false;
+      const d = await r.json();
+      setSession({ token: d.token, refresh_token: d.refresh_token });
+      return true;
+    }).catch(() => false).finally(() => { refreshInflight = null; });
+  }
+  return refreshInflight;
+}
+
+function handleAuthFailure() {
+  if (sessionEnded) return;
+  sessionEnded = true;
+  clearSession();
   // Drop the hash so login isn't immediately redirected back to a deep link
   // that triggered the failure (e.g. #exports/12).
   location.assign('/');
 }
-let sessionEnded = false;
 
-export async function api(method, path, body) {
+export async function api(method, path, body, { _retry = false } = {}) {
   const headers = { 'content-type': 'application/json' };
   const jwt = getJwt();
   if (jwt) headers.authorization = `Bearer ${jwt}`;
   const init = { method, headers };
   if (body !== undefined) init.body = JSON.stringify(body);
   const r = await fetch(path, init);
-  if (r.status === 401 && jwt) {
-    handleAuthFailure(jwt);
+  if (r.status === 401 && jwt && !_retry) {
+    if (await tryRefresh()) return api(method, path, body, { _retry: true });
+    handleAuthFailure();
     throw new Error('Session expired');
   }
   if (r.status === 204) return null;
@@ -33,13 +71,14 @@ export async function api(method, path, body) {
   return data;
 }
 
-export async function apiUpload(path, formData) {
+export async function apiUpload(path, formData, { _retry = false } = {}) {
   const headers = {};
   const jwt = getJwt();
   if (jwt) headers.authorization = `Bearer ${jwt}`;
   const r = await fetch(path, { method: 'POST', headers, body: formData });
-  if (r.status === 401 && jwt) {
-    handleAuthFailure(jwt);
+  if (r.status === 401 && jwt && !_retry) {
+    if (await tryRefresh()) return apiUpload(path, formData, { _retry: true });
+    handleAuthFailure();
     throw new Error('Session expired');
   }
   let data; try { data = await r.json(); } catch { data = {}; }

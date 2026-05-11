@@ -1,6 +1,6 @@
 import { startRegistration, startAuthentication }
   from 'https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11/+esm';
-import { api, getJwt, setJwt, clearJwt, $, esc } from './api.js';
+import { api, getJwt, getRefresh, setSession, clearSession, $, esc } from './api.js';
 import { renderAdmin } from './admin.js';
 import { renderEmployee } from './employee.js';
 
@@ -12,7 +12,15 @@ async function main() {
   if (enrollToken) return renderEnroll(enrollToken);
   if (getJwt()) {
     try { return await loadDashboard(); }
-    catch { clearJwt(); }
+    catch { clearSession(); }
+  }
+  // Warm start: no JWT but a refresh token from a prior browser session.
+  if (getRefresh()) {
+    try {
+      const d = await api('POST', '/api/auth/refresh', { refresh_token: getRefresh() });
+      setSession({ token: d.token, refresh_token: d.refresh_token });
+      return await loadDashboard();
+    } catch { clearSession(); }
   }
   renderLogin();
 }
@@ -45,8 +53,8 @@ async function login() {
   try {
     const opts = await api('POST', '/api/webauthn/login/start', { email });
     const assertion = await startAuthentication({ optionsJSON: opts });
-    const { token } = await api('POST', '/api/webauthn/login/finish', { assertion });
-    setJwt(token);
+    const d = await api('POST', '/api/webauthn/login/finish', { assertion });
+    setSession({ token: d.token, refresh_token: d.refresh_token });
     await loadDashboard();
   } catch (e) {
     errEl.textContent = e.message;
@@ -84,10 +92,10 @@ async function enroll(token) {
   try {
     const opts = await api('POST', '/api/webauthn/register/start', { token });
     const attestation = await startRegistration({ optionsJSON: opts });
-    const { token: jwt } = await api('POST', '/api/webauthn/register/finish', {
+    const d = await api('POST', '/api/webauthn/register/finish', {
       token, attestation, label: navigator.platform || 'Device',
     });
-    setJwt(jwt);
+    setSession({ token: d.token, refresh_token: d.refresh_token });
     history.replaceState(null, '', location.pathname);
     await loadDashboard();
   } catch (e) {
@@ -102,7 +110,10 @@ async function loadDashboard() {
   else renderEmployee(ctx);
 }
 
-function signOut() {
-  clearJwt();
+async function signOut() {
+  const rt = getRefresh();
+  try { await api('POST', '/api/logout', rt ? { refresh_token: rt } : undefined); }
+  catch { /* best effort */ }
+  clearSession();
   location.assign('/');
 }

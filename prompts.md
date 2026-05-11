@@ -592,3 +592,17 @@ Can you handle jwt expiration on the client side so that the user is redirected 
 commit it.
 ~~~
 
+
+## Prompt
+
+~~~
+refresh tokens for longer sessions.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+
