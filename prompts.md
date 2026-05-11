@@ -921,3 +921,17 @@ go ahead with both 1 and 2
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+now split admin.js
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+
