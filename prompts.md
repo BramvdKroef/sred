@@ -662,3 +662,17 @@ Can we make labour/expenses/evidence editable? I assume there is a cutoff date w
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+I would like for admins to be able to edit claimant details.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

@@ -66,16 +66,35 @@ router.get('/:id', (req, res, next) => {
 router.patch('/:id', (req, res, next) => {
   try {
     const before = getClaimantOrThrow(req.params.id);
-    const { legal_name, business_number, reporting_currency, sred_method } = req.body ?? {};
+    const {
+      legal_name, business_number, reporting_currency, sred_method,
+      fiscal_year_end_month, fiscal_year_end_day,
+    } = req.body ?? {};
 
     if (sred_method !== undefined && sred_method !== before.sred_method) {
       throw badRequest('sred_method is locked once set');
     }
 
     const updates = {};
-    if (legal_name !== undefined) updates.legal_name = legal_name;
-    if (business_number !== undefined) updates.business_number = business_number;
-    if (reporting_currency !== undefined) updates.reporting_currency = reporting_currency;
+    if (legal_name !== undefined) {
+      if (!legal_name || typeof legal_name !== 'string') throw badRequest('legal_name cannot be empty');
+      updates.legal_name = legal_name;
+    }
+    if (business_number !== undefined) updates.business_number = business_number || null;
+    if (reporting_currency !== undefined) {
+      if (!reporting_currency) throw badRequest('reporting_currency cannot be empty');
+      updates.reporting_currency = reporting_currency;
+    }
+    if (fiscal_year_end_month !== undefined) {
+      if (!Number.isInteger(fiscal_year_end_month) || fiscal_year_end_month < 1 || fiscal_year_end_month > 12)
+        throw badRequest('fiscal_year_end_month must be an integer 1-12');
+      updates.fiscal_year_end_month = fiscal_year_end_month;
+    }
+    if (fiscal_year_end_day !== undefined) {
+      if (!Number.isInteger(fiscal_year_end_day) || fiscal_year_end_day < 1 || fiscal_year_end_day > 31)
+        throw badRequest('fiscal_year_end_day must be an integer 1-31');
+      updates.fiscal_year_end_day = fiscal_year_end_day;
+    }
 
     const keys = Object.keys(updates);
     if (keys.length === 0) return res.json(before);

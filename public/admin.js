@@ -152,7 +152,10 @@ function renderClaimantsTab() {
       <div class="card compact">
         <div class="card-head">
           <h2>Claimant</h2>
-          <button id="new-claimant-toggle" class="secondary small">＋ New</button>
+          <div class="row" style="gap:0.3rem">
+            ${state.claimantId ? '<button id="edit-claimant-toggle" class="secondary small">✎ Edit</button>' : ''}
+            <button id="new-claimant-toggle" class="secondary small">＋ New</button>
+          </div>
         </div>
         <select id="claimant-pick" style="width: 100%">
           <option value="">— select —</option>
@@ -173,6 +176,7 @@ function renderClaimantsTab() {
             <div class="actions"><button class="small">Create claimant</button></div>
           </form>
         </div>
+        ${state.claimantId ? renderEditClaimantForm(state.claimants.find(c => c.id === state.claimantId)) : ''}
       </div>
       <div class="card compact">
         <div class="card-head">
@@ -374,6 +378,28 @@ async function renderProjectDetail(main) {
   });
   bindEditProjectForm(project);
   bindLogOnBehalfForms(project);
+}
+
+function renderEditClaimantForm(c) {
+  if (!c) return '';
+  const fye = `${String(c.fiscal_year_end_month).padStart(2,'0')}-${String(c.fiscal_year_end_day).padStart(2,'0')}`;
+  return `
+    <div id="edit-claimant-form" hidden style="margin-top: 0.75rem">
+      <form id="form-edit-claimant">
+        <div class="grid">
+          <div class="full"><label>Legal name</label><input name="legal_name" required value="${esc(c.legal_name)}"></div>
+          <div><label>Business number</label><input name="business_number" value="${esc(c.business_number ?? '')}"></div>
+          <div><label>Fiscal year end (MM-DD)</label><input name="fye" required value="${esc(fye)}" pattern="\\d{2}-\\d{2}"></div>
+          <div><label>Reporting currency</label><input name="reporting_currency" required value="${esc(c.reporting_currency)}"></div>
+          <div><label>SR&amp;ED method (locked)</label><input value="${esc(c.sred_method)}" disabled></div>
+        </div>
+        <div class="actions row" style="gap:0.4rem">
+          <button class="small">Save</button>
+          <button type="button" class="small secondary" id="cancel-edit-claimant">Cancel</button>
+        </div>
+      </form>
+    </div>
+  `;
 }
 
 function renderEditProjectForm(project) {
@@ -824,17 +850,35 @@ function bindCommon() {
     });
   });
 
-  // Toggle new-claimant / new-period / new-project forms
+  // Toggle new-claimant / new-period / new-project / edit-claimant forms
   const toggles = [
-    ['new-claimant-toggle', 'new-claimant-form'],
-    ['new-period-toggle',   'new-period-form'],
-    ['new-project-toggle',  'new-project-form'],
+    ['new-claimant-toggle',  'new-claimant-form'],
+    ['new-period-toggle',    'new-period-form'],
+    ['new-project-toggle',   'new-project-form'],
+    ['edit-claimant-toggle', 'edit-claimant-form'],
   ];
   for (const [btnId, formId] of toggles) {
     const btn = document.getElementById(btnId);
     const form = document.getElementById(formId);
     if (btn && form) btn.addEventListener('click', () => { form.hidden = !form.hidden; });
   }
+  const cancelClaim = document.getElementById('cancel-edit-claimant');
+  if (cancelClaim) cancelClaim.addEventListener('click', () => {
+    document.getElementById('edit-claimant-form').hidden = true;
+  });
+
+  bindForm('#form-edit-claimant', async fd => {
+    const fye = (fd.get('fye') || '').split('-').map(Number);
+    if (fye.length !== 2 || !fye[0] || !fye[1]) throw new Error('Fiscal year end must be MM-DD');
+    await api('PATCH', `/api/claimants/${state.claimantId}`, {
+      legal_name: fd.get('legal_name'),
+      business_number: fd.get('business_number') || null,
+      fiscal_year_end_month: fye[0],
+      fiscal_year_end_day: fye[1],
+      reporting_currency: fd.get('reporting_currency'),
+    });
+    await reloadAll();
+  });
 
   bindForm('#claimant-form', async fd => {
     const fye = (fd.get('fye') || '').split('-').map(Number);
