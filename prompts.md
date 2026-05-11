@@ -431,3 +431,17 @@ Now the form needs a password manager hint for the email field.
 commit it. At this point can you keep the server running and restart it each time you make a change?
 ~~~
 
+
+## Prompt
+
+~~~
+Can you add fixtures for labour/expense/evidence to the projects?
+~~~
+
+
+## Prompt
+
+~~~
+Yes.
+~~~
+
