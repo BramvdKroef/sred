@@ -173,15 +173,21 @@ function renderProjectsAndUsers() {
       <div id="new-project-form" hidden style="margin-top: 1rem">
         <form id="project-form">
           <div class="grid">
-            <div><label>Title</label><input name="title" required></div>
-            <div><label>Field of science</label><input name="field_of_science"></div>
+            <div class="full"><label>Title</label><input name="title" required></div>
+            <div><label>Field of science</label><input name="field_of_science" placeholder="e.g. Computer science"></div>
             <div><label>Start date</label><input type="date" name="start_date" required></div>
             <div><label>Status</label>
               <select name="status"><option>planned</option><option selected>active</option><option>completed</option></select>
             </div>
-            <div class="full"><label>Advancement sought</label><textarea name="advancement_sought" rows="2"></textarea></div>
-            <div class="full"><label>Uncertainties</label><textarea name="uncertainties" rows="2"></textarea></div>
-            <div class="full"><label>Work performed</label><textarea name="work_performed" rows="2"></textarea></div>
+            <div class="full"><label>Advancement sought</label>
+              <textarea name="advancement_sought" rows="3" placeholder="What technological advancement is this project trying to achieve?"></textarea>
+            </div>
+            <div class="full"><label>Technological uncertainties</label>
+              <textarea name="uncertainties" rows="3" placeholder="What is uncertain or not knowable from existing knowledge?"></textarea>
+            </div>
+            <div class="full"><label>Work performed</label>
+              <textarea name="work_performed" rows="4" placeholder="Systematic investigation: experiments, hypotheses tested, outcomes."></textarea>
+            </div>
           </div>
           <div class="actions"><button>Create project</button></div>
         </form>
