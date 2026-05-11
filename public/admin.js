@@ -318,7 +318,10 @@ async function renderProjectDetail(main) {
           <a href="#" id="back-to-projects" class="muted" style="text-decoration:none">← Projects</a>
           &nbsp;/&nbsp; ${esc(project.title)}
         </h2>
-        <span class="pill">${esc(project.status)}</span>
+        <div class="row" style="gap:0.4rem">
+          <button id="edit-project-toggle" class="secondary small">✎ Edit</button>
+          <span class="pill">${esc(project.status)}</span>
+        </div>
       </div>
       <div class="row" style="gap:1rem; color: var(--text-muted); font-size: 0.9rem">
         <span><strong style="color:var(--text)">${esc(claimant?.legal_name ?? '')}</strong></span>
@@ -329,6 +332,8 @@ async function renderProjectDetail(main) {
         <span>Manager: <strong style="color:var(--text)">${project.manager ? esc(project.manager.name) : '—'}</strong></span>
       </div>
     </div>
+
+    ${renderEditProjectForm(project)}
 
     <div class="card">
       <h2>Narrative</h2>
@@ -367,7 +372,116 @@ async function renderProjectDetail(main) {
     e.preventDefault();
     location.hash = 'claimants';
   });
+  bindEditProjectForm(project);
   bindLogOnBehalfForms(project);
+}
+
+function renderEditProjectForm(project) {
+  const managerOpts = state.managers.map(u =>
+    `<option value="${u.id}" ${u.id === project.manager_user_id ? 'selected' : ''}>${esc(u.name)} (${esc(u.role)})</option>`
+  ).join('');
+  const selected = (a, b) => a === b ? 'selected' : '';
+  return `
+    <div class="card" id="edit-project-card" hidden>
+      <h2>Edit project</h2>
+      <form id="form-edit-project">
+        <div class="grid">
+          <div class="full"><label>Title</label>
+            <input name="title" required value="${esc(project.title)}">
+          </div>
+          <div><label>Type</label>
+            <select name="type">
+              <option value="sred" ${selected(project.type,'sred')}>SR&amp;ED</option>
+              <option value="internal" ${selected(project.type,'internal')}>Internal</option>
+            </select>
+          </div>
+          <div><label>Phase</label>
+            <select name="phase">
+              <option value="concept" ${selected(project.phase,'concept')}>Concept</option>
+              <option value="development" ${selected(project.phase,'development')}>Development</option>
+              <option value="complete" ${selected(project.phase,'complete')}>Complete</option>
+            </select>
+          </div>
+          <div><label>Manager</label>
+            <select name="manager_user_id">
+              <option value="" ${!project.manager_user_id ? 'selected' : ''}>— none —</option>
+              ${managerOpts}
+            </select>
+          </div>
+          <div><label>Field of science</label>
+            <input name="field_of_science" value="${esc(project.field_of_science ?? '')}">
+          </div>
+          <div><label>Start date</label>
+            <input type="date" name="start_date" required value="${esc(project.start_date)}">
+          </div>
+          <div><label>End date</label>
+            <input type="date" name="end_date" value="${esc(project.end_date ?? '')}">
+          </div>
+          <div><label>Status</label>
+            <select name="status">
+              <option ${selected(project.status,'planned')}>planned</option>
+              <option ${selected(project.status,'active')}>active</option>
+              <option ${selected(project.status,'completed')}>completed</option>
+            </select>
+          </div>
+          <div class="full"><label>Advancement sought</label>
+            <textarea name="advancement_sought" rows="3">${esc(project.advancement_sought ?? '')}</textarea>
+          </div>
+          <div class="full"><label>Technological uncertainties</label>
+            <textarea name="uncertainties" rows="3">${esc(project.uncertainties ?? '')}</textarea>
+          </div>
+          <div class="full"><label>Work performed</label>
+            <textarea name="work_performed" rows="4">${esc(project.work_performed ?? '')}</textarea>
+          </div>
+        </div>
+        <div class="actions row" style="gap:0.5rem">
+          <button>Save changes</button>
+          <button type="button" class="secondary" id="cancel-edit-project">Cancel</button>
+          <span class="muted">Narrative edits create a new revision snapshot.</span>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function bindEditProjectForm(project) {
+  const toggle = document.getElementById('edit-project-toggle');
+  const card   = document.getElementById('edit-project-card');
+  const cancel = document.getElementById('cancel-edit-project');
+  const form   = document.getElementById('form-edit-project');
+  if (!toggle || !card || !form) return;
+
+  toggle.addEventListener('click', () => {
+    card.hidden = false;
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  if (cancel) cancel.addEventListener('click', () => { card.hidden = true; });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const managerRaw = fd.get('manager_user_id');
+    const endDate = fd.get('end_date');
+    try {
+      await api('PATCH', `/api/projects/${project.id}`, {
+        title: fd.get('title'),
+        field_of_science: fd.get('field_of_science') || null,
+        start_date: fd.get('start_date'),
+        end_date: endDate || null,
+        status: fd.get('status'),
+        type: fd.get('type'),
+        phase: fd.get('phase'),
+        manager_user_id: managerRaw ? Number(managerRaw) : null,
+        advancement_sought: fd.get('advancement_sought') || null,
+        uncertainties: fd.get('uncertainties') || null,
+        work_performed: fd.get('work_performed') || null,
+      });
+      // Refresh state.projects too so the list view (when user goes back) is current.
+      await reloadAll();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
 }
 
 function renderLogOnBehalfCards(project, claimant) {
