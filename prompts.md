@@ -690,3 +690,24 @@ If we know the fiscal year end could we prefill the date fields in the Add fisca
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Allow admins to edit employees.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

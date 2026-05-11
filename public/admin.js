@@ -309,6 +309,163 @@ function renderUsersUnderClaimantTable() {
     </tbody></table>`;
 }
 
+// --- Edit user (inline expansion under the All employees table) -----------
+
+function renderUserEditForm(u) {
+  const isSelf = u.id === state.me.user.id;
+  const ROLES = ['employee', 'manager', 'admin'];
+  const claimantOpts = state.claimants
+    .map(c => `<option value="${c.id}">${esc(c.legal_name)}</option>`).join('');
+  return `
+    <div class="card compact" style="margin: 0.5rem 0">
+      <h3 style="margin-top:0">Edit ${esc(u.name)}</h3>
+
+      <form data-form="user-fields" data-user="${u.id}">
+        <div class="grid">
+          <div><label>Name</label><input name="name" required value="${esc(u.name)}"></div>
+          <div><label>Role${isSelf ? ' (locked — you)' : ''}</label>
+            <select name="role" ${isSelf ? 'disabled' : ''}>
+              ${ROLES.map(r => `<option ${r === u.role ? 'selected' : ''}>${r}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="actions"><button class="small">Save user fields</button></div>
+      </form>
+
+      <h3>Attachments</h3>
+      ${u.attachments.length === 0
+        ? '<p class="empty">Not attached to any claimant.</p>'
+        : u.attachments.map(a => renderAttachmentEditor(a)).join('')}
+
+      <h3>Add attachment</h3>
+      <form data-form="add-attachment" data-user="${u.id}">
+        <div class="grid">
+          <div><label>Claimant</label><select name="claimant_id" required>${claimantOpts}</select></div>
+          <div><label>Title</label><input name="title"></div>
+          <div><label>Comp type</label>
+            <select name="comp_type"><option>salary</option><option>hourly</option></select>
+          </div>
+          <div><label>Amount (¢)</label><input type="number" name="amount_cents" min="1" required></div>
+          <div><label>Effective from</label><input type="date" name="effective_from" required></div>
+          <div><label><input type="checkbox" name="is_specified_employee" style="width:auto"> Specified</label></div>
+        </div>
+        <div class="actions"><button class="small">Add attachment</button></div>
+      </form>
+    </div>
+  `;
+}
+
+function renderAttachmentEditor(a) {
+  const compHistory = (a.compensation_history ?? []).map(r =>
+    `<li>${esc(r.effective_from)} · ${esc(r.comp_type)} · ${cents(r.amount_cents)} (${r.hours_per_year} h/yr)</li>`
+  ).join('');
+  return `
+    <div class="card" style="background: #f8fafc; padding: 0.75rem 1rem; margin: 0.5rem 0">
+      <form data-form="uc-fields" data-uc="${a.id}">
+        <div class="row" style="gap:0.6rem; align-items:flex-end; flex-wrap:wrap">
+          <div style="flex:1; min-width:14rem">
+            <label>${esc(a.claimant_name)} · attachment ${a.id}</label>
+            <input name="title" placeholder="Title" value="${esc(a.title ?? '')}">
+          </div>
+          <div><label style="display:flex; align-items:center; gap:0.4rem; text-transform:none; letter-spacing:0; color:var(--text); font-weight:500"><input type="checkbox" name="is_specified_employee" style="width:auto" ${a.is_specified_employee ? 'checked' : ''}> Specified</label></div>
+          <div><label>Status</label>
+            <select name="status">
+              <option ${a.status === 'active' ? 'selected' : ''}>active</option>
+              <option ${a.status === 'inactive' ? 'selected' : ''}>inactive</option>
+            </select>
+          </div>
+          <div><button class="small">Save</button></div>
+        </div>
+      </form>
+      <details style="margin-top:0.5rem">
+        <summary class="muted" style="cursor:pointer; font-size:0.85rem">Compensation history (${(a.compensation_history ?? []).length})</summary>
+        <ul style="font-size:0.85rem; margin:0.4rem 0 0.6rem 1rem">${compHistory || '<li class="empty">none</li>'}</ul>
+        <form data-form="add-comp" data-uc="${a.id}">
+          <div class="row" style="gap:0.5rem; align-items:flex-end">
+            <div><label>Type</label><select name="comp_type"><option>salary</option><option>hourly</option></select></div>
+            <div><label>Amount (¢)</label><input type="number" name="amount_cents" min="1" required style="width:8rem"></div>
+            <div><label>Effective from</label><input type="date" name="effective_from" required></div>
+            <div><button class="small secondary">＋ Add comp row</button></div>
+          </div>
+        </form>
+      </details>
+    </div>
+  `;
+}
+
+function bindUserEditForm(bundle, row) {
+  row.querySelector('[data-form="user-fields"]').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    try {
+      await api('PATCH', `/api/users/${bundle.id}`, {
+        name: fd.get('name'),
+        role: fd.get('role') || undefined,   // disabled-on-self → null → not sent
+      });
+      allUsers = (await api('GET', '/api/users')).items;
+      redrawAllUsers();
+    } catch (err) { alert(err.message); }
+  });
+
+  row.querySelectorAll('[data-form="uc-fields"]').forEach(form => {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const ucId = form.dataset.uc;
+      try {
+        await api('PATCH', `/api/user-claimants/${ucId}`, {
+          title: fd.get('title') || null,
+          is_specified_employee: fd.get('is_specified_employee') === 'on',
+          status: fd.get('status'),
+        });
+        // Re-render the form with fresh data
+        const fresh = await api('GET', `/api/users/${bundle.id}`);
+        row.querySelector('td').innerHTML = renderUserEditForm(fresh);
+        bindUserEditForm(fresh, row);
+      } catch (err) { alert(err.message); }
+    });
+  });
+
+  row.querySelectorAll('[data-form="add-comp"]').forEach(form => {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const ucId = form.dataset.uc;
+      try {
+        await api('POST', `/api/user-claimants/${ucId}/compensation`, {
+          comp_type: fd.get('comp_type'),
+          amount_cents: Number(fd.get('amount_cents')),
+          effective_from: fd.get('effective_from'),
+        });
+        const fresh = await api('GET', `/api/users/${bundle.id}`);
+        row.querySelector('td').innerHTML = renderUserEditForm(fresh);
+        bindUserEditForm(fresh, row);
+      } catch (err) { alert(err.message); }
+    });
+  });
+
+  const addAttach = row.querySelector('[data-form="add-attachment"]');
+  if (addAttach) addAttach.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(addAttach);
+    try {
+      await api('POST', `/api/users/${bundle.id}/attachments`, {
+        claimant_id: Number(fd.get('claimant_id')),
+        title: fd.get('title') || null,
+        is_specified_employee: fd.get('is_specified_employee') === 'on',
+        compensation: {
+          comp_type: fd.get('comp_type'),
+          amount_cents: Number(fd.get('amount_cents')),
+          effective_from: fd.get('effective_from'),
+        },
+      });
+      const fresh = await api('GET', `/api/users/${bundle.id}`);
+      row.querySelector('td').innerHTML = renderUserEditForm(fresh);
+      bindUserEditForm(fresh, row);
+    } catch (err) { alert(err.message); }
+  });
+}
+
 // --- Project detail subview ------------------------------------------------
 
 async function renderProjectDetail(main) {
@@ -705,6 +862,7 @@ function redrawAllUsers() {
           <td>${esc(u.role)}</td>
           <td><span class="pill ${u.status === 'active' ? 'open' : (u.status === 'pending' ? 'pending' : 'closed')}">${esc(u.status)}</span></td>
           <td class="actions">
+            <button class="small secondary" data-edit-user="${u.id}">Edit</button>
             ${u.status === 'disabled'
               ? `<button class="small secondary" data-act-user="reactivate" data-id="${u.id}">Reactivate</button>`
               : `<button class="small secondary" data-enroll="${u.id}">${u.status === 'pending' ? 'Send invite' : 'Add device'}</button>
@@ -712,9 +870,25 @@ function redrawAllUsers() {
                    ? ''
                    : `<button class="small danger" data-act-user="deactivate" data-id="${u.id}" data-name="${esc(u.name)}">Deactivate</button>`}`}
           </td>
-        </tr>`).join('')}
+        </tr>
+        <tr id="user-edit-row-${u.id}" hidden><td colspan="6"></td></tr>`).join('')}
       </tbody>
     </table>`;
+  el.querySelectorAll('[data-edit-user]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = Number(btn.dataset.editUser);
+      const cell = document.querySelector(`#user-edit-row-${id} td`);
+      const row  = document.getElementById(`user-edit-row-${id}`);
+      if (!row.hidden) { row.hidden = true; return; }
+      cell.innerHTML = '<p class="muted">Loading…</p>';
+      row.hidden = false;
+      try {
+        const bundle = await api('GET', `/api/users/${id}`);
+        cell.innerHTML = renderUserEditForm(bundle);
+        bindUserEditForm(bundle, row);
+      } catch (e) { cell.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+    });
+  });
   el.querySelectorAll('[data-enroll]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.enroll;
