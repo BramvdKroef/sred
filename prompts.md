@@ -136,3 +136,17 @@ go ahead with the scaffolding
 First commit what we have.
 ~~~
 
+
+## Prompt
+
+~~~
+wire up the claimants and projects routes
+~~~
+
+
+## Prompt
+
+~~~
+commit this and wire up the users router
+~~~
+
