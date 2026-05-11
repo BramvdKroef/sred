@@ -197,3 +197,23 @@ commit it and wire up the periods router
 commit it and wire up the evidence router
 ~~~
 
+
+## Prompt
+
+~~~
+<task-notification>
+<task-id>b64mxivvm</task-id>
+<tool-use-id>toolu_01Chtbfh99xxhR9sh7uBGj8a</tool-use-id>
+<output-file>/tmp/claude-1000/-home-bram-src-sred/8104ef29-2536-4afe-b7c3-b2175650e04d/tasks/b64mxivvm.output</output-file>
+<status>failed</status>
+<summary>Background command "Boot server" failed with exit code 143</summary>
+</task-notification>
+~~~
+
+
+## Prompt
+
+~~~
+commit it and wire up expenses
+~~~
+
