@@ -330,13 +330,49 @@ export function wireActivityDetails(root) {
       tr.hidden = false;
       btn.textContent = 'Close';
       cell.innerHTML = '<p class="muted">Loading…</p>';
-      try {
-        cell.innerHTML = await fetchActivityDetail(type, id);
-        wireJwtDownloads(cell);
-      } catch (e) {
-        cell.innerHTML = `<p class="error">${esc(e.message)}</p>`;
-      }
+      try { await renderAndWireDetail(cell, type, id); }
+      catch (e) { cell.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
     });
+  });
+}
+
+async function renderAndWireDetail(cell, type, id) {
+  cell.innerHTML = await fetchActivityDetail(type, id);
+  wireJwtDownloads(cell);
+  wireAttachForm(cell, type, id);
+}
+
+function wireAttachForm(cell, type, id) {
+  const form = cell.querySelector('[data-attach-form]');
+  if (!form) return;
+  bindEvidenceKindToggle(form);
+  onSubmit(form, async fd => {
+    const projectId = Number(form.dataset.projectId);
+    const date = fd.get('evidence_date') || form.dataset.entryDate;
+    const caption = fd.get('caption') || 'Attached evidence';
+    const linkKey = type === 'labour' ? 'labour_entry_id' : 'expense_id';
+    if (fd.get('ev_kind') === 'file') {
+      const efd = new FormData();
+      efd.append('project_id', String(projectId));
+      efd.append(linkKey, String(id));
+      efd.append('kind', 'file');
+      efd.append('caption', caption);
+      efd.append('evidence_date', date);
+      const file = fd.get('ev_file');
+      if (!file || !file.size) throw new Error('Select a file to upload');
+      efd.append('file', file);
+      await apiUpload('/api/evidence', efd);
+    } else if (fd.get('ev_kind') === 'link') {
+      const url = fd.get('ev_url');
+      if (!url) throw new Error('URL required');
+      await api('POST', '/api/evidence', {
+        project_id: projectId, [linkKey]: id, kind: 'link',
+        caption, evidence_date: date, url,
+      });
+    } else {
+      throw new Error('Pick a kind');
+    }
+    await renderAndWireDetail(cell, type, id);
   });
 }
 
@@ -388,14 +424,34 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
   }
   body += `</div>`;
 
-  if (linkedEv.length) {
-    body += `<h4 style="margin:0.8rem 0 0.3rem; font-size:0.92rem">Linked evidence (${linkedEv.length})</h4>
-      <ul style="font-size:0.88rem; margin:0; padding-left:1.2rem">${linkedEv.map(ev =>
+  if (type === 'labour' || type === 'expense') {
+    body += `<h4 style="margin:0.8rem 0 0.3rem; font-size:0.92rem">Linked evidence (${linkedEv.length})</h4>`;
+    if (linkedEv.length) {
+      body += `<ul style="font-size:0.88rem; margin:0; padding-left:1.2rem">${linkedEv.map(ev =>
         `<li><span class="pill type-evidence">${esc(ev.kind)}</span> ${esc(ev.caption)} ${
           ev.kind === 'file' ? `· <a href="/api/evidence/${ev.id}/download" data-jwt-dl>${esc(ev.file_path)}</a>` :
           ev.kind === 'link' ? `· <a href="${esc(ev.url)}" target="_blank" rel="noopener">${esc(ev.url)}</a>` :
           `· <span class="muted">${esc((ev.note_text ?? '').slice(0, 120))}</span>`
         }</li>`).join('')}</ul>`;
+    }
+    const entryDate = type === 'labour' ? e.work_date : e.expense_date;
+    body += `
+      <details style="margin-top:0.5rem">
+        <summary class="summary-link">＋ Attach evidence</summary>
+        <form data-attach-form="${type}-${e.id}" data-project-id="${e.project_id}" data-entry-date="${esc(entryDate)}" class="row" style="gap:0.5rem; align-items:flex-end; flex-wrap:wrap; margin-top:0.5rem">
+          <div><label>Kind</label>
+            <select name="ev_kind" class="ev-kind">
+              <option value="file">File</option>
+              <option value="link">Link</option>
+            </select>
+          </div>
+          <div><label>Date</label><input type="date" name="evidence_date" value="${esc(entryDate)}"></div>
+          <div class="input-grow"><label>Caption</label><input name="caption" placeholder="What this shows"></div>
+          <div class="full ev-file"><label>File</label><input type="file" name="ev_file"></div>
+          <div class="full ev-url" hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
+          <div><button class="small">Attach</button></div>
+        </form>
+      </details>`;
   }
   if (auditItems.length) {
     body += `<details style="margin-top:0.7rem"><summary class="muted" style="cursor:pointer; font-size:0.88rem">Audit log (${auditItems.length})</summary>

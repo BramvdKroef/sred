@@ -285,6 +285,11 @@ function renderLabourForm() {
 // --- Evidence form ---------------------------------------------------------
 
 function renderEvidenceForm() {
+  const summarize = (s, n = 40) => (s ?? '').length > n ? (s.slice(0, n) + '…') : (s ?? '');
+  const labourOpts = state.labour.map(l =>
+    `<option value="labour:${l.id}">${esc(l.work_date)} · ${l.hours}h · ${esc(summarize(l.description))}</option>`).join('');
+  const expenseOpts = state.expenses.map(e =>
+    `<option value="expense:${e.id}">${esc(e.expense_date)} · ${cents(e.amount_cents)} ${esc(e.currency)} · ${esc(summarize(e.description))}</option>`).join('');
   return `<div class="card">
     <h2>Add evidence</h2>
     <form id="evidence-form">
@@ -299,6 +304,14 @@ function renderEvidenceForm() {
           </select>
         </div>
         <div class="full"><label>Caption</label><input name="caption" required></div>
+        <div class="full">
+          <label>Attach to (optional)</label>
+          <select name="attach_to">
+            <option value="">— none (project-level) —</option>
+            ${labourOpts ? `<optgroup label="Labour entries">${labourOpts}</optgroup>` : ''}
+            ${expenseOpts ? `<optgroup label="Expenses">${expenseOpts}</optgroup>` : ''}
+          </select>
+        </div>
         <div class="full" id="ev-file"><label>File</label><input type="file" name="file"></div>
         <div class="full" id="ev-url" hidden><label>URL</label><input type="url" name="url" placeholder="https://…"></div>
         <div class="full" id="ev-note" hidden><label>Note</label><textarea name="note_text" rows="3"></textarea></div>
@@ -385,7 +398,15 @@ function bind() {
   });
 
   onSubmit(document.getElementById('evidence-form'), async fd => {
+    // Optional attach_to picker: "labour:42" or "expense:7" or "".
+    const attach = (fd.get('attach_to') || '').split(':');
+    const labourEntryId = attach[0] === 'labour'  ? Number(attach[1]) : null;
+    const expenseId     = attach[0] === 'expense' ? Number(attach[1]) : null;
+
     if (fd.get('kind') === 'file') {
+      // FormData already carries file/project_id/caption/etc.; add the link fields.
+      if (labourEntryId) fd.append('labour_entry_id', String(labourEntryId));
+      if (expenseId)     fd.append('expense_id',     String(expenseId));
       await apiUpload('/api/evidence', fd);
     } else {
       const body = {
@@ -394,6 +415,8 @@ function bind() {
         caption: fd.get('caption'),
         evidence_date: fd.get('evidence_date'),
       };
+      if (labourEntryId) body.labour_entry_id = labourEntryId;
+      if (expenseId)     body.expense_id     = expenseId;
       if (body.kind === 'link') body.url = fd.get('url');
       if (body.kind === 'note') body.note_text = fd.get('note_text');
       await api('POST', '/api/evidence', body);

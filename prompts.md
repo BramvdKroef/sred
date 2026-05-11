@@ -900,3 +900,24 @@ start with the form-submit helper and inline styles
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can labour/expense allow multiple pieces of evidence?
+~~~
+
+
+## Prompt
+
+~~~
+go ahead with both 1 and 2
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+
