@@ -12,6 +12,7 @@ const state = {
   pendingLabour: [],
   pendingExpenses: [],
   exports: [],
+  viewingProjectId: null,
 };
 
 export function renderAdmin(ctx) {
@@ -68,6 +69,7 @@ function render() {
   });
   const main = $('#main');
   if (state.tab === 'overview') return renderOverviewTab(main);
+  if (state.tab === 'claimants' && state.viewingProjectId) return renderProjectDetail(main);
   if (state.tab === 'claimants') main.innerHTML = renderClaimantsTab();
   else if (state.tab === 'users') main.innerHTML = renderUsersTab();
   else if (state.tab === 'review') return renderReviewTab(main);
@@ -212,17 +214,14 @@ function renderPeriodsTable() {
 
 function renderProjectsTable() {
   if (!state.projects.length) return '<p class="empty">No projects yet.</p>';
-  return `<table>
-    <thead><tr><th>Title</th><th>Field</th><th>Start</th><th>Status</th><th>Actions</th></tr></thead>
+  return `<table class="rows-clickable">
+    <thead><tr><th>Title</th><th>Field</th><th>Start</th><th>Status</th></tr></thead>
     <tbody>${state.projects.map(p => `
-      <tr>
-        <td>${esc(p.title)}</td>
+      <tr data-open-project="${p.id}">
+        <td><strong>${esc(p.title)}</strong></td>
         <td>${esc(p.field_of_science ?? '—')}</td>
         <td>${esc(p.start_date)}</td>
         <td><span class="pill">${esc(p.status)}</span></td>
-        <td class="actions">
-          <button class="secondary small" data-act="assign" data-id="${p.id}">Assign</button>
-        </td>
       </tr>`).join('')}
     </tbody></table>`;
 }
@@ -239,6 +238,70 @@ function renderUsersUnderClaimantTable() {
         <td><span class="pill ${u.status === 'active' ? 'open' : 'pending'}">${esc(u.status)}</span></td>
       </tr>`).join('')}
     </tbody></table>`;
+}
+
+// --- Project detail subview ------------------------------------------------
+
+async function renderProjectDetail(main) {
+  main.innerHTML = '<p class="empty">Loading project…</p>';
+  const projectId = state.viewingProjectId;
+  const [project, activity] = await Promise.all([
+    api('GET', `/api/projects/${projectId}`),
+    api('GET', `/api/activity?project_id=${projectId}&limit=25`),
+  ]);
+  const claimant = state.claimants.find(c => c.id === project.claimant_id);
+  main.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2>
+          <a href="#" id="back-to-projects" class="muted" style="text-decoration:none">← Projects</a>
+          &nbsp;/&nbsp; ${esc(project.title)}
+        </h2>
+        <span class="pill">${esc(project.status)}</span>
+      </div>
+      <div class="row" style="gap:1.5rem; color: var(--text-muted); font-size: 0.9rem">
+        <span><strong style="color:var(--text)">${esc(claimant?.legal_name ?? '')}</strong></span>
+        <span>${esc(project.field_of_science ?? '—')}</span>
+        <span>Started ${esc(project.start_date)}${project.end_date ? ` → ${esc(project.end_date)}` : ''}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Narrative</h2>
+      <h3>Advancement sought</h3>
+      <p>${esc(project.advancement_sought ?? '—')}</p>
+      <h3>Uncertainties</h3>
+      <p>${esc(project.uncertainties ?? '—')}</p>
+      <h3>Work performed</h3>
+      <p>${esc(project.work_performed ?? '—')}</p>
+    </div>
+
+    <div class="card compact">
+      <h2>Assigned employees (${project.assignments.length})</h2>
+      ${project.assignments.length === 0
+        ? '<p class="empty">No assignments yet.</p>'
+        : `<table>
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+            <tbody>${project.assignments.map(a => `
+              <tr>
+                <td>${esc(a.name)}</td>
+                <td>${esc(a.email)}</td>
+                <td><span class="pill ${a.status === 'active' ? 'open' : 'closed'}">${esc(a.status)}</span></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>`}
+    </div>
+
+    <div class="card">
+      <h2>Recent activity</h2>
+      ${activityHtml(activity.items, { showActor: true })}
+    </div>
+  `;
+  document.getElementById('back-to-projects').addEventListener('click', e => {
+    e.preventDefault();
+    state.viewingProjectId = null;
+    render();
+  });
 }
 
 // --- Users tab -------------------------------------------------------------
@@ -455,6 +518,14 @@ function bindCommon() {
   const cp = document.getElementById('claimant-pick');
   if (cp) cp.addEventListener('change', e => {
     state.claimantId = Number(e.target.value) || null; reloadAll();
+  });
+
+  // Row-click → open project detail
+  document.querySelectorAll('[data-open-project]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      state.viewingProjectId = Number(tr.dataset.openProject);
+      render();
+    });
   });
 
   // Toggle new-claimant / new-period / new-project forms

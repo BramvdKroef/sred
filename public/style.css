@@ -259,6 +259,8 @@ th {
   letter-spacing: 0.06em;
 }
 tr:hover td { background: #f8fafc; }
+table.rows-clickable tbody tr { cursor: pointer; }
+table.rows-clickable tbody tr:hover td { background: var(--brand-light); }
 td.actions { white-space: nowrap; }
 .muted { color: var(--text-muted); font-size: 0.88rem; }
 

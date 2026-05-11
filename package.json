@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "dev": "node --watch-path=src --watch src/server.js",
     "migrate": "node src/db/migrate.js",
     "seed:admin": "node src/scripts/seed-admin.js",
     "seed:etc": "node src/scripts/seed-etc.js",
