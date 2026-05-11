@@ -150,3 +150,10 @@ wire up the claimants and projects routes
 commit this and wire up the users router
 ~~~
 
+
+## Prompt
+
+~~~
+commit it and wire up the labour router
+~~~
+
