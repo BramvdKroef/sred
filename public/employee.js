@@ -1,6 +1,6 @@
 import { api, apiUpload, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
-         wireJwtDownloads } from './api.js';
+         wireJwtDownloads, renderPreferencesPage } from './api.js';
 
 const state = {
   me: null,
@@ -20,7 +20,7 @@ export async function renderEmployee(ctx) {
   await reload();
 }
 
-const ALLOWED_TABS = ['overview', 'activity', 'labour', 'evidence', 'expense'];
+const ALLOWED_TABS = ['overview', 'activity', 'labour', 'evidence', 'expense', 'preferences'];
 
 function shell() {
   const initial = location.hash.slice(1);
@@ -31,7 +31,7 @@ function shell() {
     <header>
       <h1>Precision <strong>SR&amp;ED</strong></h1>
       <div class="user">
-        <strong>${esc(state.me.user.name)}</strong>
+        <strong><a href="#preferences" style="color:#fff; text-decoration:none">${esc(state.me.user.name)}</a></strong>
         <span class="role">employee</span>
         <button class="secondary small" id="signout">Sign out</button>
       </div>
@@ -85,6 +85,7 @@ function render() {
   });
   const main = $('#main');
   if (state.tab === 'overview') main.innerHTML = renderOverview();
+  else if (state.tab === 'preferences') return renderPreferencesPage(main);
   else if (state.tab === 'activity') main.innerHTML = renderActivity();
   else if (state.tab === 'labour') main.innerHTML = renderLabourForm();
   else if (state.tab === 'evidence') main.innerHTML = renderEvidenceForm();

@@ -6,7 +6,7 @@ import { findValidEmailToken, consumeEmailToken, mintEmailToken, buildMagicLink 
 import { startRegistration, finishRegistration, startLogin, finishLogin } from '../auth/webauthn.js';
 import { mintRefreshToken, consumeRefreshToken, revokeRefreshToken } from '../auth/refresh.js';
 import { sendMagicLink } from '../lib/email.js';
-import { badRequest, unauthorized } from '../lib/errors.js';
+import { badRequest, unauthorized, notFound } from '../lib/errors.js';
 
 const router = Router();
 
@@ -194,6 +194,31 @@ router.get('/activity', requireAuth, (req, res) => {
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .slice(0, limit);
   res.json({ items });
+});
+
+router.get('/me/credentials', requireAuth, (req, res) => {
+  const items = db.prepare(`
+    SELECT id, label, transports, counter, created_at, last_used_at
+      FROM credentials
+     WHERE user_id = ?
+     ORDER BY id
+  `).all(req.user.id);
+  res.json({ items: items.map(c => ({
+    ...c,
+    transports: c.transports ? JSON.parse(c.transports) : null,
+  })) });
+});
+
+router.delete('/me/credentials/:id', requireAuth, (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const cred = db.prepare(`SELECT * FROM credentials WHERE id = ? AND user_id = ?`).get(id, req.user.id);
+    if (!cred) throw notFound('credential not found');
+    const count = db.prepare(`SELECT COUNT(*) AS n FROM credentials WHERE user_id = ?`).get(req.user.id).n;
+    if (count <= 1) throw badRequest("can't remove your only passkey; register another first");
+    db.prepare(`DELETE FROM credentials WHERE id = ?`).run(id);
+    res.status(204).end();
+  } catch (e) { next(e); }
 });
 
 router.get('/me/projects', requireAuth, (req, res) => {

@@ -858,3 +858,17 @@ Add a readme
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Add a user preferences page where users can register additional auth devices.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

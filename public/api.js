@@ -141,6 +141,92 @@ export function bindEvidenceKindToggle(form) {
   update();
 }
 
+// Preferences page (shared between admin and employee shells).
+export async function renderPreferencesPage(main) {
+  main.innerHTML = '<p class="empty">Loading…</p>';
+  await refreshPrefs(main);
+}
+
+async function refreshPrefs(main) {
+  const me   = await api('GET', '/api/me');
+  const data = await api('GET', '/api/me/credentials');
+  main.innerHTML = `
+    <div class="card">
+      <h2>Account</h2>
+      <div class="grid">
+        <div><label>Name</label><div>${esc(me.user.name)}</div></div>
+        <div><label>Email</label><div>${esc(me.user.email)}</div></div>
+        <div><label>Role</label><div><span class="role">${esc(me.user.role)}</span></div></div>
+        <div><label>Status</label><div><span class="pill ${me.user.status === 'active' ? 'open' : 'pending'}">${esc(me.user.status)}</span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Your passkeys (${data.items.length})</h2>
+        <button id="add-passkey-toggle" class="secondary small">＋ Add a passkey</button>
+      </div>
+      <div id="add-passkey-form" hidden style="margin-bottom: 0.8rem">
+        <form id="form-add-passkey" class="row" style="gap:0.5rem; align-items:flex-end">
+          <div style="flex:1; min-width:14rem"><label>Device label</label>
+            <input name="label" placeholder="${esc(navigator.platform || 'Device')}">
+          </div>
+          <div><button class="small">Register passkey</button></div>
+        </form>
+        <p class="muted" style="font-size:0.85rem; margin-top:0.4rem">
+          Your browser will prompt you to use a passkey on this device.
+        </p>
+      </div>
+      ${data.items.length === 0
+        ? '<p class="empty">No passkeys registered yet.</p>'
+        : `<table>
+            <thead><tr><th>Label</th><th>Transports</th><th>Registered</th><th>Last used</th><th></th></tr></thead>
+            <tbody>${data.items.map(c => `
+              <tr>
+                <td>${esc(c.label ?? '(unlabeled)')}</td>
+                <td>${esc((c.transports ?? []).join(', ') || '—')}</td>
+                <td>${esc(c.created_at)}</td>
+                <td>${esc(c.last_used_at ?? 'never')}</td>
+                <td class="actions">${data.items.length > 1
+                  ? `<button class="small danger" data-cred-remove="${c.id}" data-label="${esc(c.label ?? c.id)}">Remove</button>`
+                  : '<span class="muted">cannot remove the last one</span>'}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>`}
+    </div>
+  `;
+  bindPrefs(main);
+}
+
+function bindPrefs(main) {
+  const tg = main.querySelector('#add-passkey-toggle');
+  const form = main.querySelector('#add-passkey-form');
+  if (tg && form) tg.addEventListener('click', () => { form.hidden = !form.hidden; });
+
+  const submit = main.querySelector('#form-add-passkey');
+  if (submit) submit.addEventListener('submit', async e => {
+    e.preventDefault();
+    const label = new FormData(submit).get('label') || navigator.platform || 'Device';
+    try {
+      const { startRegistration } = await import('https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11/+esm');
+      const options = await api('POST', '/api/webauthn/register/start', {});
+      const attestation = await startRegistration({ optionsJSON: options });
+      await api('POST', '/api/webauthn/register/finish', { attestation, label });
+      await refreshPrefs(main);
+    } catch (err) { alert(err.message); }
+  });
+
+  main.querySelectorAll('[data-cred-remove]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Remove "${btn.dataset.label}"? You won't be able to sign in with this device.`)) return;
+      try {
+        await api('DELETE', `/api/me/credentials/${btn.dataset.credRemove}`);
+        await refreshPrefs(main);
+      } catch (err) { alert(err.message); }
+    });
+  });
+}
+
 // Tiny DOM helpers.
 export const esc = s => s == null ? '' : String(s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

@@ -1,6 +1,6 @@
 import { api, $, esc, cents, currentWeek, weekBars, chartHtml, activityHtml,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
-         wireActivityDetails, wireJwtDownloads } from './api.js';
+         wireActivityDetails, wireJwtDownloads, renderPreferencesPage } from './api.js';
 
 const state = {
   me: null,
@@ -26,7 +26,7 @@ export function renderAdmin(ctx) {
   reloadAll();
 }
 
-const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports', 'audit'];
+const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports', 'audit', 'preferences'];
 
 const TYPE_LABEL  = { sred: 'SR&ED', internal: 'Internal' };
 const PHASE_LABEL = { concept: 'Concept', development: 'Development', complete: 'Complete' };
@@ -57,7 +57,7 @@ function shell() {
     <header>
       <h1>Precision <strong>SR&amp;ED</strong></h1>
       <div class="user">
-        <strong>${esc(state.me.user.name)}</strong>
+        <strong><a href="#preferences" style="color:#fff; text-decoration:none">${esc(state.me.user.name)}</a></strong>
         <span class="role">admin</span>
         <button class="secondary small" id="signout">Sign out</button>
       </div>
@@ -203,6 +203,7 @@ function render() {
   });
   const main = $('#main');
   if (state.tab === 'overview') return renderOverviewTab(main);
+  if (state.tab === 'preferences') return renderPreferencesPage(main);
   if (state.tab === 'claimants' && state.viewingProjectId) return renderProjectDetail(main);
   if (state.tab === 'users' && state.viewingUserId) return renderUserDetail(main);
   if (state.tab === 'claimants') main.innerHTML = renderClaimantsTab();
