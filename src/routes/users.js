@@ -126,12 +126,7 @@ router.post('/', (req, res, next) => {
     const fresh = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
     audit(req.user.id, 'create', 'user', userId, undefined, fresh);
 
-    const { raw } = mintEmailToken(userId, 'invite');
-    const magicLink = buildMagicLink(raw);
-    sendMagicLink({ to: email, name, purpose: 'invite', link: magicLink })
-      .catch(err => console.warn('[invite] email send error:', err));
-
-    res.status(201).json({ ...loadUserBundle(userId), magic_link: magicLink });
+    res.status(201).json(loadUserBundle(userId));
   } catch (e) { next(e); }
 });
 
@@ -171,6 +166,24 @@ router.patch('/:id', (req, res, next) => {
     const after = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
     audit(req.user.id, 'update', 'user', userId, before, after);
     res.json(loadUserBundle(userId));
+  } catch (e) { next(e); }
+});
+
+router.post('/:id/invite', (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    const user = db.prepare(`SELECT id, email, name, status FROM users WHERE id = ?`).get(userId);
+    if (!user) throw notFound('user not found');
+    if (user.status === 'disabled') throw badRequest('user is disabled');
+
+    const purpose = user.status === 'pending' ? 'invite' : 'add_device';
+    const { raw, expiresAt } = mintEmailToken(user.id, purpose);
+    const magicLink = buildMagicLink(raw);
+    sendMagicLink({ to: user.email, name: user.name, purpose, link: magicLink })
+      .catch(err => console.warn('[invite] email send error:', err));
+
+    audit(req.user.id, purpose, 'user', user.id);
+    res.json({ user_id: user.id, purpose, magic_link: magicLink, expires_at: expiresAt });
   } catch (e) { next(e); }
 });
 

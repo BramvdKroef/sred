@@ -233,14 +233,11 @@ function renderUsersTab() {
     .join('');
   return `
     <div class="card">
-      <h2>Invite a user</h2>
-      <form id="invite-form">
+      <h2>Add employee</h2>
+      <form id="add-employee-form">
         <div class="grid">
           <div><label>Email</label><input name="email" type="email" required></div>
           <div><label>Name</label><input name="name" required></div>
-          <div><label>Role</label>
-            <select name="role"><option value="employee" selected>employee</option><option value="admin">admin</option></select>
-          </div>
           <div><label>Claimant</label><select name="claimant_id">${claimantOpts}</select></div>
           <div><label>Comp type</label>
             <select name="comp_type"><option>salary</option><option>hourly</option></select>
@@ -249,10 +246,9 @@ function renderUsersTab() {
           <div><label>Effective from</label><input name="effective_from" type="date" required></div>
           <div><label><input name="is_specified_employee" type="checkbox"> Specified employee</label></div>
         </div>
-        <div class="actions"><button>Send invite</button></div>
-        <p class="muted">If the user has no claimant yet, leave Claimant unset. (Form requires one for now.)</p>
+        <div class="actions"><button>Add</button></div>
+        <p class="muted">Creates the employee record only. Click <strong>Send invite</strong> in the table below to email them a passkey enrollment link when ready.</p>
       </form>
-      <div id="invite-result"></div>
     </div>
     <div class="card">
       <h2>All users</h2>
@@ -273,17 +269,36 @@ function redrawAllUsers() {
   if (!el) return;
   el.innerHTML = !allUsers.length ? '<p class="empty">No users yet.</p>' : `
     <table>
-      <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead>
+      <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>${allUsers.map(u => `
         <tr>
           <td>${u.id}</td>
           <td>${esc(u.email)}</td>
           <td>${esc(u.name)}</td>
           <td>${esc(u.role)}</td>
-          <td><span class="pill ${u.status === 'active' ? 'open' : 'pending'}">${esc(u.status)}</span></td>
+          <td><span class="pill ${u.status === 'active' ? 'open' : (u.status === 'pending' ? 'pending' : 'closed')}">${esc(u.status)}</span></td>
+          <td class="actions">
+            ${u.status === 'disabled'
+              ? '<span class="muted">—</span>'
+              : `<button class="small secondary" data-enroll="${u.id}">${u.status === 'pending' ? 'Send invite' : 'Add device'}</button>`}
+          </td>
         </tr>`).join('')}
       </tbody>
     </table>`;
+  el.querySelectorAll('[data-enroll]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.enroll;
+      btn.disabled = true;
+      try {
+        const r = await api('POST', `/api/users/${id}/invite`);
+        alert(`Magic link (also emailed):\n\n${r.magic_link}\n\nPurpose: ${r.purpose}\nExpires: ${r.expires_at}`);
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 // --- Review tab ------------------------------------------------------------
@@ -440,11 +455,11 @@ function bindCommon() {
     await reloadAll();
   });
 
-  bindForm('#invite-form', async (fd, form) => {
+  bindForm('#add-employee-form', async (fd, form) => {
     const body = {
       email: fd.get('email'),
       name: fd.get('name'),
-      role: fd.get('role'),
+      role: 'employee',
       attachments: [{
         claimant_id: Number(fd.get('claimant_id')),
         is_specified_employee: fd.get('is_specified_employee') === 'on',
@@ -455,9 +470,7 @@ function bindCommon() {
         },
       }],
     };
-    const r = await api('POST', '/api/users', body);
-    document.getElementById('invite-result').innerHTML =
-      `<p class="muted">Invited. Magic link (also emailed): <code>${esc(r.magic_link)}</code></p>`;
+    await api('POST', '/api/users', body);
     form.reset();
     await reloadAll();
   });

@@ -376,3 +376,30 @@ Under Users, the All Users section contains "[object Promise]"
 commit it. Then separate employee creation and enrollment. Change the invite user to "Add Employee", is should not send an invite. Add an Enroll button to the user rows.
 ~~~
 
+
+## Prompt
+
+~~~
+<task-notification>
+<task-id>b0h37v5qd</task-id>
+<tool-use-id>toolu_01AbmeXVpTF7LXMFZsaMB1QC</tool-use-id>
+<output-file>/tmp/claude-1000/-home-bram-src-sred/8104ef29-2536-4afe-b7c3-b2175650e04d/tasks/b0h37v5qd.output</output-file>
+<status>failed</status>
+<summary>Background command "Boot server" failed with exit code 143</summary>
+</task-notification>
+~~~
+
+
+## Prompt
+
+~~~
+The help text says "Use “Enroll” in the table below" while the button says "Send invite". Can you update the help text?
+~~~
+
+
+## Prompt
+
+~~~
+commit it.
+~~~
+
