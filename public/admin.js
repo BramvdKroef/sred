@@ -33,7 +33,7 @@ function shell() {
     </header>
     <nav class="tabs">
       ${tabBtn('overview', 'Overview')}
-      ${tabBtn('claimants', 'Claimants & projects')}
+      ${tabBtn('claimants', 'Projects')}
       ${tabBtn('users', 'Users')}
       ${tabBtn('review', 'Review queue')}
       ${tabBtn('exports', 'T661 exports')}
@@ -113,68 +113,79 @@ async function renderOverviewTab(main) {
 
 function renderClaimantsTab() {
   return `
-    <div class="card">
-      <h2>Claimants</h2>
-      <div class="row">
-        <select id="claimant-pick">
+    <div class="two-up">
+      <div class="card compact">
+        <div class="card-head">
+          <h2>Claimant</h2>
+          <button id="new-claimant-toggle" class="secondary small">＋ New</button>
+        </div>
+        <select id="claimant-pick" style="width: 100%">
           <option value="">— select —</option>
           ${state.claimants.map(c =>
             `<option value="${c.id}" ${c.id === state.claimantId ? 'selected' : ''}>${esc(c.legal_name)}</option>`).join('')}
         </select>
-        <button id="new-claimant-toggle" class="secondary small">New claimant</button>
-      </div>
-      <div id="new-claimant-form" hidden>
-        <h3>Create claimant</h3>
-        <form id="claimant-form">
-          <div class="grid">
-            <div><label>Legal name</label><input name="legal_name" required></div>
-            <div><label>Business number</label><input name="business_number"></div>
-            <div><label>Fiscal year end (MM-DD)</label><input name="fye" placeholder="12-31" required></div>
-            <div><label>Reporting currency</label><input name="reporting_currency" value="CAD"></div>
-            <div><label>SR&amp;ED method (locked once set)</label>
-              <select name="sred_method"><option>proxy</option><option>traditional</option></select>
+        <div id="new-claimant-form" hidden style="margin-top: 0.75rem">
+          <form id="claimant-form">
+            <div class="grid">
+              <div><label>Legal name</label><input name="legal_name" required></div>
+              <div><label>Business number</label><input name="business_number"></div>
+              <div><label>Fiscal year end (MM-DD)</label><input name="fye" placeholder="12-31" required></div>
+              <div><label>Reporting currency</label><input name="reporting_currency" value="CAD"></div>
+              <div class="full"><label>SR&amp;ED method (locked once set)</label>
+                <select name="sred_method"><option>proxy</option><option>traditional</option></select>
+              </div>
             </div>
-          </div>
-          <div class="actions"><button>Create</button></div>
-        </form>
+            <div class="actions"><button class="small">Create claimant</button></div>
+          </form>
+        </div>
+      </div>
+      <div class="card compact">
+        <div class="card-head">
+          <h2>Fiscal periods</h2>
+          ${state.claimantId ? '<button id="new-period-toggle" class="secondary small">＋ Add</button>' : ''}
+        </div>
+        ${state.claimantId
+          ? renderPeriodsTable() + `
+              <div id="new-period-form" hidden style="margin-top: 0.6rem">
+                <form id="period-form" class="row">
+                  <input type="date" name="start_date" required>
+                  <input type="date" name="end_date" required>
+                  <button class="small">Add period</button>
+                </form>
+              </div>`
+          : '<p class="empty">Pick a claimant.</p>'}
       </div>
     </div>
-    ${state.claimantId ? renderClaimantSections() : '<p class="empty">Pick or create a claimant to continue.</p>'}
+    ${state.claimantId ? renderProjectsAndUsers() : '<p class="empty">Pick or create a claimant to continue.</p>'}
   `;
 }
 
-function renderClaimantSections() {
+function renderProjectsAndUsers() {
   return `
     <div class="card">
-      <h2>Fiscal periods</h2>
-      ${renderPeriodsTable()}
-      <h3>Create period</h3>
-      <form id="period-form" class="row">
-        <input type="date" name="start_date" required>
-        <input type="date" name="end_date" required>
-        <button>Add period</button>
-      </form>
-    </div>
-    <div class="card">
-      <h2>Projects</h2>
+      <div class="card-head">
+        <h2>Projects</h2>
+        <button id="new-project-toggle" class="secondary small">＋ New project</button>
+      </div>
       ${renderProjectsTable()}
-      <h3>Create project</h3>
-      <form id="project-form">
-        <div class="grid">
-          <div><label>Title</label><input name="title" required></div>
-          <div><label>Field of science</label><input name="field_of_science"></div>
-          <div><label>Start date</label><input type="date" name="start_date" required></div>
-          <div><label>Status</label>
-            <select name="status"><option>planned</option><option selected>active</option><option>completed</option></select>
+      <div id="new-project-form" hidden style="margin-top: 1rem">
+        <form id="project-form">
+          <div class="grid">
+            <div><label>Title</label><input name="title" required></div>
+            <div><label>Field of science</label><input name="field_of_science"></div>
+            <div><label>Start date</label><input type="date" name="start_date" required></div>
+            <div><label>Status</label>
+              <select name="status"><option>planned</option><option selected>active</option><option>completed</option></select>
+            </div>
+            <div class="full"><label>Advancement sought</label><textarea name="advancement_sought" rows="2"></textarea></div>
+            <div class="full"><label>Uncertainties</label><textarea name="uncertainties" rows="2"></textarea></div>
+            <div class="full"><label>Work performed</label><textarea name="work_performed" rows="2"></textarea></div>
           </div>
-          <div class="full"><label>Advancement sought</label><textarea name="advancement_sought" rows="2"></textarea></div>
-          <div class="full"><label>Uncertainties</label><textarea name="uncertainties" rows="2"></textarea></div>
-          <div class="full"><label>Work performed</label><textarea name="work_performed" rows="2"></textarea></div>
-        </div>
-        <div class="actions"><button>Create project</button></div>
-      </form>
+          <div class="actions"><button>Create project</button></div>
+        </form>
+      </div>
     </div>
-    <div class="card">
+    <div class="card compact">
       <h2>Attached users</h2>
       ${renderUsersUnderClaimantTable()}
     </div>
@@ -446,11 +457,17 @@ function bindCommon() {
     state.claimantId = Number(e.target.value) || null; reloadAll();
   });
 
-  // Toggle new-claimant form
-  const tg = document.getElementById('new-claimant-toggle');
-  if (tg) tg.addEventListener('click', () => {
-    document.getElementById('new-claimant-form').hidden = false;
-  });
+  // Toggle new-claimant / new-period / new-project forms
+  const toggles = [
+    ['new-claimant-toggle', 'new-claimant-form'],
+    ['new-period-toggle',   'new-period-form'],
+    ['new-project-toggle',  'new-project-form'],
+  ];
+  for (const [btnId, formId] of toggles) {
+    const btn = document.getElementById(btnId);
+    const form = document.getElementById(formId);
+    if (btn && form) btn.addEventListener('click', () => { form.hidden = !form.hidden; });
+  }
 
   bindForm('#claimant-form', async fd => {
     const fye = (fd.get('fye') || '').split('-').map(Number);

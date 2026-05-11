@@ -459,3 +459,17 @@ Add a table to the Overview page with the recent activity.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can you rename the Claimants & projects tab to just Projects. And, on that tab, can you put the Claimants and Fiscal periods cards side by side? The Projects list should be the focus and I want to minimize the screen space those two sections take up.
+~~~
+
+
+## Prompt
+
+~~~
+commit it.
+~~~
+
