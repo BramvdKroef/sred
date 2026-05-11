@@ -760,3 +760,17 @@ Can you remove the Project column from the Recend activity card on the project p
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+When an admin adds labour/expenses they should automatically be approved.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

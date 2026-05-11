@@ -131,14 +131,18 @@ router.post('/', (req, res, next) => {
     const uc = resolveUserClaimant({ user: req.user, project, requestedUcId: user_claimant_id });
     const period = findOpenPeriod(project.claimant_id, expense_date);
 
+    const isAdmin = req.user.role === 'admin';
+    const initialStatus = isAdmin ? 'approved' : 'pending';
     const info = db.prepare(`
       INSERT INTO expenses
         (project_id, user_claimant_id, fiscal_period_id, expense_date, category,
-         amount_cents, currency, fx_rate, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         amount_cents, currency, fx_rate, description,
+         status, reviewed_by_user_id, reviewed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${isAdmin ? "datetime('now')" : 'NULL'})
     `).run(
       project.id, uc.id, period.id, expense_date, category,
       amount_cents, currency, fx_rate ?? null, description,
+      initialStatus, isAdmin ? req.user.id : null,
     );
     const expense = getExpenseOrThrow(info.lastInsertRowid);
     audit(req.user.id, 'create', 'expense', expense.id, undefined, expense);
