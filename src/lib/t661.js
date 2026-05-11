@@ -40,8 +40,10 @@ export function computeT661({ claimant, period }) {
     throw unprocessable('fiscal period does not belong to claimant');
   }
 
+  // Only type='sred' projects roll up into a T661. Internal projects are
+  // tracked for hygiene but excluded here.
   const projects = db.prepare(
-    `SELECT * FROM projects WHERE claimant_id = ? ORDER BY id`
+    `SELECT * FROM projects WHERE claimant_id = ? AND type = 'sred' ORDER BY id`
   ).all(claimant.id);
 
   const projectSnapshots = projects.map(project => {

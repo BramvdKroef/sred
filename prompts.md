@@ -557,3 +557,17 @@ Remove the "on behalf" text from the card titles.
 Commit
 ~~~
 
+
+## Prompt
+
+~~~
+On the projects add a field "Type" with options "SR&ED" and "Internal", and a "Phase" field with options "Concept", "Development" and "Complete".
+~~~
+
+
+## Prompt
+
+~~~
+commit it. Then add a Manager role to the user roles. Add a Manager field to projects with Manager/Admin users as options.
+~~~
+

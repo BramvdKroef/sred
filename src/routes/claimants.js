@@ -147,6 +147,8 @@ router.post('/:id/projects', (req, res, next) => {
       start_date,
       end_date,
       status,
+      type = 'sred',
+      phase = 'concept',
       advancement_sought,
       uncertainties,
       work_performed,
@@ -156,13 +158,17 @@ router.post('/:id/projects', (req, res, next) => {
     if (!start_date) throw badRequest('start_date required');
     if (!['planned', 'active', 'completed'].includes(status))
       throw badRequest('status must be planned|active|completed');
+    if (!['sred', 'internal'].includes(type))
+      throw badRequest('type must be sred|internal');
+    if (!['concept', 'development', 'complete'].includes(phase))
+      throw badRequest('phase must be concept|development|complete');
 
     const tx = db.transaction(() => {
       const info = db.prepare(`
         INSERT INTO projects
           (claimant_id, title, field_of_science, start_date, end_date, status,
-           advancement_sought, uncertainties, work_performed)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           type, phase, advancement_sought, uncertainties, work_performed)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         claimant.id,
         title,
@@ -170,6 +176,8 @@ router.post('/:id/projects', (req, res, next) => {
         start_date,
         end_date ?? null,
         status,
+        type,
+        phase,
         advancement_sought ?? null,
         uncertainties ?? null,
         work_performed ?? null,
@@ -178,8 +186,8 @@ router.post('/:id/projects', (req, res, next) => {
       db.prepare(`
         INSERT INTO project_revisions
           (project_id, title, field_of_science, advancement_sought, uncertainties,
-           work_performed, revised_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+           work_performed, type, phase, revised_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         projectId,
         title,
@@ -187,6 +195,8 @@ router.post('/:id/projects', (req, res, next) => {
         advancement_sought ?? null,
         uncertainties ?? null,
         work_performed ?? null,
+        type,
+        phase,
         req.user.id,
       );
       return projectId;

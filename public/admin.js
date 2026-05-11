@@ -24,6 +24,9 @@ export function renderAdmin(ctx) {
 
 const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports'];
 
+const TYPE_LABEL  = { sred: 'SR&ED', internal: 'Internal' };
+const PHASE_LABEL = { concept: 'Concept', development: 'Development', complete: 'Complete' };
+
 function parseHash() {
   const raw = location.hash.slice(1);
   const [tab, ...rest] = raw.split('/');
@@ -202,6 +205,19 @@ function renderProjectsAndUsers() {
         <form id="project-form">
           <div class="grid">
             <div class="full"><label>Title</label><input name="title" required></div>
+            <div><label>Type</label>
+              <select name="type">
+                <option value="sred" selected>SR&amp;ED</option>
+                <option value="internal">Internal</option>
+              </select>
+            </div>
+            <div><label>Phase</label>
+              <select name="phase">
+                <option value="concept" selected>Concept</option>
+                <option value="development">Development</option>
+                <option value="complete">Complete</option>
+              </select>
+            </div>
             <div><label>Field of science</label><input name="field_of_science" placeholder="e.g. Computer science"></div>
             <div><label>Start date</label><input type="date" name="start_date" required></div>
             <div><label>Status</label>
@@ -249,10 +265,12 @@ function renderPeriodsTable() {
 function renderProjectsTable() {
   if (!state.projects.length) return '<p class="empty">No projects yet.</p>';
   return `<table class="rows-clickable">
-    <thead><tr><th>Title</th><th>Field</th><th>Start</th><th>Status</th></tr></thead>
+    <thead><tr><th>Title</th><th>Type</th><th>Phase</th><th>Field</th><th>Start</th><th>Status</th></tr></thead>
     <tbody>${state.projects.map(p => `
       <tr data-open-project="${p.id}">
         <td><strong>${esc(p.title)}</strong></td>
+        <td><span class="pill kind-${esc(p.type)}">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></td>
+        <td><span class="pill phase-${esc(p.phase)}">${esc(PHASE_LABEL[p.phase] ?? p.phase)}</span></td>
         <td>${esc(p.field_of_science ?? '—')}</td>
         <td>${esc(p.start_date)}</td>
         <td><span class="pill">${esc(p.status)}</span></td>
@@ -293,8 +311,10 @@ async function renderProjectDetail(main) {
         </h2>
         <span class="pill">${esc(project.status)}</span>
       </div>
-      <div class="row" style="gap:1.5rem; color: var(--text-muted); font-size: 0.9rem">
+      <div class="row" style="gap:1rem; color: var(--text-muted); font-size: 0.9rem">
         <span><strong style="color:var(--text)">${esc(claimant?.legal_name ?? '')}</strong></span>
+        <span class="pill kind-${esc(project.type)}">${esc(TYPE_LABEL[project.type] ?? project.type)}</span>
+        <span class="pill phase-${esc(project.phase)}">${esc(PHASE_LABEL[project.phase] ?? project.phase)}</span>
         <span>${esc(project.field_of_science ?? '—')}</span>
         <span>Started ${esc(project.start_date)}${project.end_date ? ` → ${esc(project.end_date)}` : ''}</span>
       </div>
@@ -711,6 +731,8 @@ function bindCommon() {
       field_of_science: fd.get('field_of_science') || null,
       start_date: fd.get('start_date'),
       status: fd.get('status'),
+      type: fd.get('type'),
+      phase: fd.get('phase'),
       advancement_sought: fd.get('advancement_sought') || null,
       uncertainties: fd.get('uncertainties') || null,
       work_performed: fd.get('work_performed') || null,

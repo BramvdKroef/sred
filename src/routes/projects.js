@@ -7,8 +7,10 @@ import { audit } from '../lib/audit.js';
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-const NARRATIVE_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed'];
-const EDITABLE_FIELDS  = [...NARRATIVE_FIELDS, 'start_date', 'end_date', 'status'];
+const SNAPSHOT_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed', 'type', 'phase'];
+const EDITABLE_FIELDS = [...SNAPSHOT_FIELDS, 'start_date', 'end_date', 'status'];
+const VALID_TYPES  = ['sred', 'internal'];
+const VALID_PHASES = ['concept', 'development', 'complete'];
 
 function getProjectOrThrow(id) {
   const p = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id);
@@ -43,6 +45,12 @@ router.patch('/:id', (req, res, next) => {
     if (updates.status !== undefined && !['planned', 'active', 'completed'].includes(updates.status)) {
       throw badRequest('status must be planned|active|completed');
     }
+    if (updates.type !== undefined && !VALID_TYPES.includes(updates.type)) {
+      throw badRequest(`type must be ${VALID_TYPES.join('|')}`);
+    }
+    if (updates.phase !== undefined && !VALID_PHASES.includes(updates.phase)) {
+      throw badRequest(`phase must be ${VALID_PHASES.join('|')}`);
+    }
     if (updates.title !== undefined && !updates.title) {
       throw badRequest('title cannot be empty');
     }
@@ -50,20 +58,20 @@ router.patch('/:id', (req, res, next) => {
     const keys = Object.keys(updates);
     if (keys.length === 0) return res.json(before);
 
-    const narrativeChanged = NARRATIVE_FIELDS.some(k => k in updates && updates[k] !== before[k]);
+    const snapshotNeeded = SNAPSHOT_FIELDS.some(k => k in updates && updates[k] !== before[k]);
 
     const tx = db.transaction(() => {
       const setClause = keys.map(k => `${k} = ?`).join(', ') + `, updated_at = datetime('now')`;
       db.prepare(`UPDATE projects SET ${setClause} WHERE id = ?`)
         .run(...keys.map(k => updates[k]), before.id);
 
-      if (narrativeChanged) {
+      if (snapshotNeeded) {
         const merged = { ...before, ...updates };
         db.prepare(`
           INSERT INTO project_revisions
             (project_id, title, field_of_science, advancement_sought, uncertainties,
-             work_performed, revised_by_user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+             work_performed, type, phase, revised_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           before.id,
           merged.title,
@@ -71,6 +79,8 @@ router.patch('/:id', (req, res, next) => {
           merged.advancement_sought,
           merged.uncertainties,
           merged.work_performed,
+          merged.type,
+          merged.phase,
           req.user.id,
         );
       }

@@ -289,6 +289,12 @@ td.actions { white-space: nowrap; }
 .pill.type-expense  { background: #fff0ee;           color: #a72f2c;          border: 1px solid #f3c8c5; }
 .pill.type-evidence { background: #fdf3d3;           color: #846200;          border: 1px solid #f3e1a0; }
 
+.pill.kind-sred        { background: var(--brand-light); color: var(--brand); border: 1px solid #c5dfee; }
+.pill.kind-internal    { background: #f0f1f3;           color: #495057;       border: 1px solid #d8dadc; }
+.pill.phase-concept    { background: #fff4d6;           color: #846200;       border: 1px solid #f5e0a0; }
+.pill.phase-development{ background: #d9e8ff;           color: #1a3a8a;       border: 1px solid #b6cdef; }
+.pill.phase-complete   { background: #d9efe1;           color: #1c6a3e;       border: 1px solid #b6dec5; }
+
 table.activity td.when {
   white-space: nowrap;
   color: var(--text-muted);
