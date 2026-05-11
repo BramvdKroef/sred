@@ -262,8 +262,9 @@ function renderUsersTab() {
 }
 
 let allUsers = [];
-async function renderAllUsersTable() {
-  // We render synchronously from cache but kick off a refresh.
+function renderAllUsersTable() {
+  // Kick off an async refresh; render a placeholder synchronously so it can
+  // be embedded in a template literal without the Promise stringifying.
   api('GET', '/api/users').then(r => { allUsers = r.items; redrawAllUsers(); });
   return '<div id="all-users-table"><p class="empty">Loading…</p></div>';
 }

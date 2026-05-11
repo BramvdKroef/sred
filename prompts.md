@@ -362,3 +362,17 @@ commit it. Can you change the Acme claimant name to "Extreme Technogoly Corp" an
 delete it and commit
 ~~~
 
+
+## Prompt
+
+~~~
+Under Users, the All Users section contains "[object Promise]"
+~~~
+
+
+## Prompt
+
+~~~
+commit it. Then separate employee creation and enrollment. Change the invite user to "Add Employee", is should not send an invite. Add an Enroll button to the user rows.
+~~~
+
