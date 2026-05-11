@@ -95,7 +95,9 @@ router.get('/', (req, res) => {
     SELECT DISTINCT u.id, u.email, u.name, u.role, u.status, u.created_at
       FROM users u ${join}
      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-     ORDER BY u.id
+     ORDER BY
+       CASE u.status WHEN 'pending' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+       u.id
   `;
   const items = db.prepare(sql).all(...params);
   res.json({ items });

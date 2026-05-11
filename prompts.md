@@ -501,3 +501,17 @@ commit it. Then rename the "Attached users" section title to "Attached employees
 commit it.
 ~~~
 
+
+## Prompt
+
+~~~
+On the Employees tab, sort by status with pending first.
+~~~
+
+
+## Prompt
+
+~~~
+commit it.
+~~~
+
