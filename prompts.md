@@ -536,3 +536,24 @@ commit it, and then also persist the open project.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+An admin needs to be able to log hours and expenses on an employee's behalf. Can you add that to the project page?
+~~~
+
+
+## Prompt
+
+~~~
+Remove the "on behalf" text from the card titles.
+~~~
+
+
+## Prompt
+
+~~~
+Commit
+~~~
+
