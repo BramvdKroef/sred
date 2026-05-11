@@ -157,3 +157,23 @@ commit this and wire up the users router
 commit it and wire up the labour router
 ~~~
 
+
+## Prompt
+
+~~~
+<task-notification>
+<task-id>bdddsqrkw</task-id>
+<tool-use-id>toolu_01HTW8uo2P6PCjVZzFeNXSv5</tool-use-id>
+<output-file>/tmp/claude-1000/-home-bram-src-sred/8104ef29-2536-4afe-b7c3-b2175650e04d/tasks/bdddsqrkw.output</output-file>
+<status>failed</status>
+<summary>Background command "Boot server" failed with exit code 143</summary>
+</task-notification>
+~~~
+
+
+## Prompt
+
+~~~
+commit it and wire up the periods router
+~~~
+

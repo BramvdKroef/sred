@@ -4,6 +4,7 @@ import claimantsRouter from './claimants.js';
 import projectsRouter from './projects.js';
 import usersRouter from './users.js';
 import userClaimantsRouter from './user-claimants.js';
+import labourRouter from './labour.js';
 
 const api = Router();
 
@@ -15,10 +16,10 @@ api.use('/users', usersRouter);
 api.use('/user-claimants', userClaimantsRouter);
 api.use('/claimants', claimantsRouter);
 api.use('/projects', projectsRouter);
+api.use('/labour', labourRouter);
 
 // TODO: mount remaining resource routers as they're built:
 // api.use('/periods',  periodsRouter);
-// api.use('/labour',   labourRouter);
 // api.use('/evidence', evidenceRouter);
 // api.use('/expenses', expensesRouter);
 // api.use('/exports',  exportsRouter);
