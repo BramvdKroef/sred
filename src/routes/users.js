@@ -95,8 +95,11 @@ router.get('/', (req, res) => {
   if (status)      { where.push('u.status = ?');       params.push(status); }
   if (claimant_id) { where.push('uc.claimant_id = ?'); params.push(Number(claimant_id)); }
   const join = claimant_id ? 'JOIN user_claimants uc ON uc.user_id = u.id' : '';
+  const ucFields = claimant_id
+    ? ', uc.id AS user_claimant_id, uc.title AS uc_title, uc.is_specified_employee, uc.status AS attachment_status'
+    : '';
   const sql = `
-    SELECT DISTINCT u.id, u.email, u.name, u.role, u.status, u.created_at
+    SELECT DISTINCT u.id, u.email, u.name, u.role, u.status, u.created_at${ucFields}
       FROM users u ${join}
      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
      ORDER BY

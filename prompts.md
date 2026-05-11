@@ -802,3 +802,17 @@ Can you add a search bar next to the tabs that allow for quickly switching to pr
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Add the ability to assign more employees to a project.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

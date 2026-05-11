@@ -661,16 +661,23 @@ async function renderProjectDetail(main) {
     </div>
 
     <div class="card compact">
-      <h2>Assigned employees (${project.assignments.length})</h2>
+      <div class="card-head">
+        <h2>Assigned employees (${project.assignments.length})</h2>
+        <button id="assign-toggle" class="secondary small">＋ Assign</button>
+      </div>
+      ${renderAssignForm(project)}
       ${project.assignments.length === 0
         ? '<p class="empty">No assignments yet.</p>'
         : `<table>
-            <thead><tr><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead>
             <tbody>${project.assignments.map(a => `
               <tr>
                 <td>${esc(a.name)}</td>
                 <td>${esc(a.email)}</td>
                 <td><span class="pill ${a.status === 'active' ? 'open' : 'closed'}">${esc(a.status)}</span></td>
+                <td class="actions">${a.status === 'active'
+                  ? `<button class="small danger" data-unassign="${a.user_claimant_id}" data-name="${esc(a.name)}">Remove</button>`
+                  : `<button class="small secondary" data-reassign="${a.user_claimant_id}">Re-assign</button>`}</td>
               </tr>`).join('')}
             </tbody>
           </table>`}
@@ -690,6 +697,46 @@ async function renderProjectDetail(main) {
   });
   bindEditProjectForm(project);
   bindLogOnBehalfForms(project);
+  bindAssignmentForm(project);
+}
+
+function bindAssignmentForm(project) {
+  const tg   = document.getElementById('assign-toggle');
+  const form = document.getElementById('assign-form');
+  if (tg && form) tg.addEventListener('click', () => { form.hidden = !form.hidden; });
+
+  const submitForm = document.getElementById('form-assign');
+  if (submitForm) submitForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(submitForm);
+    try {
+      await api('POST', `/api/projects/${project.id}/assignments`, {
+        user_claimant_id: Number(fd.get('user_claimant_id')),
+      });
+      render();
+    } catch (err) { alert(err.message); }
+  });
+
+  document.querySelectorAll('[data-unassign]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Remove ${btn.dataset.name} from this project? Historical labour stays intact.`)) return;
+      try {
+        await api('DELETE', `/api/projects/${project.id}/assignments/${btn.dataset.unassign}`);
+        render();
+      } catch (err) { alert(err.message); }
+    });
+  });
+  // POST /assignments is upsert-style: reactivates an existing inactive row.
+  document.querySelectorAll('[data-reassign]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await api('POST', `/api/projects/${project.id}/assignments`, {
+          user_claimant_id: Number(btn.dataset.reassign),
+        });
+        render();
+      } catch (err) { alert(err.message); }
+    });
+  });
 }
 
 // Smart defaults for the "Add period" form. If the claimant already has
@@ -710,6 +757,31 @@ function suggestPeriodDates(claimant, periods) {
   if (end < today) end = new Date(today.getFullYear() + 1, claimant.fiscal_year_end_month - 1, claimant.fiscal_year_end_day);
   const start = new Date(end); start.setFullYear(start.getFullYear() - 1); start.setDate(start.getDate() + 1);
   return { start: fmt(start), end: fmt(end) };
+}
+
+function renderAssignForm(project) {
+  // state.users currently holds users attached to state.claimantId. After search-
+  // bar navigation, state.claimantId mirrors the open project's claimant.
+  const activeUcIds = new Set(project.assignments.filter(a => a.status === 'active').map(a => a.user_claimant_id));
+  const candidates = (state.users ?? []).filter(u =>
+    u.user_claimant_id && !activeUcIds.has(u.user_claimant_id) && u.attachment_status === 'active'
+  );
+  if (candidates.length === 0) {
+    return `<div id="assign-form" hidden style="margin-bottom:0.6rem">
+      <p class="muted" style="font-size:0.88rem">Every active employee attached to this claimant is already assigned. Add an employee to the claimant from the Employees tab to widen the pool.</p>
+    </div>`;
+  }
+  return `<div id="assign-form" hidden style="margin-bottom:0.6rem">
+    <form id="form-assign" class="row" style="gap:0.5rem; align-items:flex-end">
+      <div style="flex:1; min-width:14rem"><label>Employee</label>
+        <select name="user_claimant_id" required>
+          ${candidates.map(u =>
+            `<option value="${u.user_claimant_id}">${esc(u.name)} (${esc(u.role)})</option>`).join('')}
+        </select>
+      </div>
+      <div><button class="small">Assign</button></div>
+    </form>
+  </div>`;
 }
 
 function renderEditClaimantForm(c) {
