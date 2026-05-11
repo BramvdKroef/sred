@@ -24,11 +24,21 @@ export function renderAdmin(ctx) {
 
 const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports'];
 
+function parseHash() {
+  const raw = location.hash.slice(1);
+  const [tab, ...rest] = raw.split('/');
+  const projectId = rest[0] ? Number(rest[0]) : null;
+  return { tab, projectId: Number.isInteger(projectId) ? projectId : null };
+}
+
 function shell() {
-  // Restore tab from URL hash on initial load.
-  const initial = location.hash.slice(1);
-  if (ALLOWED_TABS.includes(initial)) state.tab = initial;
-  else location.hash = state.tab;   // canonicalize URL to match the default
+  const { tab, projectId } = parseHash();
+  if (ALLOWED_TABS.includes(tab)) {
+    state.tab = tab;
+    state.viewingProjectId = (tab === 'claimants') ? projectId : null;
+  } else {
+    location.hash = state.tab;   // canonicalize URL to match the default
+  }
 
   $('#app').innerHTML = `
     <header>
@@ -56,12 +66,13 @@ function shell() {
 }
 
 function onHashChange() {
-  const tab = location.hash.slice(1);
-  if (ALLOWED_TABS.includes(tab) && tab !== state.tab) {
-    state.tab = tab;
-    state.viewingProjectId = null;
-    render();
-  }
+  const { tab, projectId } = parseHash();
+  if (!ALLOWED_TABS.includes(tab)) return;
+  const nextProject = (tab === 'claimants') ? projectId : null;
+  if (tab === state.tab && nextProject === state.viewingProjectId) return;
+  state.tab = tab;
+  state.viewingProjectId = nextProject;
+  render();
 }
 
 const tabBtn = (key, label) =>
@@ -322,8 +333,7 @@ async function renderProjectDetail(main) {
   `;
   document.getElementById('back-to-projects').addEventListener('click', e => {
     e.preventDefault();
-    state.viewingProjectId = null;
-    render();
+    location.hash = 'claimants';
   });
 }
 
@@ -543,11 +553,10 @@ function bindCommon() {
     state.claimantId = Number(e.target.value) || null; reloadAll();
   });
 
-  // Row-click → open project detail
+  // Row-click → open project detail (drives hash; hashchange triggers render)
   document.querySelectorAll('[data-open-project]').forEach(tr => {
     tr.addEventListener('click', () => {
-      state.viewingProjectId = Number(tr.dataset.openProject);
-      render();
+      location.hash = `claimants/${tr.dataset.openProject}`;
     });
   });
 
