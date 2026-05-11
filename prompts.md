@@ -571,3 +571,10 @@ On the projects add a field "Type" with options "SR&ED" and "Internal", and a "P
 commit it. Then add a Manager role to the user roles. Add a Manager field to projects with Manager/Admin users as options.
 ~~~
 
+
+## Prompt
+
+~~~
+commit it
+~~~
+

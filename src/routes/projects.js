@@ -7,10 +7,21 @@ import { audit } from '../lib/audit.js';
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-const SNAPSHOT_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed', 'type', 'phase'];
+const SNAPSHOT_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed', 'type', 'phase', 'manager_user_id'];
 const EDITABLE_FIELDS = [...SNAPSHOT_FIELDS, 'start_date', 'end_date', 'status'];
 const VALID_TYPES  = ['sred', 'internal'];
 const VALID_PHASES = ['concept', 'development', 'complete'];
+
+function validateManagerUserId(id) {
+  if (id === null) return;
+  if (!Number.isInteger(id)) throw badRequest('manager_user_id must be an integer or null');
+  const u = db.prepare(`SELECT id, role, status FROM users WHERE id = ?`).get(id);
+  if (!u) throw badRequest(`manager_user_id ${id} not found`);
+  if (!['admin', 'manager'].includes(u.role))
+    throw badRequest(`manager_user_id ${id} must be a user with role 'admin' or 'manager'`);
+  if (u.status !== 'active')
+    throw badRequest(`manager_user_id ${id} must be active`);
+}
 
 function getProjectOrThrow(id) {
   const p = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id);
@@ -29,7 +40,10 @@ router.get('/:id', (req, res, next) => {
        WHERE pa.project_id = ?
        ORDER BY pa.id
     `).all(project.id);
-    res.json({ ...project, assignments });
+    const manager = project.manager_user_id
+      ? db.prepare(`SELECT id, name, email, role FROM users WHERE id = ?`).get(project.manager_user_id)
+      : null;
+    res.json({ ...project, manager, assignments });
   } catch (e) { next(e); }
 });
 
@@ -51,6 +65,9 @@ router.patch('/:id', (req, res, next) => {
     if (updates.phase !== undefined && !VALID_PHASES.includes(updates.phase)) {
       throw badRequest(`phase must be ${VALID_PHASES.join('|')}`);
     }
+    if ('manager_user_id' in updates) {
+      validateManagerUserId(updates.manager_user_id);
+    }
     if (updates.title !== undefined && !updates.title) {
       throw badRequest('title cannot be empty');
     }
@@ -70,8 +87,8 @@ router.patch('/:id', (req, res, next) => {
         db.prepare(`
           INSERT INTO project_revisions
             (project_id, title, field_of_science, advancement_sought, uncertainties,
-             work_performed, type, phase, revised_by_user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             work_performed, type, phase, manager_user_id, revised_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           before.id,
           merged.title,
@@ -81,6 +98,7 @@ router.patch('/:id', (req, res, next) => {
           merged.work_performed,
           merged.type,
           merged.phase,
+          merged.manager_user_id ?? null,
           req.user.id,
         );
       }

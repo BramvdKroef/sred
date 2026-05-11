@@ -20,11 +20,22 @@ let ran = 0;
 for (const file of files) {
   if (applied.has(file)) continue;
   const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+  // Disable FK enforcement for the duration of each migration so table
+  // recreates (the SQLite-recommended way to alter a CHECK constraint)
+  // don't trip on inbound references. PRAGMA inside a transaction is a
+  // no-op, so we toggle outside.
+  db.pragma('foreign_keys = OFF');
   const tx = db.transaction(() => {
     db.exec(sql);
     db.prepare('INSERT INTO _migrations (filename) VALUES (?)').run(file);
   });
   tx();
+  db.pragma('foreign_keys = ON');
+  const violations = db.prepare('PRAGMA foreign_key_check').all();
+  if (violations.length) {
+    console.error(`FK violations introduced by ${file}:`, violations);
+    process.exit(1);
+  }
   console.log(`applied ${file}`);
   ran++;
 }

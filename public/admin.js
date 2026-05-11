@@ -9,6 +9,7 @@ const state = {
   periods: [],
   projects: [],
   users: [],
+  managers: [],
   pendingLabour: [],
   pendingExpenses: [],
   exports: [],
@@ -84,6 +85,7 @@ const tabBtn = (key, label) =>
 async function reloadAll() {
   state.claimants = (await api('GET', '/api/claimants')).items;
   if (!state.claimantId && state.claimants[0]) state.claimantId = state.claimants[0].id;
+  state.managers = (await api('GET', '/api/users?role=manager,admin&status=active')).items;
   if (state.claimantId) {
     state.periods  = (await api('GET', `/api/claimants/${state.claimantId}/periods`)).items;
     state.projects = (await api('GET', `/api/claimants/${state.claimantId}/projects`)).items;
@@ -218,6 +220,13 @@ function renderProjectsAndUsers() {
                 <option value="complete">Complete</option>
               </select>
             </div>
+            <div><label>Manager</label>
+              <select name="manager_user_id">
+                <option value="">— none —</option>
+                ${state.managers.map(u =>
+                  `<option value="${u.id}">${esc(u.name)} (${esc(u.role)})</option>`).join('')}
+              </select>
+            </div>
             <div><label>Field of science</label><input name="field_of_science" placeholder="e.g. Computer science"></div>
             <div><label>Start date</label><input type="date" name="start_date" required></div>
             <div><label>Status</label>
@@ -317,6 +326,7 @@ async function renderProjectDetail(main) {
         <span class="pill phase-${esc(project.phase)}">${esc(PHASE_LABEL[project.phase] ?? project.phase)}</span>
         <span>${esc(project.field_of_science ?? '—')}</span>
         <span>Started ${esc(project.start_date)}${project.end_date ? ` → ${esc(project.end_date)}` : ''}</span>
+        <span>Manager: <strong style="color:var(--text)">${project.manager ? esc(project.manager.name) : '—'}</strong></span>
       </div>
     </div>
 
@@ -483,6 +493,12 @@ function renderUsersTab() {
             autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
           <div><label>Name</label><input name="name" required
             autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
+          <div><label>Role</label>
+            <select name="role">
+              <option value="employee" selected>Employee</option>
+              <option value="manager">Manager</option>
+            </select>
+          </div>
           <div><label>Claimant</label><select name="claimant_id">${claimantOpts}</select></div>
           <div><label>Comp type</label>
             <select name="comp_type"><option>salary</option><option>hourly</option></select>
@@ -726,6 +742,7 @@ function bindCommon() {
   });
 
   bindForm('#project-form', async fd => {
+    const managerRaw = fd.get('manager_user_id');
     await api('POST', `/api/claimants/${state.claimantId}/projects`, {
       title: fd.get('title'),
       field_of_science: fd.get('field_of_science') || null,
@@ -733,6 +750,7 @@ function bindCommon() {
       status: fd.get('status'),
       type: fd.get('type'),
       phase: fd.get('phase'),
+      manager_user_id: managerRaw ? Number(managerRaw) : null,
       advancement_sought: fd.get('advancement_sought') || null,
       uncertainties: fd.get('uncertainties') || null,
       work_performed: fd.get('work_performed') || null,
@@ -744,7 +762,7 @@ function bindCommon() {
     const body = {
       email: fd.get('email'),
       name: fd.get('name'),
-      role: 'employee',
+      role: fd.get('role') || 'employee',
       attachments: [{
         claimant_id: Number(fd.get('claimant_id')),
         is_specified_employee: fd.get('is_specified_employee') === 'on',

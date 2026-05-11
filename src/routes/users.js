@@ -9,7 +9,7 @@ import { sendMagicLink } from '../lib/email.js';
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-const VALID_ROLES = ['admin', 'employee'];
+const VALID_ROLES = ['admin', 'manager', 'employee'];
 const VALID_COMP_TYPES = ['salary', 'hourly'];
 
 function validateCompensation(c) {
@@ -87,7 +87,11 @@ router.get('/', (req, res) => {
   const { role, status, claimant_id } = req.query;
   const where = [];
   const params = [];
-  if (role)        { where.push('u.role = ?');         params.push(role); }
+  if (role) {
+    const roles = String(role).split(',').filter(Boolean);
+    where.push(`u.role IN (${roles.map(() => '?').join(',')})`);
+    params.push(...roles);
+  }
   if (status)      { where.push('u.status = ?');       params.push(status); }
   if (claimant_id) { where.push('uc.claimant_id = ?'); params.push(Number(claimant_id)); }
   const join = claimant_id ? 'JOIN user_claimants uc ON uc.user_id = u.id' : '';

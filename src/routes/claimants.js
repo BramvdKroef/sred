@@ -149,6 +149,7 @@ router.post('/:id/projects', (req, res, next) => {
       status,
       type = 'sred',
       phase = 'concept',
+      manager_user_id = null,
       advancement_sought,
       uncertainties,
       work_performed,
@@ -162,13 +163,22 @@ router.post('/:id/projects', (req, res, next) => {
       throw badRequest('type must be sred|internal');
     if (!['concept', 'development', 'complete'].includes(phase))
       throw badRequest('phase must be concept|development|complete');
+    if (manager_user_id !== null) {
+      if (!Number.isInteger(manager_user_id))
+        throw badRequest('manager_user_id must be an integer or null');
+      const u = db.prepare(`SELECT role, status FROM users WHERE id = ?`).get(manager_user_id);
+      if (!u) throw badRequest(`manager_user_id ${manager_user_id} not found`);
+      if (!['admin', 'manager'].includes(u.role))
+        throw badRequest(`manager_user_id ${manager_user_id} must have role admin or manager`);
+      if (u.status !== 'active') throw badRequest(`manager_user_id ${manager_user_id} must be active`);
+    }
 
     const tx = db.transaction(() => {
       const info = db.prepare(`
         INSERT INTO projects
           (claimant_id, title, field_of_science, start_date, end_date, status,
-           type, phase, advancement_sought, uncertainties, work_performed)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           type, phase, manager_user_id, advancement_sought, uncertainties, work_performed)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         claimant.id,
         title,
@@ -178,6 +188,7 @@ router.post('/:id/projects', (req, res, next) => {
         status,
         type,
         phase,
+        manager_user_id,
         advancement_sought ?? null,
         uncertainties ?? null,
         work_performed ?? null,
@@ -186,8 +197,8 @@ router.post('/:id/projects', (req, res, next) => {
       db.prepare(`
         INSERT INTO project_revisions
           (project_id, title, field_of_science, advancement_sought, uncertainties,
-           work_performed, type, phase, revised_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           work_performed, type, phase, manager_user_id, revised_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         projectId,
         title,
@@ -197,6 +208,7 @@ router.post('/:id/projects', (req, res, next) => {
         work_performed ?? null,
         type,
         phase,
+        manager_user_id,
         req.user.id,
       );
       return projectId;
