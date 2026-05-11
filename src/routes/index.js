@@ -9,6 +9,7 @@ import periodsRouter from './periods.js';
 import evidenceRouter from './evidence.js';
 import expensesRouter from './expenses.js';
 import exportsRouter from './exports.js';
+import auditLogRouter from './audit-log.js';
 
 const api = Router();
 
@@ -25,5 +26,6 @@ api.use('/periods', periodsRouter);
 api.use('/evidence', evidenceRouter);
 api.use('/expenses', expensesRouter);
 api.use('/exports', exportsRouter);
+api.use('/audit-log', auditLogRouter);
 
 export default api;
