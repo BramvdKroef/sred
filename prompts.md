@@ -648,3 +648,17 @@ I'd like to be able to edit a project.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can we make labour/expenses/evidence editable? I assume there is a cutoff date when we should not allow edits.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

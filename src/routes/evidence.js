@@ -175,6 +175,50 @@ router.get('/:id/download', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.patch('/:id', (req, res, next) => {
+  try {
+    const before = getEvidenceOrThrow(req.params.id);
+    if (!canSee(req.user, before)) throw forbidden();
+    const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(before.fiscal_period_id);
+    if (period?.status === 'closed') throw badRequest('fiscal period is closed');
+
+    const { caption, evidence_date, url, note_text } = req.body ?? {};
+    const updates = {};
+    if (caption !== undefined) {
+      if (!caption) throw badRequest('caption cannot be empty');
+      updates.caption = caption;
+    }
+    if (evidence_date !== undefined) updates.evidence_date = evidence_date;
+    if (before.kind === 'link' && url !== undefined) {
+      if (!url) throw badRequest('url cannot be empty');
+      updates.url = url;
+    }
+    if (before.kind === 'note' && note_text !== undefined) {
+      if (!note_text) throw badRequest('note_text cannot be empty');
+      updates.note_text = note_text;
+    }
+
+    const keys = Object.keys(updates);
+    if (keys.length === 0) return res.json(before);
+
+    // Re-bucket the fiscal period if evidence_date moves.
+    let newPeriodId = before.fiscal_period_id;
+    if (updates.evidence_date && updates.evidence_date !== before.evidence_date) {
+      const proj = db.prepare(`SELECT claimant_id FROM projects WHERE id = ?`).get(before.project_id);
+      newPeriodId = findOpenPeriod(proj.claimant_id, updates.evidence_date).id;
+    }
+
+    const setParts = keys.map(k => `${k} = ?`);
+    setParts.push('fiscal_period_id = ?');
+    const values = [...keys.map(k => updates[k]), newPeriodId, before.id];
+    db.prepare(`UPDATE evidence_items SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
+
+    const after = getEvidenceOrThrow(before.id);
+    audit(req.user.id, 'update', 'evidence_item', before.id, before, after);
+    res.json(after);
+  } catch (e) { next(e); }
+});
+
 router.delete('/:id', (req, res, next) => {
   try {
     const before = getEvidenceOrThrow(req.params.id);
