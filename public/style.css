@@ -180,6 +180,16 @@ nav.tabs button:hover:not(.active) {
   font-style: italic;
   font-size: 0.9rem;
 }
+.search-results .results-section-head {
+  padding: 0.4rem 0.8rem 0.2rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  background: #f0f2f4;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
 
 /* --- Cards -------------------------------------------------------------- */
 

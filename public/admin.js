@@ -70,7 +70,7 @@ function shell() {
       ${tabBtn('exports', 'T661 exports')}
       ${tabBtn('audit', 'Audit log')}
       <div class="project-search-wrap">
-        <input id="project-search" type="search" placeholder="Search projects…" autocomplete="off">
+        <input id="project-search" type="search" placeholder="Search projects &amp; employees…" autocomplete="off">
         <div id="project-search-results" class="search-results" hidden></div>
       </div>
     </nav>
@@ -93,23 +93,37 @@ function bindProjectSearch() {
 
   const runSearch = async (q) => {
     if (!q) { list.hidden = true; list.innerHTML = ''; return; }
-    const data = await api('GET', `/api/projects?q=${encodeURIComponent(q)}&limit=10`);
+    const [projects, users] = await Promise.all([
+      api('GET', `/api/projects?q=${encodeURIComponent(q)}&limit=6`),
+      api('GET', `/api/users?q=${encodeURIComponent(q)}&limit=6`),
+    ]);
     if (q !== lastQuery) return;  // stale
-    if (data.items.length === 0) {
-      list.innerHTML = '<div class="empty-msg">No projects match.</div>';
-    } else {
-      list.innerHTML = data.items.map(p => `
-        <div class="item" data-pid="${p.id}" data-cid="${p.claimant_id}">
-          <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)}" style="margin-left:0.3rem">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
-          <div class="claimant">${esc(p.claimant_name)}</div>
-        </div>
-      `).join('');
-      list.querySelectorAll('.item').forEach(el => {
-        el.addEventListener('click', () => {
-          selectProject({ id: Number(el.dataset.pid), claimant_id: Number(el.dataset.cid) });
-        });
-      });
+    const sections = [];
+    if (projects.items.length) {
+      sections.push(`<div class="results-section-head">Projects</div>` +
+        projects.items.map(p => `
+          <div class="item" data-kind="project" data-pid="${p.id}" data-cid="${p.claimant_id}">
+            <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)}" style="margin-left:0.3rem">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
+            <div class="claimant">${esc(p.claimant_name)}</div>
+          </div>`).join(''));
     }
+    if (users.items.length) {
+      sections.push(`<div class="results-section-head">Employees</div>` +
+        users.items.map(u => `
+          <div class="item" data-kind="user" data-uid="${u.id}">
+            <div><strong>${esc(u.name)}</strong> <span class="role" style="margin-left:0.3rem">${esc(u.role)}</span></div>
+            <div class="claimant">${esc(u.email)}</div>
+          </div>`).join(''));
+    }
+    list.innerHTML = sections.length ? sections.join('') : '<div class="empty-msg">No matches.</div>';
+    list.querySelectorAll('[data-kind="project"]').forEach(el => {
+      el.addEventListener('click', () => {
+        selectProject({ id: Number(el.dataset.pid), claimant_id: Number(el.dataset.cid) });
+      });
+    });
+    list.querySelectorAll('[data-kind="user"]').forEach(el => {
+      el.addEventListener('click', () => selectUser(Number(el.dataset.uid)));
+    });
     list.hidden = false;
   };
 
@@ -132,13 +146,26 @@ async function selectProject({ id, claimant_id }) {
   state.tab = 'claimants';
   state.claimantId = claimant_id;
   state.viewingProjectId = id;
+  state.viewingUserId = null;
   history.replaceState(null, '', `#claimants/${id}`);
-  // Reset the search UI
+  resetSearch();
+  await reloadAll();
+}
+
+async function selectUser(id) {
+  state.tab = 'users';
+  state.viewingUserId = id;
+  state.viewingProjectId = null;
+  history.replaceState(null, '', `#users/${id}`);
+  resetSearch();
+  render();
+}
+
+function resetSearch() {
   const input = document.getElementById('project-search');
   const list  = document.getElementById('project-search-results');
   if (input) input.value = '';
   if (list) { list.hidden = true; list.innerHTML = ''; }
-  await reloadAll();
 }
 
 function onHashChange() {

@@ -830,3 +830,17 @@ Add a view page for employees.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can de search bar search for employees as well?
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

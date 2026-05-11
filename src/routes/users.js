@@ -94,7 +94,7 @@ function insertAttachment(userId, a, actorUserId) {
 // --- /api/users -------------------------------------------------------------
 
 router.get('/', (req, res) => {
-  const { role, status, claimant_id } = req.query;
+  const { role, status, claimant_id, q } = req.query;
   const where = [];
   const params = [];
   if (role) {
@@ -104,6 +104,10 @@ router.get('/', (req, res) => {
   }
   if (status)      { where.push('u.status = ?');       params.push(status); }
   if (claimant_id) { where.push('uc.claimant_id = ?'); params.push(Number(claimant_id)); }
+  if (q && String(q).trim()) {
+    where.push('(u.name LIKE ? OR u.email LIKE ?)');
+    params.push(`%${q}%`, `%${q}%`);
+  }
   const join = claimant_id ? 'JOIN user_claimants uc ON uc.user_id = u.id' : '';
   const ucFields = claimant_id
     ? ', uc.id AS user_claimant_id, uc.title AS uc_title, uc.is_specified_employee, uc.status AS attachment_status'
