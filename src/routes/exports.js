@@ -8,7 +8,7 @@ import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { computeT661, snapshotProjectRevisions, collectEvidenceManifest } from '../lib/t661.js';
-import { toMarkdown, toCsv } from '../lib/format.js';
+import { toMarkdown, toCsv, toPdf } from '../lib/format.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -110,8 +110,12 @@ router.get('/:id/download', (req, res, next) => {
       res.setHeader('content-disposition', `attachment; filename="${baseName}.md"`);
       res.setHeader('content-type', 'text/markdown');
       res.send(toMarkdown(totals));
+    } else if (format === 'pdf') {
+      res.setHeader('content-disposition', `attachment; filename="${baseName}.pdf"`);
+      res.setHeader('content-type', 'application/pdf');
+      toPdf(totals).pipe(res);
     } else {
-      throw badRequest('format must be json|csv|md');
+      throw badRequest('format must be json|csv|md|pdf');
     }
   } catch (e) { next(e); }
 });

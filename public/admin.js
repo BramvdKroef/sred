@@ -676,7 +676,8 @@ async function renderExportsTab(main) {
             <td>${x.is_draft ? 'yes' : 'no'}</td>
             <td>${esc(x.generated_at)}</td>
             <td>
-              <a href="/api/exports/${x.id}/download?format=md" data-jwt-dl>md</a>
+              <a href="/api/exports/${x.id}/download?format=pdf" data-jwt-dl>pdf</a>
+              · <a href="/api/exports/${x.id}/download?format=md" data-jwt-dl>md</a>
               · <a href="/api/exports/${x.id}/download?format=csv" data-jwt-dl>csv</a>
               · <a href="/api/exports/${x.id}/download?format=json" data-jwt-dl>json</a>
             </td>

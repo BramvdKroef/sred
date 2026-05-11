@@ -620,3 +620,17 @@ Add an option to Log labour to select Overtime.
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Can you add a pdf option to the T661 exports?
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

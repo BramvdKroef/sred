@@ -97,3 +97,127 @@ function csvCell(v) {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
+
+import PDFDocument from 'pdfkit';
+import { PassThrough } from 'node:stream';
+
+// PDF rendering uses pdfkit. The output is a readable stream the export
+// route can pipe straight to the response.
+export function toPdf(totals) {
+  const doc = new PDFDocument({ size: 'LETTER', margins: { top: 60, bottom: 60, left: 60, right: 60 } });
+  const out = new PassThrough();
+  doc.pipe(out);
+
+  const c = totals.claimant;
+  const p = totals.fiscal_period;
+  const ccy = c.reporting_currency;
+  const cents = (n) => `${(n / 100).toFixed(2)} ${ccy}`;
+  const BRAND = '#0078b5';
+  const MUTED = '#6b7480';
+
+  // ── Header ──────────────────────────────────────────────────────────
+  doc.fillColor(BRAND).fontSize(22).font('Helvetica-Bold').text('T661 export');
+  doc.fillColor('black').fontSize(16).font('Helvetica').text(c.legal_name);
+  doc.moveDown(0.4);
+  doc.fontSize(9).fillColor(MUTED);
+  metaLine(doc, 'Business number', c.business_number ?? '(not set)');
+  metaLine(doc, 'Fiscal period',   `${p.start_date} → ${p.end_date}  (${p.status})`);
+  metaLine(doc, 'SR&ED method',    c.sred_method);
+  metaLine(doc, 'Reporting',       ccy);
+  metaLine(doc, 'Generated',       totals.generated_at);
+  doc.fillColor('black').moveDown(1);
+
+  // ── Grand totals ────────────────────────────────────────────────────
+  sectionHeader(doc, 'Grand totals', BRAND);
+  const g = totals.grand_total;
+  totalsRow(doc, 'Labour',                                                       cents(g.labour_cost_cents));
+  totalsRow(doc, 'Materials',                                                    cents(g.materials_cents));
+  totalsRow(doc, 'Contract expenditures',                                        cents(g.contract_expenditures_cents));
+  totalsRow(doc, 'Third-party payments',                                         cents(g.third_party_payments_cents));
+  totalsRow(doc, `Overhead${c.sred_method === 'proxy' ? ' (proxy 55%)' : ''}`,   cents(g.overhead_cents));
+  doc.moveDown(0.2);
+  totalsRow(doc, 'Total',                                                        cents(g.total_cents), true);
+  doc.moveDown(1.5);
+
+  // ── Per project ─────────────────────────────────────────────────────
+  for (const proj of totals.projects) {
+    if (doc.y > 640) doc.addPage();
+    sectionHeader(doc, proj.title, BRAND);
+    doc.fontSize(8.5).font('Helvetica').fillColor(MUTED).text(
+      `Project #${proj.id}  ·  ${proj.field_of_science ?? '(field unset)'}  ·  ` +
+      `Status: ${proj.status}  ·  ${proj.start_date}${proj.end_date ? ` → ${proj.end_date}` : ''}`
+    );
+    doc.fillColor('black').moveDown(0.5);
+
+    narrativeBlock(doc, 'Advancement sought', proj.narrative.advancement_sought);
+    narrativeBlock(doc, 'Technological uncertainties', proj.narrative.uncertainties);
+    narrativeBlock(doc, 'Work performed', proj.narrative.work_performed);
+
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(BRAND).text('Totals'); doc.fillColor('black');
+    doc.fontSize(9).font('Helvetica');
+    totalsRow(doc, 'Labour',         cents(proj.totals.labour_cost_cents));
+    totalsRow(doc, 'Materials',      cents(proj.totals.materials_cents));
+    totalsRow(doc, 'Contract',       cents(proj.totals.contract_expenditures_cents));
+    totalsRow(doc, 'Third-party',    cents(proj.totals.third_party_payments_cents));
+    totalsRow(doc, 'Overhead',       cents(proj.totals.overhead_cents));
+    totalsRow(doc, 'Project total',  cents(proj.totals.total_cents), true);
+    doc.moveDown(0.6);
+
+    if (proj.labour_worksheet.length) {
+      doc.fontSize(10).font('Helvetica-Bold').fillColor(BRAND).text('Labour worksheet'); doc.fillColor('black');
+      doc.fontSize(9).font('Helvetica');
+      for (const r of proj.labour_worksheet) {
+        const flags = [r.is_specified_employee ? 'specified' : null, r.cap_applied ? 'cap applied' : null].filter(Boolean).join(', ');
+        const tail  = flags ? `  [${flags}]` : '';
+        doc.text(`  ${r.employee_name}: ${r.total_hours.toFixed(2)}h  ·  ${cents(r.labour_cost_cents)}${tail}`);
+      }
+      doc.moveDown(0.4);
+    }
+
+    if (proj.expense_lines.length) {
+      doc.fontSize(10).font('Helvetica-Bold').fillColor(BRAND).text('Expenses'); doc.fillColor('black');
+      doc.fontSize(9).font('Helvetica');
+      for (const e of proj.expense_lines) {
+        const fx = e.fx_rate ? ` @ ${e.fx_rate}` : '';
+        doc.text(`  ${e.expense_date}  ·  ${e.category}  ·  ${(e.amount_cents/100).toFixed(2)} ${e.currency}${fx}  (${cents(e.reporting_amount_cents)})  — ${e.description}`);
+      }
+      doc.moveDown(0.4);
+    }
+    doc.moveDown(0.8);
+  }
+
+  doc.end();
+  return out;
+}
+
+function metaLine(doc, k, v) {
+  doc.font('Helvetica-Bold').text(`${k}: `, { continued: true });
+  doc.font('Helvetica').text(v);
+}
+
+function sectionHeader(doc, text, brand) {
+  doc.fontSize(13).font('Helvetica-Bold').fillColor(brand).text(text);
+  // Underline accent
+  const y = doc.y + 1;
+  doc.save().moveTo(doc.page.margins.left, y).lineTo(doc.page.margins.left + 40, y)
+     .lineWidth(2).stroke(brand).restore();
+  doc.fillColor('black').moveDown(0.4);
+}
+
+function totalsRow(doc, label, value, isTotal = false) {
+  if (isTotal) doc.font('Helvetica-Bold');
+  else doc.font('Helvetica');
+  doc.fontSize(9.5);
+  const x = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const y = doc.y;
+  doc.text(label, x, y, { continued: false });
+  doc.text(value, x, y, { width: right - x, align: 'right' });
+}
+
+function narrativeBlock(doc, label, value) {
+  doc.fontSize(9.5).font('Helvetica-Bold').text(label);
+  doc.font('Helvetica').text(value ?? '(unset)');
+  doc.moveDown(0.3);
+}
