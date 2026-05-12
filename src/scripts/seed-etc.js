@@ -4,8 +4,8 @@
 // Narratives are written as plausible SR&ED claims with technological
 // advancement, uncertainty, and work-performed sections.
 //
-// Idempotent: re-running renames the claimant and only inserts projects
-// whose title doesn't already exist.
+// Idempotent: creates claimant #1 if missing, otherwise renames it; only
+// inserts projects whose title doesn't already exist.
 
 import { db } from '../db/index.js';
 
@@ -78,11 +78,13 @@ const PROJECTS = [
 
 const claimant = db.prepare('SELECT id, legal_name FROM claimants WHERE id = ?').get(CLAIMANT_ID);
 if (!claimant) {
-  console.error(`No claimant id=${CLAIMANT_ID}. Run migrations and seed:admin first.`);
-  process.exit(1);
-}
-
-if (claimant.legal_name !== CLAIMANT_NAME) {
+  db.prepare(`
+    INSERT INTO claimants
+      (id, legal_name, fiscal_year_end_month, fiscal_year_end_day, sred_method)
+    VALUES (?, ?, 12, 31, 'proxy')
+  `).run(CLAIMANT_ID, CLAIMANT_NAME);
+  console.log(`created claimant ${CLAIMANT_ID}: "${CLAIMANT_NAME}"`);
+} else if (claimant.legal_name !== CLAIMANT_NAME) {
   db.prepare('UPDATE claimants SET legal_name = ? WHERE id = ?').run(CLAIMANT_NAME, CLAIMANT_ID);
   console.log(`renamed claimant ${CLAIMANT_ID}: "${claimant.legal_name}" → "${CLAIMANT_NAME}"`);
 } else {
