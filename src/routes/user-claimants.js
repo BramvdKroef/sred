@@ -1,17 +1,12 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import { getUserClaimant } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
-
-function getUcOrThrow(id) {
-  const uc = db.prepare(`SELECT * FROM user_claimants WHERE id = ?`).get(id);
-  if (!uc) throw notFound('user_claimant not found');
-  return uc;
-}
 
 router.patch('/:id', (req, res, next) => {
   try {

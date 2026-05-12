@@ -1,17 +1,12 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import { getClaimant } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
-
-function getClaimantOrThrow(id) {
-  const c = db.prepare(`SELECT * FROM claimants WHERE id = ?`).get(id);
-  if (!c) throw notFound('claimant not found');
-  return c;
-}
 
 router.get('/', (_req, res) => {
   const items = db.prepare(`SELECT * FROM claimants ORDER BY id`).all();
@@ -51,7 +46,7 @@ router.post('/', (req, res, next) => {
       sred_method,
     );
 
-    const created = getClaimantOrThrow(info.lastInsertRowid);
+    const created = getClaimant(info.lastInsertRowid);
     audit(req.user.id, 'create', 'claimant', created.id, undefined, created);
     res.status(201).json(created);
   } catch (e) { next(e); }
@@ -59,13 +54,13 @@ router.post('/', (req, res, next) => {
 
 router.get('/:id', (req, res, next) => {
   try {
-    res.json(getClaimantOrThrow(req.params.id));
+    res.json(getClaimant(req.params.id));
   } catch (e) { next(e); }
 });
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getClaimantOrThrow(req.params.id);
+    const before = getClaimant(req.params.id);
     const {
       legal_name, business_number, reporting_currency, sred_method,
       fiscal_year_end_month, fiscal_year_end_day,
@@ -103,7 +98,7 @@ router.patch('/:id', (req, res, next) => {
     db.prepare(`UPDATE claimants SET ${setClause} WHERE id = ?`)
       .run(...keys.map(k => updates[k]), before.id);
 
-    const after = getClaimantOrThrow(before.id);
+    const after = getClaimant(before.id);
     audit(req.user.id, 'update', 'claimant', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -112,7 +107,7 @@ router.patch('/:id', (req, res, next) => {
 // Nested: list fiscal periods under a claimant
 router.get('/:id/periods', (req, res, next) => {
   try {
-    const claimant = getClaimantOrThrow(req.params.id);
+    const claimant = getClaimant(req.params.id);
     const items = db.prepare(
       `SELECT * FROM fiscal_periods WHERE claimant_id = ? ORDER BY start_date DESC`
     ).all(claimant.id);
@@ -123,7 +118,7 @@ router.get('/:id/periods', (req, res, next) => {
 // Nested: create a fiscal period under a claimant
 router.post('/:id/periods', (req, res, next) => {
   try {
-    const claimant = getClaimantOrThrow(req.params.id);
+    const claimant = getClaimant(req.params.id);
     const { start_date, end_date } = req.body ?? {};
     if (!start_date) throw badRequest('start_date required');
     if (!end_date) throw badRequest('end_date required');
@@ -149,7 +144,7 @@ router.post('/:id/periods', (req, res, next) => {
 // Nested: list projects under a claimant
 router.get('/:id/projects', (req, res, next) => {
   try {
-    const claimant = getClaimantOrThrow(req.params.id);
+    const claimant = getClaimant(req.params.id);
     const items = db.prepare(`SELECT * FROM projects WHERE claimant_id = ? ORDER BY id DESC`)
       .all(claimant.id);
     res.json({ items });
@@ -159,7 +154,7 @@ router.get('/:id/projects', (req, res, next) => {
 // Nested: create a project under a claimant
 router.post('/:id/projects', (req, res, next) => {
   try {
-    const claimant = getClaimantOrThrow(req.params.id);
+    const claimant = getClaimant(req.params.id);
     const {
       title,
       field_of_science,

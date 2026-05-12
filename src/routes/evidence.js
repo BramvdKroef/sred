@@ -5,9 +5,10 @@ import path from 'node:path';
 import { db } from '../db/index.js';
 import { config } from '../config.js';
 import { requireAuth } from '../auth/middleware.js';
-import { badRequest, notFound, forbidden, unprocessable } from '../lib/errors.js';
+import { badRequest, notFound, forbidden } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { randomToken } from '../lib/random.js';
+import { getEvidence, findOpenPeriod } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -28,25 +29,10 @@ const upload = multer({
 
 // --- helpers ---------------------------------------------------------------
 
-function getEvidenceOrThrow(id) {
-  const e = db.prepare(`SELECT * FROM evidence_items WHERE id = ?`).get(id);
-  if (!e) throw notFound('evidence not found');
-  return e;
-}
-
+// Evidence ownership: uploader-or-admin (distinct from labour/expense, which
+// scope via user_claimants).
 function canSee(user, evidence) {
-  if (user.role === 'admin') return true;
-  return evidence.uploaded_by_user_id === user.id;
-}
-
-function findOpenPeriod(claimantId, date) {
-  const period = db.prepare(`
-    SELECT * FROM fiscal_periods
-     WHERE claimant_id = ? AND status = 'open' AND ? BETWEEN start_date AND end_date
-     LIMIT 1
-  `).get(claimantId, date);
-  if (!period) throw unprocessable(`no open fiscal period covers ${date} for claimant ${claimantId}`);
-  return period;
+  return user.role === 'admin' || evidence.uploaded_by_user_id === user.id;
 }
 
 function assertAttached(user, claimantId) {
@@ -145,7 +131,7 @@ router.post('/', upload.single('file'), (req, res, next) => {
       filePath, fileSize, fileMime, urlVal, noteVal,
     );
 
-    const created = getEvidenceOrThrow(info.lastInsertRowid);
+    const created = getEvidence(info.lastInsertRowid);
     audit(req.user.id, 'create', 'evidence_item', created.id, undefined, created);
     res.status(201).json(created);
   } catch (e) {
@@ -157,7 +143,7 @@ router.post('/', upload.single('file'), (req, res, next) => {
 
 router.get('/:id', (req, res, next) => {
   try {
-    const e = getEvidenceOrThrow(req.params.id);
+    const e = getEvidence(req.params.id);
     if (!canSee(req.user, e)) throw forbidden();
     res.json(e);
   } catch (e) { next(e); }
@@ -165,7 +151,7 @@ router.get('/:id', (req, res, next) => {
 
 router.get('/:id/download', (req, res, next) => {
   try {
-    const evidence = getEvidenceOrThrow(req.params.id);
+    const evidence = getEvidence(req.params.id);
     if (!canSee(req.user, evidence)) throw forbidden();
     if (evidence.kind !== 'file' || !evidence.file_path) {
       throw badRequest('evidence is not a file');
@@ -177,7 +163,7 @@ router.get('/:id/download', (req, res, next) => {
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getEvidenceOrThrow(req.params.id);
+    const before = getEvidence(req.params.id);
     if (!canSee(req.user, before)) throw forbidden();
     const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(before.fiscal_period_id);
     if (period?.status === 'closed') throw badRequest('fiscal period is closed');
@@ -213,7 +199,7 @@ router.patch('/:id', (req, res, next) => {
     const values = [...keys.map(k => updates[k]), newPeriodId, before.id];
     db.prepare(`UPDATE evidence_items SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
 
-    const after = getEvidenceOrThrow(before.id);
+    const after = getEvidence(before.id);
     audit(req.user.id, 'update', 'evidence_item', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -221,7 +207,7 @@ router.patch('/:id', (req, res, next) => {
 
 router.delete('/:id', (req, res, next) => {
   try {
-    const before = getEvidenceOrThrow(req.params.id);
+    const before = getEvidence(req.params.id);
     if (!canSee(req.user, before)) throw forbidden();
 
     // Retention: closing a fiscal period locks all its evidence. Open periods are mutable.

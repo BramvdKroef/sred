@@ -949,3 +949,17 @@ split employee.js too
 commit it
 ~~~
 
+
+## Prompt
+
+~~~
+Now factor the route handlers.
+~~~
+
+
+## Prompt
+
+~~~
+commit it
+~~~
+

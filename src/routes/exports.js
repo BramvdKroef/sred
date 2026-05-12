@@ -9,18 +9,13 @@ import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { computeT661, snapshotProjectRevisions, collectEvidenceManifest } from '../lib/t661.js';
 import { toMarkdown, toCsv, toPdf } from '../lib/format.js';
+import { getT661Export } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
 const BUNDLES_DIR = path.join(config.uploadsDir, '..', 'data', 'bundles');
 fs.mkdirSync(BUNDLES_DIR, { recursive: true });
-
-function getExportOrThrow(id) {
-  const row = db.prepare(`SELECT * FROM t661_exports WHERE id = ?`).get(id);
-  if (!row) throw notFound('export not found');
-  return row;
-}
 
 // --- routes ----------------------------------------------------------------
 

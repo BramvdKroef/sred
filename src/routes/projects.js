@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import { getProject } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -21,12 +22,6 @@ function validateManagerUserId(id) {
     throw badRequest(`manager_user_id ${id} must be a user with role 'admin' or 'manager'`);
   if (u.status !== 'active')
     throw badRequest(`manager_user_id ${id} must be active`);
-}
-
-function getProjectOrThrow(id) {
-  const p = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id);
-  if (!p) throw notFound('project not found');
-  return p;
 }
 
 router.get('/', (req, res) => {
@@ -51,7 +46,7 @@ router.get('/', (req, res) => {
 
 router.get('/:id', (req, res, next) => {
   try {
-    const project = getProjectOrThrow(req.params.id);
+    const project = getProject(req.params.id);
     const assignments = db.prepare(`
       SELECT pa.id, pa.user_claimant_id, pa.status, u.id AS user_id, u.email, u.name
         FROM project_assignments pa
@@ -69,7 +64,7 @@ router.get('/:id', (req, res, next) => {
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getProjectOrThrow(req.params.id);
+    const before = getProject(req.params.id);
 
     const updates = {};
     for (const k of EDITABLE_FIELDS) {
@@ -125,7 +120,7 @@ router.patch('/:id', (req, res, next) => {
     });
     tx();
 
-    const after = getProjectOrThrow(before.id);
+    const after = getProject(before.id);
     audit(req.user.id, 'update', 'project', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -133,7 +128,7 @@ router.patch('/:id', (req, res, next) => {
 
 router.get('/:id/revisions', (req, res, next) => {
   try {
-    const project = getProjectOrThrow(req.params.id);
+    const project = getProject(req.params.id);
     const items = db.prepare(
       `SELECT * FROM project_revisions WHERE project_id = ? ORDER BY id DESC`
     ).all(project.id);
@@ -143,7 +138,7 @@ router.get('/:id/revisions', (req, res, next) => {
 
 router.post('/:id/assignments', (req, res, next) => {
   try {
-    const project = getProjectOrThrow(req.params.id);
+    const project = getProject(req.params.id);
     const { user_claimant_id } = req.body ?? {};
     if (!Number.isInteger(user_claimant_id)) throw badRequest('user_claimant_id required');
 
@@ -178,7 +173,7 @@ router.post('/:id/assignments', (req, res, next) => {
 
 router.delete('/:id/assignments/:user_claimant_id', (req, res, next) => {
   try {
-    const project = getProjectOrThrow(req.params.id);
+    const project = getProject(req.params.id);
     const ucId = Number(req.params.user_claimant_id);
     const before = db.prepare(
       `SELECT * FROM project_assignments WHERE project_id = ? AND user_claimant_id = ?`

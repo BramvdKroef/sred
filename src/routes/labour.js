@@ -1,76 +1,15 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { badRequest, notFound, forbidden, unprocessable } from '../lib/errors.js';
+import { badRequest, forbidden } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import {
+  getProject, getLabourEntry, findOpenPeriod, resolveUserClaimant,
+  isOwnerOrAdmin, assertEditable,
+} from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth);
-
-// --- helpers ---------------------------------------------------------------
-
-function getProjectOrThrow(id) {
-  const p = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id);
-  if (!p) throw notFound('project not found');
-  return p;
-}
-
-function findOpenPeriod(claimantId, workDate) {
-  const period = db.prepare(`
-    SELECT * FROM fiscal_periods
-     WHERE claimant_id = ?
-       AND status = 'open'
-       AND ? BETWEEN start_date AND end_date
-     LIMIT 1
-  `).get(claimantId, workDate);
-  if (!period) {
-    throw unprocessable(
-      `no open fiscal period covers ${workDate} for claimant ${claimantId}`
-    );
-  }
-  return period;
-}
-
-function resolveUserClaimant({ user, project, requestedUcId }) {
-  if (user.role === 'admin') {
-    if (!Number.isInteger(requestedUcId))
-      throw badRequest('admin must specify user_claimant_id');
-    const uc = db.prepare(`SELECT * FROM user_claimants WHERE id = ?`).get(requestedUcId);
-    if (!uc) throw notFound('user_claimant not found');
-    if (uc.claimant_id !== project.claimant_id)
-      throw badRequest("user_claimant does not belong to this project's claimant");
-    if (uc.status !== 'active')
-      throw badRequest('user_claimant attachment is inactive');
-    return uc;
-  }
-  // employee
-  const uc = db.prepare(
-    `SELECT * FROM user_claimants WHERE user_id = ? AND claimant_id = ?`
-  ).get(user.id, project.claimant_id);
-  if (!uc) throw forbidden('you are not attached to this claimant');
-  if (uc.status !== 'active') throw forbidden('your attachment to this claimant is inactive');
-  return uc;
-}
-
-function getEntryOrThrow(id) {
-  const e = db.prepare(`SELECT * FROM labour_entries WHERE id = ?`).get(id);
-  if (!e) throw notFound('labour entry not found');
-  return e;
-}
-
-function canSeeEntry(user, entry) {
-  if (user.role === 'admin') return true;
-  const uc = db.prepare(
-    `SELECT user_id FROM user_claimants WHERE id = ?`
-  ).get(entry.user_claimant_id);
-  return uc && uc.user_id === user.id;
-}
-
-function assertEditable(entry) {
-  if (entry.status === 'approved') throw badRequest('entry is approved and locked; reject it first');
-  const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(entry.fiscal_period_id);
-  if (period?.status === 'closed') throw badRequest('fiscal period is closed');
-}
 
 // --- routes ----------------------------------------------------------------
 
@@ -113,7 +52,7 @@ router.post('/', (req, res, next) => {
     if (is_overtime !== undefined && typeof is_overtime !== 'boolean')
       throw badRequest('is_overtime must be boolean');
 
-    const project = getProjectOrThrow(project_id);
+    const project = getProject(project_id);
     const uc = resolveUserClaimant({ user: req.user, project, requestedUcId: user_claimant_id });
     const period = findOpenPeriod(project.claimant_id, work_date);
 
@@ -130,7 +69,7 @@ router.post('/', (req, res, next) => {
       initialStatus, isAdmin ? req.user.id : null,
     );
 
-    const entry = getEntryOrThrow(info.lastInsertRowid);
+    const entry = getLabourEntry(info.lastInsertRowid);
     audit(req.user.id, 'create', 'labour_entry', entry.id, undefined, entry);
     res.status(201).json(entry);
   } catch (e) { next(e); }
@@ -138,16 +77,16 @@ router.post('/', (req, res, next) => {
 
 router.get('/:id', (req, res, next) => {
   try {
-    const entry = getEntryOrThrow(req.params.id);
-    if (!canSeeEntry(req.user, entry)) throw forbidden();
+    const entry = getLabourEntry(req.params.id);
+    if (!isOwnerOrAdmin(req.user, entry.user_claimant_id)) throw forbidden();
     res.json(entry);
   } catch (e) { next(e); }
 });
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getEntryOrThrow(req.params.id);
-    if (!canSeeEntry(req.user, before)) throw forbidden();
+    const before = getLabourEntry(req.params.id);
+    if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
     assertEditable(before);
 
     const { work_date, hours, description, is_overtime } = req.body ?? {};
@@ -173,7 +112,7 @@ router.patch('/:id', (req, res, next) => {
     // If work_date changed, re-infer the fiscal period.
     let newPeriodId = before.fiscal_period_id;
     if (updates.work_date && updates.work_date !== before.work_date) {
-      const project = getProjectOrThrow(before.project_id);
+      const project = getProject(before.project_id);
       newPeriodId = findOpenPeriod(project.claimant_id, updates.work_date).id;
     }
 
@@ -190,7 +129,7 @@ router.patch('/:id', (req, res, next) => {
     const values = [...keys.map(k => updates[k]), newPeriodId, before.id];
     db.prepare(`UPDATE labour_entries SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
 
-    const after = getEntryOrThrow(before.id);
+    const after = getLabourEntry(before.id);
     audit(req.user.id, 'update', 'labour_entry', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -198,8 +137,8 @@ router.patch('/:id', (req, res, next) => {
 
 router.delete('/:id', (req, res, next) => {
   try {
-    const before = getEntryOrThrow(req.params.id);
-    if (!canSeeEntry(req.user, before)) throw forbidden();
+    const before = getLabourEntry(req.params.id);
+    if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
     assertEditable(before);
     db.prepare(`DELETE FROM labour_entries WHERE id = ?`).run(before.id);
     audit(req.user.id, 'delete', 'labour_entry', before.id, before, undefined);
@@ -209,7 +148,7 @@ router.delete('/:id', (req, res, next) => {
 
 router.post('/:id/approve', requireAdmin, (req, res, next) => {
   try {
-    const before = getEntryOrThrow(req.params.id);
+    const before = getLabourEntry(req.params.id);
     db.prepare(`
       UPDATE labour_entries
          SET status = 'approved',
@@ -219,7 +158,7 @@ router.post('/:id/approve', requireAdmin, (req, res, next) => {
              updated_at = datetime('now')
        WHERE id = ?
     `).run(req.user.id, before.id);
-    const after = getEntryOrThrow(before.id);
+    const after = getLabourEntry(before.id);
     audit(req.user.id, 'approve', 'labour_entry', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -229,7 +168,7 @@ router.post('/:id/reject', requireAdmin, (req, res, next) => {
   try {
     const { reason } = req.body ?? {};
     if (!reason || typeof reason !== 'string') throw badRequest('reason required');
-    const before = getEntryOrThrow(req.params.id);
+    const before = getLabourEntry(req.params.id);
     db.prepare(`
       UPDATE labour_entries
          SET status = 'rejected',
@@ -239,7 +178,7 @@ router.post('/:id/reject', requireAdmin, (req, res, next) => {
              updated_at = datetime('now')
        WHERE id = ?
     `).run(req.user.id, reason, before.id);
-    const after = getEntryOrThrow(before.id);
+    const after = getLabourEntry(before.id);
     audit(req.user.id, 'reject', 'labour_entry', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -270,7 +209,7 @@ router.post('/bulk-approve', requireAdmin, (req, res, next) => {
     tx();
 
     for (const before of beforeRows) {
-      const after = getEntryOrThrow(before.id);
+      const after = getLabourEntry(before.id);
       audit(req.user.id, 'approve', 'labour_entry', before.id, before, after);
     }
     res.json({ approved: beforeRows.length });

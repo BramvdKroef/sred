@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { badRequest, notFound, forbidden, unprocessable } from '../lib/errors.js';
+import { badRequest, forbidden } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import {
+  getProject, getClaimant, getExpense, findOpenPeriod, resolveUserClaimant,
+  isOwnerOrAdmin, assertEditable,
+} from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -10,63 +14,6 @@ router.use(requireAuth);
 const VALID_CATEGORIES = ['material', 'contract', 'third_party_payment', 'overhead'];
 
 // --- helpers ---------------------------------------------------------------
-
-function getProjectOrThrow(id) {
-  const p = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id);
-  if (!p) throw notFound('project not found');
-  return p;
-}
-
-function getClaimantOrThrow(id) {
-  const c = db.prepare(`SELECT * FROM claimants WHERE id = ?`).get(id);
-  if (!c) throw notFound('claimant not found');
-  return c;
-}
-
-function findOpenPeriod(claimantId, date) {
-  const period = db.prepare(`
-    SELECT * FROM fiscal_periods
-     WHERE claimant_id = ? AND status = 'open' AND ? BETWEEN start_date AND end_date
-     LIMIT 1
-  `).get(claimantId, date);
-  if (!period) throw unprocessable(`no open fiscal period covers ${date} for claimant ${claimantId}`);
-  return period;
-}
-
-function resolveUserClaimant({ user, project, requestedUcId }) {
-  if (user.role === 'admin') {
-    if (!Number.isInteger(requestedUcId)) throw badRequest('admin must specify user_claimant_id');
-    const uc = db.prepare(`SELECT * FROM user_claimants WHERE id = ?`).get(requestedUcId);
-    if (!uc) throw notFound('user_claimant not found');
-    if (uc.claimant_id !== project.claimant_id) throw badRequest("user_claimant does not belong to this project's claimant");
-    if (uc.status !== 'active') throw badRequest('user_claimant attachment is inactive');
-    return uc;
-  }
-  const uc = db.prepare(
-    `SELECT * FROM user_claimants WHERE user_id = ? AND claimant_id = ?`
-  ).get(user.id, project.claimant_id);
-  if (!uc) throw forbidden('you are not attached to this claimant');
-  if (uc.status !== 'active') throw forbidden('your attachment to this claimant is inactive');
-  return uc;
-}
-
-function getExpenseOrThrow(id) {
-  const e = db.prepare(`SELECT * FROM expenses WHERE id = ?`).get(id);
-  if (!e) throw notFound('expense not found');
-  return e;
-}
-
-function canSee(user, expense) {
-  if (user.role === 'admin') return true;
-  const uc = db.prepare(`SELECT user_id FROM user_claimants WHERE id = ?`).get(expense.user_claimant_id);
-  return uc && uc.user_id === user.id;
-}
-
-function assertEditable(expense) {
-  if (expense.status === 'approved') throw badRequest('expense is approved and locked; reject it first');
-  const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(expense.fiscal_period_id);
-  if (period?.status === 'closed') throw badRequest('fiscal period is closed');
-}
 
 function validateAmount(amount_cents) {
   if (!Number.isInteger(amount_cents) || amount_cents <= 0)
@@ -124,8 +71,8 @@ router.post('/', (req, res, next) => {
     validateAmount(amount_cents);
     if (!description || typeof description !== 'string') throw badRequest('description required');
 
-    const project = getProjectOrThrow(project_id);
-    const claimant = getClaimantOrThrow(project.claimant_id);
+    const project = getProject(project_id);
+    const claimant = getClaimant(project.claimant_id);
     validateFxAgainstClaimant(currency, fx_rate, claimant);
 
     const uc = resolveUserClaimant({ user: req.user, project, requestedUcId: user_claimant_id });
@@ -144,7 +91,7 @@ router.post('/', (req, res, next) => {
       amount_cents, currency, fx_rate ?? null, description,
       initialStatus, isAdmin ? req.user.id : null,
     );
-    const expense = getExpenseOrThrow(info.lastInsertRowid);
+    const expense = getExpense(info.lastInsertRowid);
     audit(req.user.id, 'create', 'expense', expense.id, undefined, expense);
     res.status(201).json(expense);
   } catch (e) { next(e); }
@@ -152,16 +99,16 @@ router.post('/', (req, res, next) => {
 
 router.get('/:id', (req, res, next) => {
   try {
-    const e = getExpenseOrThrow(req.params.id);
-    if (!canSee(req.user, e)) throw forbidden();
+    const e = getExpense(req.params.id);
+    if (!isOwnerOrAdmin(req.user, e.user_claimant_id)) throw forbidden();
     res.json(e);
   } catch (e) { next(e); }
 });
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getExpenseOrThrow(req.params.id);
-    if (!canSee(req.user, before)) throw forbidden();
+    const before = getExpense(req.params.id);
+    if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
     assertEditable(before);
 
     const { expense_date, category, amount_cents, currency, fx_rate, description } = req.body ?? {};
@@ -185,8 +132,8 @@ router.patch('/:id', (req, res, next) => {
 
     // Re-validate fx vs reporting currency against merged state.
     const merged = { ...before, ...updates };
-    const project = getProjectOrThrow(before.project_id);
-    const claimant = getClaimantOrThrow(project.claimant_id);
+    const project = getProject(before.project_id);
+    const claimant = getClaimant(project.claimant_id);
     validateFxAgainstClaimant(merged.currency, merged.fx_rate, claimant);
 
     // Re-infer period if expense_date changed.
@@ -207,7 +154,7 @@ router.patch('/:id', (req, res, next) => {
     const values = [...keys.map(k => updates[k]), newPeriodId, before.id];
     db.prepare(`UPDATE expenses SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
 
-    const after = getExpenseOrThrow(before.id);
+    const after = getExpense(before.id);
     audit(req.user.id, 'update', 'expense', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -215,8 +162,8 @@ router.patch('/:id', (req, res, next) => {
 
 router.delete('/:id', (req, res, next) => {
   try {
-    const before = getExpenseOrThrow(req.params.id);
-    if (!canSee(req.user, before)) throw forbidden();
+    const before = getExpense(req.params.id);
+    if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
     assertEditable(before);
     db.prepare(`DELETE FROM expenses WHERE id = ?`).run(before.id);
     audit(req.user.id, 'delete', 'expense', before.id, before, undefined);
@@ -226,7 +173,7 @@ router.delete('/:id', (req, res, next) => {
 
 router.post('/:id/approve', requireAdmin, (req, res, next) => {
   try {
-    const before = getExpenseOrThrow(req.params.id);
+    const before = getExpense(req.params.id);
     db.prepare(`
       UPDATE expenses
          SET status = 'approved',
@@ -236,7 +183,7 @@ router.post('/:id/approve', requireAdmin, (req, res, next) => {
              updated_at = datetime('now')
        WHERE id = ?
     `).run(req.user.id, before.id);
-    const after = getExpenseOrThrow(before.id);
+    const after = getExpense(before.id);
     audit(req.user.id, 'approve', 'expense', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
@@ -246,7 +193,7 @@ router.post('/:id/reject', requireAdmin, (req, res, next) => {
   try {
     const { reason } = req.body ?? {};
     if (!reason || typeof reason !== 'string') throw badRequest('reason required');
-    const before = getExpenseOrThrow(req.params.id);
+    const before = getExpense(req.params.id);
     db.prepare(`
       UPDATE expenses
          SET status = 'rejected',
@@ -256,7 +203,7 @@ router.post('/:id/reject', requireAdmin, (req, res, next) => {
              updated_at = datetime('now')
        WHERE id = ?
     `).run(req.user.id, reason, before.id);
-    const after = getExpenseOrThrow(before.id);
+    const after = getExpense(before.id);
     audit(req.user.id, 'reject', 'expense', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
