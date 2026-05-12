@@ -1,11 +1,14 @@
-// Seed Extreme Technology Corporation as claimant #1 and add a few
-// fixture projects that match their real lines of business (ET Grow
-// for greenhouses, ET Fusion for ISPs/utilities, NWIC for rural ISP).
-// Narratives are written as plausible SR&ED claims with technological
-// advancement, uncertainty, and work-performed sections.
+// Seed Extreme Technology Corporation as claimant #1, the FY2026 fiscal
+// period, four ETC employees (Alice, Charlie, Bram, Dana) with
+// compensation rows, and a few fixture projects that match their real
+// lines of business (ET Grow for greenhouses, ET Fusion for ISPs/utilities,
+// NWIC for rural ISP). Narratives are written as plausible SR&ED claims
+// with technological advancement, uncertainty, and work-performed sections.
 //
-// Idempotent: creates claimant #1 if missing, otherwise renames it; only
-// inserts projects whose title doesn't already exist.
+// Idempotent: creates anything missing, leaves existing rows alone.
+// Designed to run after seed:admin on a fresh DB so that the IDs line up
+// with what seed:data expects (admin user #1; employees #2-5;
+// user_claimants #1-4 in Alice/Charlie/Bram/Dana order).
 
 import { db } from '../db/index.js';
 
@@ -90,6 +93,65 @@ if (!claimant) {
 } else {
   console.log(`claimant ${CLAIMANT_ID} already named "${CLAIMANT_NAME}"`);
 }
+
+// --- Fiscal period ----------------------------------------------------------
+
+const period = db.prepare(
+  `SELECT id FROM fiscal_periods WHERE claimant_id = ? AND start_date = ?`
+).get(CLAIMANT_ID, '2026-01-01');
+if (!period) {
+  db.prepare(`
+    INSERT INTO fiscal_periods (claimant_id, start_date, end_date, status)
+    VALUES (?, '2026-01-01', '2026-12-31', 'open')
+  `).run(CLAIMANT_ID);
+  console.log(`created fiscal period 2026-01-01 → 2026-12-31`);
+} else {
+  console.log(`fiscal period 2026-01-01 → 2026-12-31 already exists`);
+}
+
+// --- Employees + user_claimants + compensation ------------------------------
+
+const EMPLOYEES = [
+  { email: 'alice@etcweb.com',   name: 'Alice Tremblay',  title: 'ML engineer',         specified: 0, comp: { type: 'salary', cents: 11_500_000 } },
+  { email: 'charlie@etcweb.com', name: 'Charlie Nguyen',  title: 'Distributed systems', specified: 0, comp: { type: 'salary', cents: 13_200_000 } },
+  { email: 'bram@etcweb.com',    name: 'Bram Employee',   title: 'Founding engineer',   specified: 1, comp: { type: 'salary', cents: 18_000_000 } },
+  { email: 'dana@etcweb.com',    name: 'Dana Park',       title: 'Network engineer',    specified: 0, comp: { type: 'salary', cents: 12_400_000 } },
+];
+
+let empCreated = 0;
+for (const e of EMPLOYEES) {
+  let user = db.prepare(`SELECT id FROM users WHERE email = ?`).get(e.email);
+  if (!user) {
+    const info = db.prepare(
+      `INSERT INTO users (email, name, role, status) VALUES (?, ?, 'employee', 'active')`
+    ).run(e.email, e.name);
+    user = { id: info.lastInsertRowid };
+    empCreated++;
+  }
+  let uc = db.prepare(
+    `SELECT id FROM user_claimants WHERE user_id = ? AND claimant_id = ?`
+  ).get(user.id, CLAIMANT_ID);
+  if (!uc) {
+    const info = db.prepare(`
+      INSERT INTO user_claimants (user_id, claimant_id, title, is_specified_employee)
+      VALUES (?, ?, ?, ?)
+    `).run(user.id, CLAIMANT_ID, e.title, e.specified);
+    uc = { id: info.lastInsertRowid };
+  }
+  const hasComp = db.prepare(
+    `SELECT 1 FROM compensation_rows WHERE user_claimant_id = ?`
+  ).get(uc.id);
+  if (!hasComp) {
+    db.prepare(`
+      INSERT INTO compensation_rows
+        (user_claimant_id, comp_type, amount_cents, hours_per_year, effective_from)
+      VALUES (?, ?, ?, 2080, '2026-01-01')
+    `).run(uc.id, e.comp.type, e.comp.cents);
+  }
+}
+console.log(`employees: ${empCreated} new, ${EMPLOYEES.length - empCreated} existing`);
+
+// --- Projects ---------------------------------------------------------------
 
 let created = 0, skipped = 0;
 for (const p of PROJECTS) {
