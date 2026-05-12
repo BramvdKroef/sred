@@ -10,7 +10,7 @@ router.use(requireAuth, requireAdmin);
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getUcOrThrow(req.params.id);
+    const before = getUserClaimant(req.params.id);
     const { title, is_specified_employee, status } = req.body ?? {};
 
     const updates = {};
@@ -41,7 +41,7 @@ router.patch('/:id', (req, res, next) => {
 
 router.post('/:id/compensation', (req, res, next) => {
   try {
-    const uc = getUcOrThrow(req.params.id);
+    const uc = getUserClaimant(req.params.id);
     const { comp_type, amount_cents, hours_per_year, effective_from } = req.body ?? {};
     if (!['salary', 'hourly'].includes(comp_type))
       throw badRequest('comp_type must be salary|hourly');

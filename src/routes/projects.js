@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { badRequest } from '../lib/errors.js';
+import { badRequest, notFound } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { getProject } from '../lib/route-helpers.js';
 

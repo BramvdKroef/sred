@@ -66,7 +66,7 @@ router.post('/t661', (req, res, next) => {
       JSON.stringify(evidenceManifest.map(e => e.id)),
     );
 
-    const exportRow = getExportOrThrow(info.lastInsertRowid);
+    const exportRow = getT661Export(info.lastInsertRowid);
     audit(req.user.id, 'export_t661', 't661_export', exportRow.id, undefined,
       { claimant_id, fiscal_period_id, is_draft: draft, total_cents: totals.grand_total.total_cents });
 
@@ -76,7 +76,7 @@ router.post('/t661', (req, res, next) => {
 
 router.get('/:id', (req, res, next) => {
   try {
-    const row = getExportOrThrow(req.params.id);
+    const row = getT661Export(req.params.id);
     res.json({
       ...row,
       totals: JSON.parse(row.totals_json),
@@ -88,7 +88,7 @@ router.get('/:id', (req, res, next) => {
 
 router.get('/:id/download', (req, res, next) => {
   try {
-    const row = getExportOrThrow(req.params.id);
+    const row = getT661Export(req.params.id);
     const totals = JSON.parse(row.totals_json);
     const format = (req.query.format ?? 'json').toLowerCase();
     const baseName = `t661-${row.claimant_id}-${row.fiscal_period_id}-${row.id}`;
@@ -117,7 +117,7 @@ router.get('/:id/download', (req, res, next) => {
 
 router.post('/:id/evidence-package', (req, res, next) => {
   try {
-    const row = getExportOrThrow(req.params.id);
+    const row = getT661Export(req.params.id);
     if (row.bundle_path) {
       throw conflict('evidence package already built', { bundle_path: row.bundle_path });
     }
@@ -182,7 +182,7 @@ router.post('/:id/evidence-package', (req, res, next) => {
 
 router.get('/:id/evidence-package', (req, res, next) => {
   try {
-    const row = getExportOrThrow(req.params.id);
+    const row = getT661Export(req.params.id);
     if (!row.bundle_path) throw notFound('no bundle built yet; POST first');
     if (!fs.existsSync(row.bundle_path)) throw notFound('bundle file missing on disk');
     res.download(row.bundle_path);
