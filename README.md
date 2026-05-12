@@ -22,11 +22,11 @@ npm run dev                              # node --watch
 
 The seed script prints a magic-link URL to stdout (and sends it via SMTP if `SMTP_HOST` is set). Open `http://localhost:3000`, follow the link, enroll a passkey, and you're in.
 
-To bootstrap a richer demo:
+To bootstrap a richer demo (run after `seed:admin` on a fresh DB so the IDs line up):
 
 ```sh
-npm run seed:etc          # rename claimant 1 to Extreme Technology Corp + 4 fixture projects
-npm run seed:data         # ~140 labour entries, 12 expenses, 11 evidence items spread over 7 weeks
+npm run seed:etc          # Extreme Technology Corp claimant + FY2026 period + 4 employees + 4 fixture projects
+npm run seed:data         # ~150 labour entries, 12 expenses, 11 evidence items spread over 7 weeks
 ```
 
 ## Scripts
@@ -37,8 +37,8 @@ npm run seed:data         # ~140 labour entries, 12 expenses, 11 evidence items 
 | `npm run dev` | `node --watch-path=src --watch src/server.js` — auto-restarts on `src/` changes. |
 | `npm run migrate` | Apply pending migrations in `src/db/migrations/`. Toggles FK enforcement around each one so table recreates (e.g. for CHECK widening) stay safe. |
 | `npm run seed:admin -- --email=... --name="..."` | Create or re-invite the first admin; prints a fresh magic link. |
-| `npm run seed:etc` | Idempotent: rename claimant 1 to ETC and insert four SR&ED projects with realistic narratives. |
-| `npm run seed:data` | Idempotent demo data: project assignments, labour, expenses, evidence files. |
+| `npm run seed:etc` | Idempotent: create/rename claimant 1 to ETC, FY2026 period, four employees with comp rows, and four SR&ED projects with realistic narratives. |
+| `npm run seed:data` | Idempotent demo data on top of `seed:etc`: project assignments, labour, expenses, evidence files. |
 
 ## Environment
 
