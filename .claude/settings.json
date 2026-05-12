@@ -1,14 +1,1 @@
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r '\"\\n## Prompt\\n\\n~~~\\n\" + .prompt + \"\\n~~~\\n\"' >> /home/bram/src/sred/prompts.md"
-          }
-        ]
-      }
-    ]
-  }
-}
+{}
