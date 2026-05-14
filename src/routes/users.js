@@ -32,6 +32,9 @@ function validateAttachment(a) {
   if (!Number.isInteger(a.claimant_id)) throw badRequest('attachment.claimant_id required');
   const claimant = db.prepare(`SELECT id FROM claimants WHERE id = ?`).get(a.claimant_id);
   if (!claimant) throw badRequest(`claimant ${a.claimant_id} not found`);
+  if (a.employment_start_date !== undefined && a.employment_start_date !== null &&
+      typeof a.employment_start_date !== 'string')
+    throw badRequest('attachment.employment_start_date must be a string (YYYY-MM-DD) or null');
   validateCompensation(a.compensation);
 }
 
@@ -42,7 +45,8 @@ function loadUserBundle(userId) {
   if (!user) throw notFound('user not found');
   const attachments = db.prepare(`
     SELECT uc.id, uc.claimant_id, c.legal_name AS claimant_name,
-           uc.title, uc.is_specified_employee, uc.status, uc.created_at
+           uc.title, uc.is_specified_employee, uc.employment_start_date,
+           uc.status, uc.created_at
       FROM user_claimants uc
       JOIN claimants c ON c.id = uc.claimant_id
      WHERE uc.user_id = ?
@@ -71,9 +75,16 @@ function loadUserBundle(userId) {
 
 function insertAttachment(userId, a, actorUserId) {
   const ucInfo = db.prepare(`
-    INSERT INTO user_claimants (user_id, claimant_id, title, is_specified_employee)
-    VALUES (?, ?, ?, ?)
-  `).run(userId, a.claimant_id, a.title ?? null, a.is_specified_employee ? 1 : 0);
+    INSERT INTO user_claimants
+      (user_id, claimant_id, title, is_specified_employee, employment_start_date)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    userId,
+    a.claimant_id,
+    a.title ?? null,
+    a.is_specified_employee ? 1 : 0,
+    a.employment_start_date ?? null,
+  );
   const ucId = ucInfo.lastInsertRowid;
 
   db.prepare(`

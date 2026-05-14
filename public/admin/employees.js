@@ -15,31 +15,42 @@ function renderUsersTab(ctx) {
   const claimantOpts = ctx.state.claimants
     .map(c => `<option value="${c.id}" ${c.id === ctx.state.claimantId ? 'selected' : ''}>${esc(c.legal_name)}</option>`)
     .join('');
+  // The form has two modes:
+  //   - 'create' (default): collect name+role and POST /api/users (which also
+  //     inserts the first attachment via the `attachments` array).
+  //   - 'attach': collected when the typed email matches an existing user.
+  //     name/role are hidden; submit POSTs to /api/users/:id/attachments.
+  // UC-A3 step 1 spec: "name, email, employment start date" — both Title (UC
+  // step 2) and Employment start date are now first-class fields on this form.
   return `
     <div class="card">
       <h2>Add employee</h2>
-      <form id="add-employee-form">
+      <form id="add-employee-form" data-mode="create">
         <div class="grid">
           <div><label>Email</label><input name="email" type="email" required
             autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
-          <div><label>Name</label><input name="name" required
+          <div data-only-create><label>Name</label><input name="name"
             autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
-          <div><label>Role</label>
+          <div data-only-create><label>Role</label>
             <select name="role">
               <option value="employee" selected>Employee</option>
               <option value="manager">Manager</option>
             </select>
           </div>
           <div><label>Claimant</label><select name="claimant_id">${claimantOpts}</select></div>
+          <div><label>Title</label><input name="title"
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
+          <div><label>Employment start date</label><input name="employment_start_date" type="date"></div>
           <div><label>Comp type</label>
             <select name="comp_type"><option>salary</option><option>hourly</option></select>
           </div>
           <div><label>Amount (¢/yr or ¢/hr)</label><input name="amount_cents" type="number" min="1" required></div>
-          <div><label>Effective from</label><input name="effective_from" type="date" required></div>
+          <div><label>Effective from</label><input name="effective_from" type="date"></div>
           <div><label><input name="is_specified_employee" type="checkbox"> Specified employee</label></div>
         </div>
-        <div class="actions"><button>Add</button></div>
-        <p class="muted">Creates the employee record only. Click <strong>Send invite</strong> in the table below to email them a passkey enrollment link when ready.</p>
+        <div id="add-employee-existing" class="muted" hidden style="margin:0.4rem 0; padding:0.5rem; border:1px solid var(--accent, #bbb); border-radius:4px"></div>
+        <div class="actions"><button data-submit-label>Add</button></div>
+        <p class="muted">Creates the employee record only. Click <strong>Send invite</strong> in the table below to email them a passkey enrollment link when ready. If <em>Effective from</em> is left blank we default it from <em>Employment start date</em>.</p>
       </form>
     </div>
     <div class="card">
@@ -90,24 +101,108 @@ let currentCtx;   // captured each time the list renders so the fetch callback c
 
 function bindList(ctx) {
   currentCtx = ctx;
+  bindAddEmployeeForm(ctx);
+}
 
-  bindForm('#add-employee-form', async (fd, form) => {
-    const body = {
-      email: fd.get('email'),
-      name: fd.get('name'),
-      role: fd.get('role') || 'employee',
-      attachments: [{
-        claimant_id: Number(fd.get('claimant_id')),
-        is_specified_employee: fd.get('is_specified_employee') === 'on',
-        compensation: {
-          comp_type: fd.get('comp_type'),
-          amount_cents: Number(fd.get('amount_cents')),
-          effective_from: fd.get('effective_from'),
-        },
-      }],
+// UC-A3: when an admin types an email that already belongs to a user, surface
+// the match and offer to switch the form into "attach to claimant" mode
+// (alt flow A3.a — cross-claimant onboarding). The server already rejects
+// duplicate emails (UNIQUE constraint on users.email + 409 in
+// src/routes/users.js), so without this UX the admin gets an unhelpful
+// "email already exists" error and no path forward.
+function bindAddEmployeeForm(ctx) {
+  const form = document.getElementById('add-employee-form');
+  if (!form) return;
+  const emailInput = form.querySelector('input[name="email"]');
+  const notice     = form.querySelector('#add-employee-existing');
+  const submitBtn  = form.querySelector('[data-submit-label]');
+  let existingUserId = null;   // populated when admin opts into attach mode
+
+  const setMode = (mode, user) => {
+    form.dataset.mode = mode;
+    existingUserId = mode === 'attach' ? user.id : null;
+    form.querySelectorAll('[data-only-create]').forEach(el => {
+      el.hidden = mode === 'attach';
+      el.querySelectorAll('input, select').forEach(i => { i.disabled = mode === 'attach'; });
+    });
+    const nameInput = form.querySelector('input[name="name"]');
+    if (nameInput) nameInput.required = mode === 'create';
+    submitBtn.textContent = mode === 'attach' ? 'Attach' : 'Add';
+  };
+
+  const lookupEmail = async () => {
+    const email = (emailInput.value || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      notice.hidden = true; notice.innerHTML = ''; setMode('create');
+      return;
+    }
+    try {
+      const r = await api('GET', `/api/users?q=${encodeURIComponent(email)}`);
+      const match = (r.items || []).find(u => (u.email || '').toLowerCase() === email);
+      if (!match) {
+        notice.hidden = true; notice.innerHTML = ''; setMode('create');
+        return;
+      }
+      notice.hidden = false;
+      notice.innerHTML =
+        `User <strong>${esc(match.name)}</strong> (${esc(match.email)}) already exists.
+         Switch to attach-to-claimant mode?
+         <button type="button" class="small" data-attach-yes>Yes</button>
+         <button type="button" class="small secondary" data-attach-no>No</button>`;
+      notice.querySelector('[data-attach-yes]').addEventListener('click', () => {
+        setMode('attach', match);
+        notice.innerHTML =
+          `Attach to claimant — creating a new attachment under
+           <strong>${esc(match.name)}</strong>. Submit POSTs to the existing user.`;
+      });
+      notice.querySelector('[data-attach-no]').addEventListener('click', () => {
+        notice.hidden = true; notice.innerHTML = ''; setMode('create');
+      });
+    } catch {
+      // search failed — degrade silently to create mode; the server will
+      // reject a duplicate email on submit with a clear 409.
+      notice.hidden = true; notice.innerHTML = ''; setMode('create');
+    }
+  };
+
+  // Trigger on blur. Debounced keyup is also reasonable but blur is the
+  // simpler model: admin types a complete email, tabs out, sees the prompt.
+  emailInput.addEventListener('blur', lookupEmail);
+
+  onSubmit(form, async (fd) => {
+    const employmentStart = fd.get('employment_start_date') || null;
+    // Effective_from defaults to employment start date when blank (UC-A3
+    // step 1 spec lists employment start date as the primary field; the
+    // first comp row should inherit it unless the admin overrides).
+    const effectiveFrom = fd.get('effective_from') || employmentStart;
+    if (!effectiveFrom)
+      throw new Error('Provide an employment start date or an effective-from date for the first comp row.');
+
+    const attachment = {
+      claimant_id: Number(fd.get('claimant_id')),
+      title: fd.get('title') || null,
+      is_specified_employee: fd.get('is_specified_employee') === 'on',
+      employment_start_date: employmentStart,
+      compensation: {
+        comp_type: fd.get('comp_type'),
+        amount_cents: Number(fd.get('amount_cents')),
+        effective_from: effectiveFrom,
+      },
     };
-    await api('POST', '/api/users', body);
+
+    if (form.dataset.mode === 'attach' && existingUserId) {
+      await api('POST', `/api/users/${existingUserId}/attachments`, attachment);
+    } else {
+      await api('POST', '/api/users', {
+        email: fd.get('email'),
+        name: fd.get('name'),
+        role: fd.get('role') || 'employee',
+        attachments: [attachment],
+      });
+    }
+    notice.hidden = true; notice.innerHTML = '';
     form.reset();
+    setMode('create');
     await ctx.reloadAll();
   });
 }
