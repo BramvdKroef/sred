@@ -128,7 +128,10 @@ router.get('/', (req, res, next) => {
       params.push(req.user.id);
     }
     const sql = `
-      SELECT ei.* FROM evidence_items ei
+      SELECT ei.*, c.legal_name AS claimant_name
+        FROM evidence_items ei
+        LEFT JOIN projects p ON p.id = ei.project_id
+        LEFT JOIN claimants c ON c.id = p.claimant_id
        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
        ORDER BY ei.evidence_date DESC, ei.id DESC
     `;
