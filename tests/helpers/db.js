@@ -23,8 +23,10 @@ export async function setupTempDb() {
   );
 
   process.env.DATABASE_PATH = tmpFile;
-  // config.js requires JWT_SECRET at module load.
-  if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'test-secret';
+  // config.js requires JWT_SECRET at module load (≥32 chars, not a known weak value).
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'test-only-' + crypto.randomBytes(24).toString('hex');
+  }
 
   // Importing migrate.js runs the migration loop as a top-level side-effect.
   // The dynamic import here ensures DATABASE_PATH is already in env.

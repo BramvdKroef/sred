@@ -35,6 +35,18 @@ function canSee(user, evidence) {
   return user.role === 'admin' || evidence.uploaded_by_user_id === user.id;
 }
 
+// Reject link URLs that aren't http/https/mailto — `javascript:`, `data:`,
+// and `vbscript:` would otherwise survive client-side esc() and be clickable
+// script execution in an admin's session.
+function validateLinkUrl(raw) {
+  let parsed;
+  try { parsed = new URL(raw); } catch { throw badRequest('url is malformed'); }
+  if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+    throw badRequest('url must use http, https, or mailto scheme');
+  }
+  return parsed.href;
+}
+
 function assertAttached(user, claimantId) {
   if (user.role === 'admin') return;
   const uc = db.prepare(
@@ -113,7 +125,7 @@ router.post('/', upload.single('file'), (req, res, next) => {
       fileMime = req.file.mimetype;
     } else if (kind === 'link') {
       if (!linkUrl) throw badRequest('url required when kind=link');
-      urlVal = linkUrl;
+      urlVal = validateLinkUrl(linkUrl);
     } else {
       if (!noteText) throw badRequest('note_text required when kind=note');
       noteVal = noteText;
@@ -177,7 +189,7 @@ router.patch('/:id', (req, res, next) => {
     if (evidence_date !== undefined) updates.evidence_date = evidence_date;
     if (before.kind === 'link' && url !== undefined) {
       if (!url) throw badRequest('url cannot be empty');
-      updates.url = url;
+      updates.url = validateLinkUrl(url);
     }
     if (before.kind === 'note' && note_text !== undefined) {
       if (!note_text) throw badRequest('note_text cannot be empty');

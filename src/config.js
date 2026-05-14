@@ -13,12 +13,25 @@ function required(name) {
   return v;
 }
 
+function jwtSecret() {
+  const v = process.env.JWT_SECRET;
+  if (!v) throw new Error('Missing required env var: JWT_SECRET');
+  const banned = new Set(['change-me', 'changeme', 'secret', 'dev', 'password']);
+  if (banned.has(v.toLowerCase()) || v.length < 32) {
+    throw new Error(
+      "JWT_SECRET must be a unique random value at least 32 chars long. " +
+      "Generate one with: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\""
+    );
+  }
+  return v;
+}
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   databasePath: path.resolve(ROOT_DIR, process.env.DATABASE_PATH || './data/sred.db'),
   uploadsDir: path.resolve(ROOT_DIR, process.env.UPLOADS_DIR || './uploads'),
 
-  jwtSecret: required('JWT_SECRET'),
+  jwtSecret: jwtSecret(),
   jwtTtlSeconds: Number(process.env.JWT_TTL_SECONDS || 3600),
   refreshTtlDays: Number(process.env.REFRESH_TTL_DAYS || 30),
 

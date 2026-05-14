@@ -248,6 +248,17 @@ function bindPrefs(main) {
 export const esc = s => s == null ? '' : String(s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+// Reject `javascript:` / `data:` / `vbscript:` URLs so user-supplied link
+// evidence can't smuggle script execution into an admin's session.
+export const safeHref = u => {
+  try {
+    const x = new URL(u);
+    return ['http:', 'https:', 'mailto:'].includes(x.protocol) ? x.href : '#';
+  } catch {
+    return '#';
+  }
+};
+
 export const cents = n => (n == null) ? '' : (n / 100).toFixed(2);
 
 export const $ = sel => document.querySelector(sel);
@@ -420,7 +431,7 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
       <div><strong>Uploaded by:</strong> user #${e.uploaded_by_user_id}</div>
       <div class="full"><strong>Caption:</strong> ${esc(e.caption)}</div>
       ${e.kind === 'file' ? `<div class="full"><strong>File:</strong> <a href="/api/evidence/${e.id}/download" data-jwt-dl>${esc(e.file_path)}</a> (${e.file_size ?? '?'} bytes, ${esc(e.file_mime ?? '')})</div>` : ''}
-      ${e.kind === 'link' ? `<div class="full"><strong>URL:</strong> <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a></div>` : ''}
+      ${e.kind === 'link' ? `<div class="full"><strong>URL:</strong> <a href="${esc(safeHref(e.url))}" target="_blank" rel="noopener">${esc(e.url)}</a></div>` : ''}
       ${e.kind === 'note' ? `<div class="full"><strong>Note:</strong> ${esc(e.note_text)}</div>` : ''}
       ${e.labour_entry_id ? `<div><strong>Linked to:</strong> labour entry #${e.labour_entry_id}</div>` : ''}
       ${e.expense_id ? `<div><strong>Linked to:</strong> expense #${e.expense_id}</div>` : ''}
@@ -434,7 +445,7 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
       body += `<ul style="font-size:0.88rem; margin:0; padding-left:1.2rem">${linkedEv.map(ev =>
         `<li><span class="pill type-evidence">${esc(ev.kind)}</span> ${esc(ev.caption)} ${
           ev.kind === 'file' ? `· <a href="/api/evidence/${ev.id}/download" data-jwt-dl>${esc(ev.file_path)}</a>` :
-          ev.kind === 'link' ? `· <a href="${esc(ev.url)}" target="_blank" rel="noopener">${esc(ev.url)}</a>` :
+          ev.kind === 'link' ? `· <a href="${esc(safeHref(ev.url))}" target="_blank" rel="noopener">${esc(ev.url)}</a>` :
           `· <span class="muted">${esc((ev.note_text ?? '').slice(0, 120))}</span>`
         }</li>`).join('')}</ul>`;
     }

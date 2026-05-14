@@ -1,4 +1,4 @@
-import { api, esc, cents, onSubmit, wireJwtDownloads } from '../api.js';
+import { api, esc, cents, onSubmit, wireJwtDownloads, safeHref } from '../api.js';
 
 export function render(main, ctx) {
   const { state } = ctx;
@@ -72,7 +72,7 @@ export function render(main, ctx) {
             <td>${esc(e.caption)}</td>
             <td>${e.kind === 'file'
                   ? `<a href="/api/evidence/${e.id}/download" data-jwt-dl>${esc(e.file_path)}</a>`
-                  : e.kind === 'link' ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a>`
+                  : e.kind === 'link' ? `<a href="${esc(safeHref(e.url))}" target="_blank" rel="noopener">${esc(e.url)}</a>`
                   : `<span class="muted">${esc(e.note_text)}</span>`}</td>
             <td class="actions"><button class="small secondary" data-edit-evidence="${e.id}">Edit</button></td>
           </tr>
