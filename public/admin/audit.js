@@ -41,12 +41,12 @@ export async function render(main, ctx) {
       <div class="card-head">
         <h2>Audit log <span class="muted" style="font-size:0.85rem; font-weight:500">${data.items.length} most recent</span></h2>
         <div class="row" style="gap:0.4rem">
-          <select id="audit-entity-filter">
+          <select id="audit-entity-filter" aria-label="Filter by entity type">
             <option value="">all entities</option>
             ${facets.entity_types.map(t =>
               `<option value="${t}" ${f.entity_type === t ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
-          <select id="audit-action-filter">
+          <select id="audit-action-filter" aria-label="Filter by action">
             <option value="">all actions</option>
             ${facets.actions.map(a =>
               `<option value="${a}" ${f.action === a ? 'selected' : ''}>${a}</option>`).join('')}

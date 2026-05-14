@@ -243,9 +243,9 @@ async function refreshPrefs(main) {
       </div>
       <div id="add-passkey-form" hidden style="margin-bottom: 0.8rem">
         <form id="form-add-passkey" class="row" style="gap:0.5rem; align-items:flex-end">
-          <div style="flex:1; min-width:14rem"><label>Device label</label>
+          <div style="flex:1; min-width:14rem"><label>Device label
             <input name="label" placeholder="${esc(navigator.platform || 'Device')}">
-          </div>
+          </label></div>
           <div><button class="small">Add passkey</button></div>
         </form>
         <p class="muted" style="font-size:0.85rem; margin-top:0.4rem">
@@ -547,16 +547,16 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
       <details style="margin-top:0.5rem">
         <summary class="summary-link">＋ Attach evidence</summary>
         <form data-attach-form="${type}-${e.id}" data-project-id="${e.project_id}" data-entry-date="${esc(entryDate)}" class="row" style="gap:0.5rem; align-items:flex-end; flex-wrap:wrap; margin-top:0.5rem">
-          <div><label>Kind</label>
+          <div><label>Kind
             <select name="ev_kind" class="ev-kind">
               <option value="file">File</option>
               <option value="link">Link</option>
             </select>
-          </div>
-          <div><label>Date</label><input type="date" name="evidence_date" value="${esc(entryDate)}"></div>
-          <div class="input-grow"><label>Caption</label><input name="caption" placeholder="What this shows"></div>
-          <div class="full ev-file"><label>File</label><input type="file" name="ev_file"></div>
-          <div class="full ev-url" hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
+          </label></div>
+          <div><label>Date <input type="date" name="evidence_date" value="${esc(entryDate)}"></label></div>
+          <div class="input-grow"><label>Caption <input name="caption" placeholder="What this shows"></label></div>
+          <div class="full ev-file"><label>File <input type="file" name="ev_file"></label></div>
+          <div class="full ev-url" hidden><label>URL <input type="url" name="ev_url" placeholder="https://…"></label></div>
           <div><button class="small">Add evidence</button></div>
         </form>
       </details>`;

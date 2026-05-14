@@ -213,10 +213,10 @@ function totalsCard(state) {
 
 function labourEditForm(e) {
   return `<form data-form-edit-labour="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0">
-    <div><label>Date</label><input type="date" name="work_date" value="${esc(e.work_date)}" required></div>
-    <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required style="width:6rem"></div>
+    <div><label>Date <input type="date" name="work_date" value="${esc(e.work_date)}" required></label></div>
+    <div><label>Hours <input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required style="width:6rem"></label></div>
     <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime" ${e.is_overtime ? 'checked' : ''}> Overtime</label></div>
-    <div class="input-grow"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
+    <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
     <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save labour entry</button><button type="button" class="small secondary" data-cancel-labour="${e.id}">Cancel</button></div></div>
   </form>`;
 }
@@ -224,23 +224,23 @@ function labourEditForm(e) {
 function expenseEditForm(e) {
   const cats = ['material','contract','third_party_payment','overhead'];
   return `<form data-form-edit-expense="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0; flex-wrap:wrap">
-    <div><label>Date</label><input type="date" name="expense_date" value="${esc(e.expense_date)}" required></div>
-    <div><label>Category</label><select name="category">${cats.map(c =>
-      `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-    <div><label>Amount <span class="muted">(${esc(e.currency)})</span></label><input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required style="width:9rem"></div>
-    <div><label>Currency</label><input name="currency" value="${esc(e.currency)}" required style="width:5rem"></div>
-    <div><label>FX rate</label><input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" style="width:6rem"></div>
-    <div class="input-grow"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
+    <div><label>Date <input type="date" name="expense_date" value="${esc(e.expense_date)}" required></label></div>
+    <div><label>Category <select name="category">${cats.map(c =>
+      `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
+    <div><label>Amount <span class="muted">(${esc(e.currency)})</span> <input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required style="width:9rem"></label></div>
+    <div><label>Currency <input name="currency" value="${esc(e.currency)}" required style="width:5rem"></label></div>
+    <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" style="width:6rem"></label></div>
+    <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
     <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save expense</button><button type="button" class="small secondary" data-cancel-expense="${e.id}">Cancel</button></div></div>
   </form>`;
 }
 
 function evidenceEditForm(e) {
   return `<form data-form-edit-evidence="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0; flex-wrap:wrap">
-    <div><label>Date</label><input type="date" name="evidence_date" value="${esc(e.evidence_date)}" required></div>
-    <div class="input-grow"><label>Caption</label><input name="caption" value="${esc(e.caption)}" required></div>
-    ${e.kind === 'link' ? `<div class="input-grow"><label>URL</label><input type="url" name="url" value="${esc(e.url ?? '')}" required></div>` : ''}
-    ${e.kind === 'note' ? `<div style="flex:1 1 100%"><label>Note</label><textarea name="note_text" rows="2" required>${esc(e.note_text ?? '')}</textarea></div>` : ''}
+    <div><label>Date <input type="date" name="evidence_date" value="${esc(e.evidence_date)}" required></label></div>
+    <div class="input-grow"><label>Caption <input name="caption" value="${esc(e.caption)}" required></label></div>
+    ${e.kind === 'link' ? `<div class="input-grow"><label>URL <input type="url" name="url" value="${esc(e.url ?? '')}" required></label></div>` : ''}
+    ${e.kind === 'note' ? `<div style="flex:1 1 100%"><label>Note <textarea name="note_text" rows="2" required>${esc(e.note_text ?? '')}</textarea></label></div>` : ''}
     ${e.kind === 'file' ? `<div><label>&nbsp;</label><span class="muted">file content not editable</span></div>` : ''}
     <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save evidence</button><button type="button" class="small secondary" data-cancel-evidence="${e.id}">Cancel</button></div></div>
   </form>`;

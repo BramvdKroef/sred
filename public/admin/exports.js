@@ -18,7 +18,7 @@ export async function render(main, ctx) {
     <div class="card">
       <h2>Generate T661 export</h2>
       <form id="export-form" class="row">
-        <select name="fiscal_period_id" required>${periodOpts}</select>
+        <select name="fiscal_period_id" required aria-label="Fiscal period">${periodOpts}</select>
         <label><input type="checkbox" name="draft" checked> draft</label>
         <button>Generate export</button>
       </form>

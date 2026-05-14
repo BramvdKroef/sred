@@ -17,25 +17,25 @@ export function renderLabour(main, ctx) {
     <h2>Log labour</h2>
     <form id="labour-form">
       <div class="grid">
-        <div><label>Project</label>${projectSelect(ctx.state)}</div>
-        <div><label>Date</label><input type="date" name="work_date" required></div>
-        <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" required></div>
+        <div><label>Project ${projectSelect(ctx.state)}</label></div>
+        <div><label>Date <input type="date" name="work_date" required></label></div>
+        <div><label>Hours <input type="number" name="hours" step="0.25" min="0.25" max="24" required></label></div>
         <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime"> Overtime</label></div>
-        <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
+        <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
       </div>
       <details class="attach-block" style="margin-top:0.6rem">
         <summary class="summary-link">＋ Attach evidence (optional)</summary>
         <div class="grid" style="margin-top:0.6rem">
-          <div><label>Kind</label>
+          <div><label>Kind
             <select name="ev_kind" class="ev-kind">
               <option value="">— none —</option>
               <option value="file">File</option>
               <option value="link">Link</option>
             </select>
-          </div>
-          <div style="flex:1"><label>Caption</label><input name="ev_caption" placeholder="What this evidence shows"></div>
-          <div class="full ev-file" hidden><label>File</label><input type="file" name="ev_file"></div>
-          <div class="full ev-url"  hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
+          </label></div>
+          <div style="flex:1"><label>Caption <input name="ev_caption" placeholder="What this evidence shows"></label></div>
+          <div class="full ev-file" hidden><label>File <input type="file" name="ev_file"></label></div>
+          <div class="full ev-url"  hidden><label>URL <input type="url" name="ev_url" placeholder="https://…"></label></div>
         </div>
       </details>
       <div class="actions" style="margin-top:0.8rem"><button>Add labour entry</button></div>
@@ -71,27 +71,28 @@ export function renderEvidence(main, ctx) {
     <h2>Add evidence</h2>
     <form id="evidence-form">
       <div class="grid">
-        <div><label>Project</label>${projectSelect(state)}</div>
-        <div><label>Date</label><input type="date" name="evidence_date" required></div>
-        <div><label>Kind</label>
+        <div><label>Project ${projectSelect(state)}</label></div>
+        <div><label>Date <input type="date" name="evidence_date" required></label></div>
+        <div><label>Kind
           <select name="kind" id="ev-kind">
             <option value="file">File</option>
             <option value="link">Link</option>
             <option value="note">Note</option>
           </select>
-        </div>
-        <div class="full"><label>Caption</label><input name="caption" required></div>
+        </label></div>
+        <div class="full"><label>Caption <input name="caption" required></label></div>
         <div class="full">
-          <label>Attach to (optional)</label>
-          <select name="attach_to">
-            <option value="">— none (project-level) —</option>
-            ${labourOpts ? `<optgroup label="Labour entries">${labourOpts}</optgroup>` : ''}
-            ${expenseOpts ? `<optgroup label="Expenses">${expenseOpts}</optgroup>` : ''}
-          </select>
+          <label>Attach to (optional)
+            <select name="attach_to">
+              <option value="">— none (project-level) —</option>
+              ${labourOpts ? `<optgroup label="Labour entries">${labourOpts}</optgroup>` : ''}
+              ${expenseOpts ? `<optgroup label="Expenses">${expenseOpts}</optgroup>` : ''}
+            </select>
+          </label>
         </div>
-        <div class="full" id="ev-file"><label>File</label><input type="file" name="file"></div>
-        <div class="full" id="ev-url" hidden><label>URL</label><input type="url" name="url" placeholder="https://…"></div>
-        <div class="full" id="ev-note" hidden><label>Note</label><textarea name="note_text" rows="3"></textarea></div>
+        <div class="full" id="ev-file"><label>File <input type="file" name="file"></label></div>
+        <div class="full" id="ev-url" hidden><label>URL <input type="url" name="url" placeholder="https://…"></label></div>
+        <div class="full" id="ev-note" hidden><label>Note <textarea name="note_text" rows="3"></textarea></label></div>
       </div>
       <div class="actions"><button>Add evidence</button></div>
     </form>
@@ -139,26 +140,26 @@ export function renderExpense(main, ctx) {
     <h2>Submit expense</h2>
     <form id="expense-form">
       <div class="grid">
-        <div><label>Project</label>${projectSelect(ctx.state)}</div>
-        <div><label>Date</label><input type="date" name="expense_date" required></div>
-        <div><label>Category</label>
+        <div><label>Project ${projectSelect(ctx.state)}</label></div>
+        <div><label>Date <input type="date" name="expense_date" required></label></div>
+        <div><label>Category
           <select name="category">
             <option value="material">material</option>
             <option value="contract">contract</option>
             <option value="third_party_payment">third-party payment</option>
             <option value="overhead">overhead</option>
           </select>
-        </div>
-        <div><label>Amount <span class="muted" data-amount-unit>(CAD)</span></label><input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></div>
-        <div><label>Currency</label><input name="currency" value="CAD" data-currency-input></div>
-        <div><label>FX rate (if not reporting currency)</label><input type="number" step="0.0001" name="fx_rate"></div>
-        <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
+        </label></div>
+        <div><label>Amount <span class="muted" data-amount-unit>(CAD)</span> <input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></label></div>
+        <div><label>Currency <input name="currency" value="CAD" data-currency-input></label></div>
+        <div><label>FX rate (if not reporting currency) <input type="number" step="0.0001" name="fx_rate"></label></div>
+        <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
       </div>
       <details class="attach-block" style="margin-top:0.6rem" open>
         <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
         <div class="grid" style="margin-top:0.6rem">
-          <div style="flex:1"><label>Caption</label><input name="receipt_caption" placeholder="e.g. Invoice #INV-2026-0312"></div>
-          <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
+          <div style="flex:1"><label>Caption <input name="receipt_caption" placeholder="e.g. Invoice #INV-2026-0312"></label></div>
+          <div class="full"><label>File <input type="file" name="receipt_file"></label></div>
         </div>
       </details>
       <div class="actions" style="margin-top:0.8rem"><button>Add expense</button></div>
