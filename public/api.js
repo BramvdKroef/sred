@@ -261,6 +261,34 @@ export const safeHref = u => {
 
 export const cents = n => (n == null) ? '' : (n / 100).toFixed(2);
 
+// Parse a dollar-string input (e.g. "95000", "95,000", "1234.56") into
+// integer cents. Returns null on empty/blank, NaN on unparseable. Throws on
+// negative. Used by dollar-denominated inputs so users no longer have to
+// hand-multiply by 100 (people were typing 9500000 for $95k salaries).
+export function dollarsToCents(s) {
+  if (s == null) return null;
+  const cleaned = String(s).replace(/[,\s$]/g, '').trim();
+  if (cleaned === '') return null;
+  const n = Number(cleaned);
+  if (Number.isNaN(n)) return NaN;
+  if (n < 0) throw new Error('amount cannot be negative');
+  return Math.round(n * 100);
+}
+
+// Render a dollars-denominated <input type="number"> with step=0.01 and a
+// non-negative min. Use this (or hand-roll equivalent markup) for any form
+// field that previously took raw cents. The submit handler should call
+// dollarsToCents(fd.get(name)) to convert back to integer cents before
+// hitting the API; the stored field name stays `*_cents`.
+export function dollarInput(name, valueCents, opts = {}) {
+  const v = valueCents != null ? (valueCents / 100).toFixed(2) : '';
+  const required = opts.required ? 'required' : '';
+  const step = opts.step ?? '0.01';
+  const placeholder = opts.placeholder ?? '';
+  const extra = opts.extraAttrs ?? '';
+  return `<input type="number" step="${step}" min="0" name="${name}" value="${v}" placeholder="${placeholder}" ${required} ${extra}>`;
+}
+
 // Reason a labour/expense row can't be edited, or null if it's editable.
 // Mirrors the server's assertEditable (route-helpers.js): approved entries
 // or entries in a closed period are locked. `period` is the matching
