@@ -218,7 +218,7 @@ export function bindForm(selector, handler) {
 
 // Preferences page (shared between admin and employee shells).
 export async function renderPreferencesPage(main) {
-  main.innerHTML = '<p class="empty">Loading…</p>';
+  main.innerHTML = '<p class="loading">Loading…</p>';
   await refreshPrefs(main);
 }
 
@@ -246,7 +246,7 @@ async function refreshPrefs(main) {
           <div style="flex:1; min-width:14rem"><label>Device label</label>
             <input name="label" placeholder="${esc(navigator.platform || 'Device')}">
           </div>
-          <div><button class="small">Register passkey</button></div>
+          <div><button class="small">Add passkey</button></div>
         </form>
         <p class="muted" style="font-size:0.85rem; margin-top:0.4rem">
           Your browser will prompt you to use a passkey on this device.
@@ -557,7 +557,7 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
           <div class="input-grow"><label>Caption</label><input name="caption" placeholder="What this shows"></div>
           <div class="full ev-file"><label>File</label><input type="file" name="ev_file"></div>
           <div class="full ev-url" hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
-          <div><button class="small">Attach</button></div>
+          <div><button class="small">Add evidence</button></div>
         </form>
       </details>`;
   }

@@ -31,7 +31,28 @@ const state = {
   viewingUserId: null,
 };
 
-export const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports', 'audit', 'preferences'];
+export const ALLOWED_TABS = ['overview', 'projects', 'employees', 'review', 'exports', 'audit', 'preferences'];
+
+// Legacy → current hash-key migration. The tab keys were renamed from
+// `claimants`/`users` to `projects`/`employees` so the URL matches the visible
+// tab labels. Bookmarks and any deep links in third-party emails still use the
+// old keys; this helper rewrites them on first load and on every hashchange.
+//
+// Returns the migrated hash (string, including the leading "#") when the input
+// uses a legacy key, or `null` when no migration is needed. Exported so tests
+// can pin the migration table without standing up a DOM.
+export function migrateLegacyHash(rawHash) {
+  if (rawHash == null) return null;
+  const raw = String(rawHash).replace(/^#/, '');
+  if (raw === '') return null;
+  const [head, ...rest] = raw.split('/');
+  let mapped;
+  if (head === 'claimants') mapped = 'projects';
+  else if (head === 'users') mapped = 'employees';
+  else return null;
+  const tail = rest.length ? '/' + rest.join('/') : '';
+  return '#' + mapped + tail;
+}
 
 // --- Active-claimant persistence (pure helpers, unit-tested) ---------------
 
@@ -72,8 +93,8 @@ export function parseHashStr(rawHash) {
   const numId = Number.isInteger(id) ? id : null;
   return {
     tab,
-    projectId: tab === 'claimants' ? numId : null,
-    userId:    tab === 'users'     ? numId : null,
+    projectId: tab === 'projects'  ? numId : null,
+    userId:    tab === 'employees' ? numId : null,
     valid:     ALLOWED_TABS.includes(tab),
   };
 }
@@ -92,11 +113,16 @@ function parseHash() {
 }
 
 function onHashChange() {
+  // Legacy hash redirect (#claimants → #projects, #users → #employees). Using
+  // location.replace so the legacy URL doesn't sit in the back-button history.
+  // The replace fires another hashchange that we then handle normally.
+  const migrated = migrateLegacyHash(location.hash);
+  if (migrated) { location.replace(migrated); return; }
   const { tab, projectId, userId, valid } = parseHash();
   // Unknown hash → revert URL to the current valid tab so URL ≠ view doesn't desync.
   if (!valid) { history.replaceState(null, '', '#' + state.tab); return; }
-  const nextProject = (tab === 'claimants') ? projectId : null;
-  const nextUser    = (tab === 'users')     ? userId    : null;
+  const nextProject = (tab === 'projects')  ? projectId : null;
+  const nextUser    = (tab === 'employees') ? userId    : null;
   if (tab === state.tab && nextProject === state.viewingProjectId && nextUser === state.viewingUserId) return;
   state.tab = tab;
   state.viewingProjectId = nextProject;
@@ -107,11 +133,16 @@ function onHashChange() {
 // --- Shell render + nav + search ------------------------------------------
 
 function shell() {
+  // First load: rewrite any legacy hash (#claimants / #users) before parsing
+  // so a bookmarked URL lands on the right tab. Replace (not assign) keeps the
+  // back-button history clean.
+  const migrated = migrateLegacyHash(location.hash);
+  if (migrated) history.replaceState(null, '', migrated);
   const { tab, projectId, userId, valid } = parseHash();
   if (valid) {
     state.tab = tab;
-    state.viewingProjectId = (tab === 'claimants') ? projectId : null;
-    state.viewingUserId    = (tab === 'users')     ? userId    : null;
+    state.viewingProjectId = (tab === 'projects')  ? projectId : null;
+    state.viewingUserId    = (tab === 'employees') ? userId    : null;
   } else {
     location.hash = state.tab;
   }
@@ -128,13 +159,13 @@ function shell() {
     </header>
     <nav class="tabs">
       ${tabBtn('overview', 'Overview')}
-      ${tabBtn('claimants', 'Projects')}
-      ${tabBtn('users', 'Employees')}
+      ${tabBtn('projects', 'Projects')}
+      ${tabBtn('employees', 'Employees')}
       ${tabBtn('review', 'Review queue')}
       ${tabBtn('exports', 'T661 exports')}
       ${tabBtn('audit', 'Audit log')}
       <div class="project-search-wrap">
-        <input id="project-search" type="search" placeholder="Search projects &amp; employees…" autocomplete="off">
+        <input id="project-search" type="search" placeholder="Jump to project or employee…" autocomplete="off">
         <div id="project-search-results" class="search-results" hidden></div>
       </div>
     </nav>
@@ -244,8 +275,8 @@ function render() {
   const ctx = { state, render, reloadAll, selectProject, selectUser };
   switch (state.tab) {
     case 'overview':    return overview.render(main, ctx);
-    case 'claimants':   return projects.render(main, ctx);
-    case 'users':       return employees.render(main, ctx);
+    case 'projects':    return projects.render(main, ctx);
+    case 'employees':   return employees.render(main, ctx);
     case 'review':      return review.render(main, ctx);
     case 'exports':     return exportsTab.render(main, ctx);
     case 'audit':       return audit.render(main, ctx);
@@ -256,7 +287,7 @@ function render() {
 // --- Cross-tab navigation helpers (used by the search bar + various rows) -
 
 async function selectProject({ id, claimant_id }) {
-  state.tab = 'claimants';
+  state.tab = 'projects';
   // Jumping to a project from search/anywhere also pins the active claimant
   // to that project's claimant so the header stays consistent.
   if (state.activeClaimantId !== claimant_id) {
@@ -265,16 +296,16 @@ async function selectProject({ id, claimant_id }) {
   }
   state.viewingProjectId = id;
   state.viewingUserId = null;
-  history.replaceState(null, '', `#claimants/${id}`);
+  history.replaceState(null, '', `#projects/${id}`);
   resetSearch();
   await reloadAll();
 }
 
 async function selectUser(id) {
-  state.tab = 'users';
+  state.tab = 'employees';
   state.viewingUserId = id;
   state.viewingProjectId = null;
-  history.replaceState(null, '', `#users/${id}`);
+  history.replaceState(null, '', `#employees/${id}`);
   resetSearch();
   render();
 }
@@ -288,36 +319,56 @@ function resetSearch() {
 
 // --- Global search (projects + employees) ---------------------------------
 
+// Per-section cap before the "See all <N>" overflow row appears. Clicking the
+// footer raises the visible window to EXPANDED_CAP for that section.
+const SEARCH_CAP = 6;
+const EXPANDED_CAP = 30;
+
 function bindProjectSearch() {
   const input = document.getElementById('project-search');
   const list  = document.getElementById('project-search-results');
   if (!input || !list) return;
   let timer = null;
   let lastQuery = '';
+  // Per-section expansion state. Keys are 'project' / 'user'; values are the
+  // current visible cap for that section. Reset on each new query.
+  let expanded = { project: false, user: false };
+
+  const renderSection = (kind, head, items, renderItem) => {
+    const cap = expanded[kind] ? EXPANDED_CAP : SEARCH_CAP;
+    const visible = items.slice(0, cap);
+    const overflow = items.length > visible.length;
+    const overflowRow = overflow
+      ? `<div class="item search-more" data-expand="${kind}">See all ${items.length} ${head.toLowerCase()} matches</div>`
+      : '';
+    return `<div class="results-section-head">${head}</div>` +
+      visible.map(renderItem).join('') + overflowRow;
+  };
 
   const runSearch = async (q) => {
     if (!q) { list.hidden = true; list.innerHTML = ''; return; }
+    // Fetch up to EXPANDED_CAP per section so the "See all" expansion is free
+    // (no second round-trip). Both /api/projects and /api/users already cap
+    // limit server-side, so this stays cheap.
     const [projects, users] = await Promise.all([
-      api('GET', `/api/projects?q=${encodeURIComponent(q)}&limit=6`),
-      api('GET', `/api/users?q=${encodeURIComponent(q)}&limit=6`),
+      api('GET', `/api/projects?q=${encodeURIComponent(q)}&limit=${EXPANDED_CAP}`),
+      api('GET', `/api/users?q=${encodeURIComponent(q)}&limit=${EXPANDED_CAP}`),
     ]);
     if (q !== lastQuery) return;  // stale
     const sections = [];
     if (projects.items.length) {
-      sections.push(`<div class="results-section-head">Projects</div>` +
-        projects.items.map(p => `
+      sections.push(renderSection('project', 'Projects', projects.items, p => `
           <div class="item" data-kind="project" data-pid="${p.id}" data-cid="${p.claimant_id}">
             <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)}" style="margin-left:0.3rem">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
             <div class="claimant">${esc(p.claimant_name)}</div>
-          </div>`).join(''));
+          </div>`));
     }
     if (users.items.length) {
-      sections.push(`<div class="results-section-head">Employees</div>` +
-        users.items.map(u => `
+      sections.push(renderSection('user', 'Employees', users.items, u => `
           <div class="item" data-kind="user" data-uid="${u.id}">
             <div><strong>${esc(u.name)}</strong> <span class="role" style="margin-left:0.3rem">${esc(u.role)}</span></div>
             <div class="claimant">${esc(u.email)}</div>
-          </div>`).join(''));
+          </div>`));
     }
     list.innerHTML = sections.length ? sections.join('') : '<div class="empty-msg">No matches.</div>';
     list.querySelectorAll('[data-kind="project"]').forEach(el => {
@@ -328,12 +379,42 @@ function bindProjectSearch() {
     list.querySelectorAll('[data-kind="user"]').forEach(el => {
       el.addEventListener('click', () => selectUser(Number(el.dataset.uid)));
     });
+    // "See all <N>" footer: flip the per-section flag and re-render without a
+    // second API call. The cached `projects` / `users` are still in scope.
+    list.querySelectorAll('[data-expand]').forEach(el => {
+      el.addEventListener('click', () => {
+        expanded[el.dataset.expand] = true;
+        // Re-render synchronously using the already-fetched items.
+        const sections2 = [];
+        if (projects.items.length) sections2.push(renderSection('project', 'Projects', projects.items, p => `
+          <div class="item" data-kind="project" data-pid="${p.id}" data-cid="${p.claimant_id}">
+            <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)}" style="margin-left:0.3rem">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
+            <div class="claimant">${esc(p.claimant_name)}</div>
+          </div>`));
+        if (users.items.length) sections2.push(renderSection('user', 'Employees', users.items, u => `
+          <div class="item" data-kind="user" data-uid="${u.id}">
+            <div><strong>${esc(u.name)}</strong> <span class="role" style="margin-left:0.3rem">${esc(u.role)}</span></div>
+            <div class="claimant">${esc(u.email)}</div>
+          </div>`));
+        list.innerHTML = sections2.join('');
+        list.querySelectorAll('[data-kind="project"]').forEach(el => {
+          el.addEventListener('click', () => {
+            selectProject({ id: Number(el.dataset.pid), claimant_id: Number(el.dataset.cid) });
+          });
+        });
+        list.querySelectorAll('[data-kind="user"]').forEach(el => {
+          el.addEventListener('click', () => selectUser(Number(el.dataset.uid)));
+        });
+      });
+    });
     list.hidden = false;
   };
 
   input.addEventListener('input', () => {
     const q = input.value.trim();
     lastQuery = q;
+    // Each new query starts collapsed again; the user can re-expand if needed.
+    expanded = { project: false, user: false };
     clearTimeout(timer);
     timer = setTimeout(() => runSearch(q), 180);
   });

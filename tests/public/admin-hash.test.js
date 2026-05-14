@@ -22,31 +22,31 @@ test('parseHashStr: unknown hash is flagged invalid', () => {
   }
 });
 
-test('parseHashStr: claimants/<id> extracts projectId', () => {
-  const r = parseHashStr('#claimants/42');
-  assert.equal(r.tab, 'claimants');
+test('parseHashStr: projects/<id> extracts projectId', () => {
+  const r = parseHashStr('#projects/42');
+  assert.equal(r.tab, 'projects');
   assert.equal(r.projectId, 42);
   assert.equal(r.userId, null);
   assert.equal(r.valid, true);
 });
 
-test('parseHashStr: users/<id> extracts userId', () => {
-  const r = parseHashStr('#users/7');
-  assert.equal(r.tab, 'users');
+test('parseHashStr: employees/<id> extracts userId', () => {
+  const r = parseHashStr('#employees/7');
+  assert.equal(r.tab, 'employees');
   assert.equal(r.userId, 7);
   assert.equal(r.projectId, null);
   assert.equal(r.valid, true);
 });
 
 test('parseHashStr: non-numeric id segments yield null id', () => {
-  const r = parseHashStr('#claimants/abc');
-  assert.equal(r.tab, 'claimants');
+  const r = parseHashStr('#projects/abc');
+  assert.equal(r.tab, 'projects');
   assert.equal(r.projectId, null);
   assert.equal(r.valid, true);
 });
 
 test('parseHashStr: missing id is null, not undefined', () => {
-  const r = parseHashStr('#claimants');
+  const r = parseHashStr('#projects');
   assert.equal(r.projectId, null);
   assert.equal(r.userId, null);
 });

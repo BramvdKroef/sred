@@ -20,7 +20,7 @@ export async function render(main, ctx) {
       <form id="export-form" class="row">
         <select name="fiscal_period_id" required>${periodOpts}</select>
         <label><input type="checkbox" name="draft" checked> draft</label>
-        <button>Generate</button>
+        <button>Generate export</button>
       </form>
       <p class="muted">Draft means the period need not be closed.</p>
     </div>
@@ -38,7 +38,7 @@ export async function render(main, ctx) {
             <option value="pdf">PDF</option>
           </select>
         </label>
-        <button>Generate</button>
+        <button>Generate comparison</button>
       </form>
       <div id="compare-result"></div>
     </div>

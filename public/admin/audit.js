@@ -6,7 +6,7 @@ import { api, esc } from '../api.js';
 let universeFacets = null;
 
 export async function render(main, ctx) {
-  main.innerHTML = '<p class="empty">Loading audit log…</p>';
+  main.innerHTML = '<p class="loading">Loading audit log…</p>';
   const f = ctx.state.auditFilter ?? {};
   const activeClaimantId = ctx.state.activeClaimantId ?? null;
   const qs = new URLSearchParams();

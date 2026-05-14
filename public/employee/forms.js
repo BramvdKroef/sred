@@ -38,7 +38,7 @@ export function renderLabour(main, ctx) {
           <div class="full ev-url"  hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
         </div>
       </details>
-      <div class="actions" style="margin-top:0.8rem"><button>Save</button></div>
+      <div class="actions" style="margin-top:0.8rem"><button>Add labour entry</button></div>
     </form>
   </div>`;
 
@@ -93,7 +93,7 @@ export function renderEvidence(main, ctx) {
         <div class="full" id="ev-url" hidden><label>URL</label><input type="url" name="url" placeholder="https://…"></div>
         <div class="full" id="ev-note" hidden><label>Note</label><textarea name="note_text" rows="3"></textarea></div>
       </div>
-      <div class="actions"><button>Save</button></div>
+      <div class="actions"><button>Add evidence</button></div>
     </form>
   </div>`;
 
@@ -161,7 +161,7 @@ export function renderExpense(main, ctx) {
           <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
         </div>
       </details>
-      <div class="actions" style="margin-top:0.8rem"><button>Save</button></div>
+      <div class="actions" style="margin-top:0.8rem"><button>Add expense</button></div>
     </form>
   </div>`;
 

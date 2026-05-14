@@ -217,7 +217,7 @@ function labourEditForm(e) {
     <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required style="width:6rem"></div>
     <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime" ${e.is_overtime ? 'checked' : ''}> Overtime</label></div>
     <div class="input-grow"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
-    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save</button><button type="button" class="small secondary" data-cancel-labour="${e.id}">Cancel</button></div></div>
+    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save labour entry</button><button type="button" class="small secondary" data-cancel-labour="${e.id}">Cancel</button></div></div>
   </form>`;
 }
 
@@ -231,7 +231,7 @@ function expenseEditForm(e) {
     <div><label>Currency</label><input name="currency" value="${esc(e.currency)}" required style="width:5rem"></div>
     <div><label>FX rate</label><input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" style="width:6rem"></div>
     <div class="input-grow"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
-    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save</button><button type="button" class="small secondary" data-cancel-expense="${e.id}">Cancel</button></div></div>
+    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save expense</button><button type="button" class="small secondary" data-cancel-expense="${e.id}">Cancel</button></div></div>
   </form>`;
 }
 
@@ -242,7 +242,7 @@ function evidenceEditForm(e) {
     ${e.kind === 'link' ? `<div class="input-grow"><label>URL</label><input type="url" name="url" value="${esc(e.url ?? '')}" required></div>` : ''}
     ${e.kind === 'note' ? `<div style="flex:1 1 100%"><label>Note</label><textarea name="note_text" rows="2" required>${esc(e.note_text ?? '')}</textarea></div>` : ''}
     ${e.kind === 'file' ? `<div><label>&nbsp;</label><span class="muted">file content not editable</span></div>` : ''}
-    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save</button><button type="button" class="small secondary" data-cancel-evidence="${e.id}">Cancel</button></div></div>
+    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save evidence</button><button type="button" class="small secondary" data-cancel-evidence="${e.id}">Cancel</button></div></div>
   </form>`;
 }
 

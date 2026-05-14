@@ -5,7 +5,7 @@ export async function render(main, ctx) {
     renderFirstRunChecklist(main);
     return;
   }
-  main.innerHTML = '<p class="empty">Loading overview…</p>';
+  main.innerHTML = '<p class="loading">Loading overview…</p>';
   const week = currentWeek();
   // Honour the page-header claimant selector (hoist step 4). When set, every
   // panel below shows only that claimant's data; null = cross-claimant.
@@ -53,19 +53,19 @@ function renderFirstRunChecklist(main) {
       <ol style="margin:0.6rem 0 0.2rem; padding-left:1.2rem; line-height:1.65">
         <li>
           <strong>Create your first claimant</strong> — your company or one you're filing for.
-          &nbsp;<a href="#claimants" class="summary-link">Add claimant</a>
+          &nbsp;<a href="#projects" class="summary-link">Add claimant</a>
         </li>
         <li>
           <strong>Add a fiscal period</strong> — typically your fiscal year.
-          &nbsp;<a href="#claimants" class="summary-link">Add period</a>
+          &nbsp;<a href="#projects" class="summary-link">Add period</a>
         </li>
         <li>
           <strong>Invite employees</strong> — they'll enrol via magic link.
-          &nbsp;<a href="#users" class="summary-link">Add employee</a>
+          &nbsp;<a href="#employees" class="summary-link">Add employee</a>
         </li>
         <li>
           <strong>Create projects</strong> — the SR&amp;ED work being claimed.
-          &nbsp;<a href="#claimants" class="summary-link">Add project</a>
+          &nbsp;<a href="#projects" class="summary-link">Add project</a>
         </li>
         <li>
           <strong>Generate your T661</strong> — once labour, expenses, and evidence are logged.
