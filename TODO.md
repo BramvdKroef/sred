@@ -18,6 +18,7 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 - [ ] [P3] `compensation_rows.hours_per_year = 0` would divide-by-zero in the hourly calc. Schema has no CHECK preventing it.
 - [ ] [P3] **Audit-log filter facets rebuild from filtered results**, so once you filter by `action=approve` the entity-type dropdown only contains approve-relevant types — hard to switch back without clearing manually. Compute facets from the unfiltered universe.
 - [ ] [P3] **Evidence detail shows `user #{id}` as a raw ID** (`public/api.js:420`). Show the name or hide the line.
+- [ ] [P3] **CSV / MD / PDF export shapes differ.** `toCsv` emits one row per *category* per project (labour, materials, contract, third_party_payment, overhead, project_total); `toMarkdown` and `toPdf` iterate `labour_worksheet` and `expense_lines` row-by-row. Probably intentional (CSV is for accountant rollups) but someone diffing outputs across formats will be confused. Document the contract or normalize.
 
 ## UI: missing / partial use cases
 
@@ -71,7 +72,8 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 
 Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 critical, 2 high, 5 medium, 4 low/info (11 findings). High-priority items below; full evidence + fix suggestions in the report.
 
-- [x] ~~**V-01 (High) Stored XSS via `javascript:` URLs in evidence link items.**~~ Fixed: scheme allowlist (`http:`/`https:`/`mailto:`) on both write (`src/routes/evidence.js`) and render (`safeHref` in `public/api.js`, applied at the three render sites). CSP header is still TODO as defence-in-depth.
+- [x] ~~**V-01 (High) Stored XSS via `javascript:` URLs in evidence link items.**~~ Fixed: scheme allowlist (`http:`/`https:`/`mailto:`) on both write (`src/routes/evidence.js`) and render (`safeHref` in `public/api.js`, applied at the three render sites).
+- [ ] [P2] **CSP header as defence-in-depth.** Recommended by the vuln review alongside V-01: ship a `Content-Security-Policy` header banning inline scripts and `javascript:` URIs, and limiting script sources to `'self'` + `cdn.jsdelivr.net` (used by `@simplewebauthn/browser`). Catches any future XSS the scheme-allowlist misses, and reduces the blast radius of V-11 (tokens in `localStorage`).
 - [x] ~~**V-02 (High) Default `JWT_SECRET=change-me` boots without complaint.**~~ Fixed: `src/config.js` now rejects known weak values and enforces ≥32 chars at startup. `.env.example` replaced the placeholder with `__REPLACE_WITH_RANDOM_HEX_AT_LEAST_32_CHARS__`.
 - [ ] [P2] **V-03 (Med) Refresh-token replay doesn't invalidate the family.** `src/auth/refresh.js:18-36` revokes the replayed token but leaves siblings live. Treat replay as theft: revoke all `WHERE user_id = ? AND revoked_at IS NULL`.
 - [ ] [P2] **V-04 (Med) No rate limiting anywhere.** Recovery flood, magic-link spam, `webauthn_challenges` table-fill DoS. Add `express-rate-limit` on the auth endpoints and a reaper for stale challenges.
@@ -82,6 +84,19 @@ Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 c
 - [ ] [P3] **V-09 (Low) Stale WebAuthn challenges accumulate.** Delete expired rows on each new `storeChallenge`.
 - [ ] [P3] **V-10 (Low) `nodemailer` 6.x DoS advisory `GHSA-rcmh-qjqh-p98v`.** Bump to ^7.0.11 or ^8.0.4. Realistic exposure is low (we only feed it server-constructed addresses).
 - [ ] [P3] **V-11 (Low) Refresh token in `localStorage`; JWT in `sessionStorage`.** Exfiltrated by any XSS (V-01 makes this realisable today). Long-term: move refresh to `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/api/auth/refresh`. Short-term: ship a CSP banning inline scripts.
+
+## Docs to update
+
+The UI use-case audit found these features in the SPA without a corresponding entry in `docs/use-cases.md`. Each is "decide: document it as a UC, or drop it from the UI."
+
+- [ ] [P3] **Global search bar** (admin top nav) — useful, just unmodeled.
+- [ ] [P3] **Overview dashboards** (admin + employee) — this-week chart, recent activity feed. Cross-cuts UC-E4 / UC-R1 but is its own surface; consider an explicit "at-a-glance dashboard" UC.
+- [ ] [P3] **User deactivate / reactivate** — lifecycle action absent from UC-A3 (which only covers onboarding). Either extend A3 or add an offboarding UC.
+- [ ] [P3] **Project `type` (sred/internal) and `phase` (concept/development/complete)** — present on the project form, not in UC-A4. Either document or drop.
+- [ ] [P3] **Log labour on behalf** (admin → project detail). Alt flow E3.a covers the expense case; there's no equivalent in UC-E1 for labour. Add or remove.
+- [ ] [P3] **Overtime flag** on labour entries. Surfaced on the form but absent from UC-E1; also unclear how it interacts with the T661 labour cost calc in UC-R2.
+- [ ] [P3] **Project manager assignment** (`manager_user_id`) — not in UC-A4.
+- [ ] [P3] **Audit-log tab** — §5 cross-cutting requirement only says actions are logged, not that there's a dedicated UI. The UI is fine; just confirm it's intentional and document.
 
 ## Done
 
