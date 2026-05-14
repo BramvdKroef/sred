@@ -27,7 +27,22 @@ const state = {
   viewingUserId: null,
 };
 
-const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports', 'audit', 'preferences'];
+export const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports', 'audit', 'preferences'];
+
+// Pure parser for the URL hash. Returns { tab, projectId, userId, valid }.
+// Exported so tests can verify hash handling without a DOM.
+export function parseHashStr(rawHash) {
+  const raw = (rawHash ?? '').replace(/^#/, '');
+  const [tab, ...rest] = raw.split('/');
+  const id = rest[0] ? Number(rest[0]) : null;
+  const numId = Number.isInteger(id) ? id : null;
+  return {
+    tab,
+    projectId: tab === 'claimants' ? numId : null,
+    userId:    tab === 'users'     ? numId : null,
+    valid:     ALLOWED_TABS.includes(tab),
+  };
+}
 
 export function renderAdmin(ctx) {
   state.me = ctx.me;
@@ -39,20 +54,13 @@ export function renderAdmin(ctx) {
 // --- URL hash routing ------------------------------------------------------
 
 function parseHash() {
-  const raw = location.hash.slice(1);
-  const [tab, ...rest] = raw.split('/');
-  const id = rest[0] ? Number(rest[0]) : null;
-  const numId = Number.isInteger(id) ? id : null;
-  return {
-    tab,
-    projectId: tab === 'claimants' ? numId : null,
-    userId:    tab === 'users'     ? numId : null,
-  };
+  return parseHashStr(location.hash);
 }
 
 function onHashChange() {
-  const { tab, projectId, userId } = parseHash();
-  if (!ALLOWED_TABS.includes(tab)) return;
+  const { tab, projectId, userId, valid } = parseHash();
+  // Unknown hash → revert URL to the current valid tab so URL ≠ view doesn't desync.
+  if (!valid) { history.replaceState(null, '', '#' + state.tab); return; }
   const nextProject = (tab === 'claimants') ? projectId : null;
   const nextUser    = (tab === 'users')     ? userId    : null;
   if (tab === state.tab && nextProject === state.viewingProjectId && nextUser === state.viewingUserId) return;
@@ -65,8 +73,8 @@ function onHashChange() {
 // --- Shell render + nav + search ------------------------------------------
 
 function shell() {
-  const { tab, projectId, userId } = parseHash();
-  if (ALLOWED_TABS.includes(tab)) {
+  const { tab, projectId, userId, valid } = parseHash();
+  if (valid) {
     state.tab = tab;
     state.viewingProjectId = (tab === 'claimants') ? projectId : null;
     state.viewingUserId    = (tab === 'users')     ? userId    : null;

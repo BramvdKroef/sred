@@ -1,4 +1,4 @@
-import { api, esc, cents, onSubmit, wireJwtDownloads, safeHref } from '../api.js';
+import { api, esc, cents, onSubmit, wireJwtDownloads, safeHref, lockReason } from '../api.js';
 
 export function render(main, ctx) {
   const { state } = ctx;
@@ -20,7 +20,8 @@ export function render(main, ctx) {
       <table>
         <thead><tr><th>Date</th><th>Project</th><th>Hours</th><th>Description</th><th>Status</th><th></th></tr></thead>
         <tbody>${state.labour.map(e => {
-          const editable = e.status !== 'approved';
+          const reason = lockReason(e);
+          const editable = reason === null;
           return `
           <tr>
             <td>${esc(e.work_date)}</td>
@@ -28,7 +29,7 @@ export function render(main, ctx) {
             <td>${e.hours}${e.is_overtime ? ' <span class="pill overtime">OT</span>' : ''}</td>
             <td>${esc(e.description)}</td>
             <td><span class="pill ${e.status}">${esc(e.status)}</span>${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
-            <td class="actions">${editable ? `<button class="small secondary" data-edit-labour="${e.id}">Edit</button>` : '<span class="muted">locked</span>'}</td>
+            <td class="actions">${editable ? `<button class="small secondary" data-edit-labour="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
           ${editable ? `<tr id="row-edit-labour-${e.id}" hidden><td colspan="6">${labourEditForm(e)}</td></tr>` : ''}
           `;
@@ -42,7 +43,8 @@ export function render(main, ctx) {
       <table>
         <thead><tr><th>Date</th><th>Project</th><th>Category</th><th>Amount</th><th>Description</th><th>Status</th><th></th></tr></thead>
         <tbody>${state.expenses.map(e => {
-          const editable = e.status !== 'approved';
+          const reason = lockReason(e);
+          const editable = reason === null;
           return `
           <tr>
             <td>${esc(e.expense_date)}</td>
@@ -51,7 +53,7 @@ export function render(main, ctx) {
             <td>${cents(e.amount_cents)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</td>
             <td>${esc(e.description)}</td>
             <td><span class="pill ${e.status}">${esc(e.status)}</span>${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
-            <td class="actions">${editable ? `<button class="small secondary" data-edit-expense="${e.id}">Edit</button>` : '<span class="muted">locked</span>'}</td>
+            <td class="actions">${editable ? `<button class="small secondary" data-edit-expense="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
           ${editable ? `<tr id="row-edit-expense-${e.id}" hidden><td colspan="7">${expenseEditForm(e)}</td></tr>` : ''}
           `;
@@ -84,6 +86,14 @@ export function render(main, ctx) {
   `;
   bindActivity(main, ctx);
   wireJwtDownloads(main);
+}
+
+// Render a "why this row is read-only" pill. Uses .pill.approved /
+// .pill.closed colour tokens that already exist in style.css.
+function lockPill(reason) {
+  if (reason === 'approved')      return '<span class="pill approved">approved</span>';
+  if (reason === 'period closed') return '<span class="pill closed">period closed</span>';
+  return '<span class="muted">locked</span>';
 }
 
 // --- Inline row-edit forms (one per type) ---------------------------------
