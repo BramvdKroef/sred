@@ -328,6 +328,33 @@ form textarea { resize: vertical; min-height: 4.5em; font-family: inherit; }
 /* --- Tables ------------------------------------------------------------- */
 
 table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+/* Horizontal-scroll wrapper for tables on narrow viewports. Applied via a
+   selector so every existing `<table>` rendered inside a `.card` (which is
+   every list-table in the SPA) becomes scrollable without per-render
+   wrapping. Caveat: `display: block` collapses table cells to content-width,
+   so we keep the `width: 100%` rule above to make the table still fill the
+   card on wide screens. Below ~720px the cells start to overflow horizontally
+   and the user can swipe to see them; a faint shadow gradient hints at it. */
+.card > table,
+.card .table-scroll {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  background:
+    linear-gradient(to right, var(--surface) 30%, rgba(255,255,255,0)),
+    linear-gradient(to right, rgba(255,255,255,0), var(--surface) 70%) 100% 0 / 50px 100% no-repeat,
+    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,0.10), rgba(0,0,0,0)),
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,0.10), rgba(0,0,0,0)) 100% 0 / 14px 100% no-repeat;
+  background-repeat: no-repeat;
+  background-color: var(--surface);
+  background-attachment: local, local, scroll, scroll;
+}
+/* Hide a column (header + body cells, or any element flagged narrow-only)
+   under 600px. Used to drop low-value columns on phones. */
+@media (max-width: 600px) {
+  .hide-on-narrow { display: none; }
+}
 th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 th {
   background: linear-gradient(180deg, #f6f8fa 0%, #eef1f4 100%);
@@ -608,4 +635,33 @@ pre.json { background: #f6f8fa; padding: 0.75rem; overflow: auto; border-radius:
   header .user { flex-wrap: wrap; }
   .chart { height: 200px; }
   .metric { font-size: 1.7rem; }
+}
+
+/* --- Phone-relevant employee flows --------------------------------------- */
+/* The employee tabs (Log labour, Submit expense, Add evidence) are the only
+   surfaces a user is likely to hit from a phone after enrolling via magic
+   link. Tighten three things on narrow viewports:
+   1. Tap targets — bump the buttons (the default `button.small` is too
+      compact for a thumb), and pad form controls to ≥44px tall so they meet
+      the WCAG / iOS HIG minimum.
+   2. The form `.grid` already collapses to one column via auto-fit
+      minmax(180px, 1fr) once the viewport drops below ~360px; force it
+      explicitly under 600px so the breakpoint is predictable across browsers
+      that round auto-fit differently.
+   3. The overview bar chart's day labels overlap under ~400px because both
+      the weekday and `MM-DD` text are stacked. Shrink the label font and
+      tighten the column gap so the columns stay legible. */
+@media (max-width: 600px) {
+  form .grid { grid-template-columns: 1fr; }
+  /* 0.95rem font + 0.7rem top/bottom padding ≈ 45px content box — clears the
+     44px tap-target threshold without growing the wide-screen default. */
+  button { padding: 0.75rem 1.2rem; }
+  button.small { padding: 0.55rem 0.85rem; font-size: 0.9rem; }
+  input, select, textarea { padding: 0.65rem 0.7rem; }
+  /* Bar chart: tighter gap + smaller labels so 7 columns fit on a 320px-wide
+     screen without their labels colliding. The bar itself stays full-height. */
+  .chart { gap: 0.35rem; padding: 0.35rem 0.25rem 0; }
+  .chart .bar-label { font-size: 0.7rem; margin-top: 0.35rem; line-height: 1.15; }
+  .chart .bar-value { font-size: 0.7rem; }
+  .chart .today-mark { font-size: 0.55rem; }
 }

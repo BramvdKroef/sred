@@ -105,7 +105,7 @@ function renderAuditRow(it) {
       <td class="when">${esc(it.created_at)}</td>
       <td>${esc(it.actor_name ?? '(system)')}</td>
       <td><span class="pill">${esc(it.action)}</span></td>
-      <td>${esc(it.entity_type)} #${it.entity_id}</td>
+      <td>${esc(it.entity_type)}<span class="hide-on-narrow"> #${it.entity_id}</span></td>
       <td>${summary}
         <button class="small secondary" data-toggle-audit="${it.id}" style="margin-left:0.4rem">details</button>
         <pre id="audit-details-${it.id}" class="json" hidden>${esc(JSON.stringify({ before, after }, null, 2))}</pre>

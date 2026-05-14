@@ -148,12 +148,12 @@ function renderPeriodsTable(periods) {
 function renderProjectsTable(projects) {
   if (!projects.length) return '<p class="empty">No projects yet.</p>';
   return `<table class="rows-clickable">
-    <thead><tr><th>Title</th><th>Type</th><th>Field</th><th>Start</th><th>Status</th></tr></thead>
+    <thead><tr><th>Title</th><th>Type</th><th class="hide-on-narrow">Field</th><th>Start</th><th>Status</th></tr></thead>
     <tbody>${projects.map(p => `
       <tr data-open-project="${p.id}">
         <td><strong>${esc(p.title)}</strong></td>
         <td><span class="pill kind-${esc(p.type)}">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></td>
-        <td>${esc(p.field_of_science ?? '—')}</td>
+        <td class="hide-on-narrow">${esc(p.field_of_science ?? '—')}</td>
         <td>${esc(p.start_date)}</td>
         <td><span class="pill status-${esc(p.status)}">${esc(STATUS_LABEL[p.status] ?? p.status)}</span></td>
       </tr>`).join('')}
