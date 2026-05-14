@@ -26,20 +26,25 @@ async function main() {
 }
 
 function renderLogin() {
+  // Pre-auth pages wrap their card in <main> so the page has a landmark
+  // (axe `landmark-one-main`). The <h1> here is both the brand and the
+  // page heading — only one h1 in the document, which is correct.
   $('#app').innerHTML = `
-    <div class="card center">
-      <h1>Precision <strong>SR&amp;ED</strong></h1>
-      <p class="muted">Sign in with your passkey.</p>
-      <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="username webauthn" style="width: 100%">
-      <p class="actions">
-        <button id="login-btn">Sign in with passkey</button>
-      </p>
-      <p class="error" id="login-error"></p>
-      <p class="muted">
-        <a href="#" id="recover-link">Lost your passkey?</a>
-      </p>
-    </div>
+    <main>
+      <div class="card center">
+        <h1>Precision <strong>SR&amp;ED</strong></h1>
+        <p class="muted">Sign in with your passkey.</p>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username webauthn" style="width: 100%">
+        <p class="actions">
+          <button id="login-btn">Sign in with passkey</button>
+        </p>
+        <p class="error" id="login-error"></p>
+        <p class="muted">
+          <a href="#" id="recover-link">Lost your passkey?</a>
+        </p>
+      </div>
+    </main>
   `;
   $('#login-btn').addEventListener('click', login);
   $('#recover-link').addEventListener('click', e => { e.preventDefault(); requestRecovery(); });
@@ -76,12 +81,14 @@ async function requestRecovery() {
 
 function renderEnroll(token) {
   $('#app').innerHTML = `
-    <div class="card center">
-      <h1>Welcome to Precision <strong>SR&amp;ED</strong></h1>
-      <p class="muted">Set up your passkey to access the tracker.</p>
-      <p class="actions"><button id="enroll-btn">Set up passkey</button></p>
-      <p class="error" id="enroll-error"></p>
-    </div>
+    <main>
+      <div class="card center">
+        <h1>Welcome to Precision <strong>SR&amp;ED</strong></h1>
+        <p class="muted">Set up your passkey to access the tracker.</p>
+        <p class="actions"><button id="enroll-btn">Set up passkey</button></p>
+        <p class="error" id="enroll-error"></p>
+      </div>
+    </main>
   `;
   $('#enroll-btn').addEventListener('click', () => enroll(token));
 }

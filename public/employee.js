@@ -33,9 +33,11 @@ function shell() {
   if (ALLOWED_TABS.includes(initial)) state.tab = initial;
   else location.hash = state.tab;
 
+  // Brand strip is a <div>, not <h1>, so each tab's <h1> is the sole top-level
+  // heading on the page (axe `landmark-one-main` + `page-has-heading-one`).
   $('#app').innerHTML = `
     <header>
-      <h1>Precision <strong>SR&amp;ED</strong></h1>
+      <div class="brand">Precision <strong>SR&amp;ED</strong></div>
       <div class="user">
         <strong><a href="#preferences" class="header-link">${esc(state.me.user.name)}</a></strong>
         <span class="role">employee</span>
@@ -49,6 +51,7 @@ function shell() {
       ${tabBtn('evidence', 'Add evidence')}
       ${tabBtn('expense', 'Submit expense')}
     </nav>
+    <h1 id="page-heading" class="sr-only"></h1>
     <main id="main"></main>
   `;
   $('#signout').addEventListener('click', state.signOut);
@@ -116,10 +119,23 @@ async function setPeriodFilter(periodId) {
   render();
 }
 
+const TAB_TITLES = {
+  overview:    'Overview',
+  activity:    'My activity',
+  labour:      'Log labour',
+  evidence:    'Add evidence',
+  expense:     'Submit expense',
+  preferences: 'Preferences',
+};
+
 function render() {
   document.querySelectorAll('nav.tabs button').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === state.tab);
   });
+  // Update the single page <h1> so the document outline reflects the current
+  // tab. Kept visually hidden — the cards still carry their own <h2>s.
+  const heading = document.getElementById('page-heading');
+  if (heading) heading.textContent = TAB_TITLES[state.tab] ?? '';
   const main = $('#main');
   const ctx = { state, render, reload, setPeriodFilter };
   switch (state.tab) {
