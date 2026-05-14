@@ -57,5 +57,9 @@ export function consumeEmailToken(tokenId) {
 }
 
 export function buildMagicLink(rawToken) {
-  return `${config.origin}/enroll?token=${encodeURIComponent(rawToken)}`;
+  // First entry in config.origins is the canonical outbound origin.
+  // Multiple origins are supported for WebAuthn verification (tunnel/preview
+  // domains), but a magic link must point at a single landing page.
+  const canonical = config.origins[0];
+  return `${canonical}/enroll?token=${encodeURIComponent(rawToken)}`;
 }

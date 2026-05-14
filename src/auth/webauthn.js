@@ -63,7 +63,7 @@ export async function finishRegistration({ user, response, label }) {
   const verification = await verifyRegistrationResponse({
     response,
     expectedChallenge: challenge,
-    expectedOrigin: config.origin,
+    expectedOrigin: config.origins,
     expectedRPID: config.rpId,
   });
   if (!verification.verified || !verification.registrationInfo) {
@@ -109,7 +109,7 @@ export async function finishLogin({ response }) {
   const verification = await verifyAuthenticationResponse({
     response,
     expectedChallenge: challenge,
-    expectedOrigin: config.origin,
+    expectedOrigin: config.origins,
     expectedRPID: config.rpId,
     credential: {
       id: credRow.credential_id,

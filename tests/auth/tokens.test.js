@@ -315,11 +315,12 @@ test('buildMagicLink embeds the raw token and the configured ORIGIN', () => {
   const raw = 'abc123-token';
   const link = buildMagicLink(raw);
 
-  assert.ok(link.startsWith(config.origin), `link should start with ORIGIN (${config.origin}): ${link}`);
+  const canonical = config.origins[0];
+  assert.ok(link.startsWith(canonical), `link should start with canonical ORIGIN (${canonical}): ${link}`);
   assert.ok(link.includes(encodeURIComponent(raw)), `link should contain the raw token: ${link}`);
 
   // Round-trip: the URL parses and exposes the same token under ?token=.
   const url = new URL(link);
-  assert.equal(url.origin + (url.pathname === '/' ? '' : ''), new URL(config.origin).origin);
+  assert.equal(url.origin + (url.pathname === '/' ? '' : ''), new URL(canonical).origin);
   assert.equal(url.searchParams.get('token'), raw);
 });

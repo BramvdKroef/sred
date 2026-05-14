@@ -26,6 +26,38 @@ function jwtSecret() {
   return v;
 }
 
+// Parse the ORIGIN env var as a comma-separated list. A single value continues
+// to work (one-element array). Frozen so downstream callers cannot mutate it
+// after boot (V-07 hardening: an explicit pinned list is preferred to letting
+// an operator relax `ORIGIN` to a regex and lose RP-ID enforcement).
+function origins() {
+  const raw = process.env.ORIGIN || 'http://localhost:3000';
+  const list = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (list.length === 0) {
+    throw new Error('ORIGIN must contain at least one value');
+  }
+  const isProd = process.env.NODE_ENV === 'production';
+  for (const o of list) {
+    let parsed;
+    try { parsed = new URL(o); }
+    catch { throw new Error(`ORIGIN entry is not a valid URL: ${o}`); }
+    if (isProd) {
+      if (parsed.protocol !== 'https:') {
+        throw new Error(`ORIGIN entries must use https:// in production: ${o}`);
+      }
+    } else {
+      // Dev: allow http://localhost*, otherwise still require https.
+      const isLocalhostHttp =
+        parsed.protocol === 'http:' &&
+        (parsed.hostname === 'localhost' || parsed.hostname.endsWith('.localhost') || parsed.hostname === '127.0.0.1');
+      if (parsed.protocol !== 'https:' && !isLocalhostHttp) {
+        throw new Error(`ORIGIN entries must use https:// (http:// allowed only for localhost): ${o}`);
+      }
+    }
+  }
+  return Object.freeze(list);
+}
+
 export const config = {
   port: Number(process.env.PORT || 3000),
   databasePath: path.resolve(ROOT_DIR, process.env.DATABASE_PATH || './data/sred.db'),
@@ -37,7 +69,10 @@ export const config = {
 
   rpName: process.env.RP_NAME || 'SR&ED Tracker',
   rpId: process.env.RP_ID || 'localhost',
-  origin: process.env.ORIGIN || 'http://localhost:3000',
+  // WebAuthn expectedOrigin (frozen array; SimpleWebAuthn v11 accepts string[]).
+  // First entry is the canonical origin used for outbound magic links and log
+  // messages. Multi-tunnel deploys pass a comma-separated ORIGIN.
+  origins: origins(),
 
   inviteTtlMinutes: Number(process.env.INVITE_TTL_MINUTES || 1440),
   recoveryTtlMinutes: Number(process.env.RECOVERY_TTL_MINUTES || 15),
