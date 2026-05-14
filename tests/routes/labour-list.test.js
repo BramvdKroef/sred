@@ -29,6 +29,7 @@ let server;
 let baseUrl;
 let userToken;
 let claimantAId, claimantBId;
+let projectAId, projectBId;
 
 before(async () => {
   ctx = await setupTempDb();
@@ -50,8 +51,8 @@ before(async () => {
   const ucAId = insertUserClaimant(ctx.db, userId, claimantAId);
   const ucBId = insertUserClaimant(ctx.db, userId, claimantBId);
 
-  const projectAId = insertProject(ctx.db, claimantAId, { title: 'Project A' });
-  const projectBId = insertProject(ctx.db, claimantBId, { title: 'Project B' });
+  projectAId = insertProject(ctx.db, claimantAId, { title: 'Project A' });
+  projectBId = insertProject(ctx.db, claimantBId, { title: 'Project B' });
 
   insertLabourEntry(ctx.db, projectAId, ucAId, periodAId, { description: 'work on A' });
   insertLabourEntry(ctx.db, projectBId, ucBId, periodBId, { description: 'work on B' });
@@ -156,4 +157,22 @@ test('GET /api/expenses?claimant_id=N returns only rows for that claimant', asyn
   assert.equal(itemsB.length, 1);
   assert.equal(itemsB[0].description, 'expense for B');
   assert.equal(itemsB[0].claimant_name, 'Beta Boundless Inc');
+});
+
+// --- combined project_id + claimant_id (Review queue filter dropdowns) -----
+// The Review queue can stack the active-claimant scope with a per-project
+// filter. The two WHERE terms must AND (not OR): asking for claimantA's
+// labour but with projectB's id should return zero rows even though both
+// projects exist and the user is attached to both claimants.
+
+test('GET /api/labour?project_id=A&claimant_id=A returns the matching row; cross-pair returns none', async () => {
+  const matching = await getList(`/api/labour?project_id=${projectAId}&claimant_id=${claimantAId}`);
+  assert.equal(matching.length, 1);
+  assert.equal(matching[0].description, 'work on A');
+  assert.equal(matching[0].claimant_name, 'Acme Alpha Ltd');
+
+  // Cross-pair: projectA belongs to claimantA, not claimantB — the AND of
+  // the two filters must exclude this row.
+  const empty = await getList(`/api/labour?project_id=${projectAId}&claimant_id=${claimantBId}`);
+  assert.equal(empty.length, 0);
 });
