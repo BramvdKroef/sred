@@ -77,11 +77,11 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 - [x] ~~**Auto-approve visual indicator.**~~ On-behalf labour and expense forms now show a `pill.approved` note: "As an admin, this entry will be saved as approved and skip the review queue."
 - [x] ~~**Distinguish "locked" reasons.**~~ Replaced by `lockReason(entry)` returning `'approved' | 'period closed' | null`; `lockPill()` in `public/employee/activity.js` renders distinct pills.
 - [ ] [P3] **Search-bar discoverability.** Rename placeholder to "Jump to project or employee…", add a "See all projects" overflow link.
-- [ ] [P3] **Disabled+spinning state on "Build" evidence package.** Currently no progress indicator; users re-click.
+- [x] ~~**Disabled+spinning state on "Build" evidence package.**~~ Click handler in `public/admin/exports.js` now disables the button and swaps the label to "Building…" while the POST is in flight; restores on error (success re-renders the row to a download link).
 - [ ] [P3] **Loading vs empty-state distinction.** Currently both render `<p class="empty">…</p>`. Pick distinct copy or classes.
 - [ ] [P3] **Hash-route key alignment.** `#claimants` is labeled "Projects" and `#users` is labeled "Employees". Either rename keys to match labels (with a redirect from the legacy hash) or rename labels to match keys.
 - [ ] [P3] **Standardize form button labels.** "Save" / "Save changes" / "Create project" / "Generate" vary across forms. Pick a consistent verb-object pattern.
-- [ ] [P3] **`fiscal_period_id` as a number** in the Exports list — replace with the period's date range.
+- [x] ~~**`fiscal_period_id` as a number** in the Exports list.~~ Exports table now shows `start_date → end_date` via a client-side lookup against `state.periods` (already loaded for the active claimant).
 
 ## Tests to add
 
