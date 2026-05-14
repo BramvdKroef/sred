@@ -11,7 +11,7 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 - [x] ~~`claimant.reporting_currency` FX path.~~ Resolved: kept the column and documented its semantics in `t661.js` (`fx_rate` converts native currency to `reporting_currency`).
 - [x] ~~Proxy `expense_lines` includes overhead rows.~~ Fixed: under proxy mode, `expense_lines` is filtered to exclude `category='overhead'`. Test added.
 - [x] ~~`consumeEmailToken(tokenId)` silent UPDATE.~~ Now returns rows-affected; register/finish throws `unauthorized` when consume returns 0.
-- [ ] [P2] **Employees tab race / stale state.** `public/admin/employees.js:52-87` returns a placeholder and resolves the user list via `.then()`; the module-level `let allUsers` survives tab switches. Await the fetch inside `render()` and drop the module-level state.
+- [x] ~~**Employees tab race / stale state.**~~ `render()` is now async and awaits the user fetch; `allUsers`/`redrawAllUsers`/`currentCtx` indirection dropped. Matches `review.js`'s pattern.
 - [x] ~~`onHashChange` drops state silently.~~ Fixed in `public/admin.js`: reverts to last valid hash via `history.replaceState`. Unit-tested.
 - [ ] [P2] **Field-of-science is free-text** but CRA T661 expects a categorical T4088 code. Misspellings won't match what the tax preparer pastes. **(Needs human — picking the right CRA categories.)**
 - [x] ~~`work_date` format CHECK.~~ Migration 007: `CHECK (work_date GLOB '????-??-??')`.
@@ -23,18 +23,19 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 - [x] ~~`refresh.js` follow-ups.~~ `last_used_at` column dropped (migration 010); `mintRefreshToken` prunes expired siblings; expired and deactivated paths now share `unauthorized('refresh token invalid')`.
 - [x] ~~`route-helpers.js` subtleties.~~ `resolveUserClaimant` casts stringified ints; `assertEditable` throws `notFound` if the period row is missing; `isOwnerOrAdmin` documents the missing-uc-returns-false contract (grep confirmed no caller relies on it as a not-found signal).
 - [ ] [P3] **Content-sniff MIME on evidence uploads.** Allowlist verifies the multipart-supplied MIME, but a `.html`-content file with `Content-Type: application/pdf` still slips through (and now lands on disk as `.pdf`, worse for an admin double-clicking the bundle locally). Add magic-byte detection (`file-type` library) as a follow-up.
-- [ ] [P3] **Admin can invite themselves** via `/api/users/:id/invite`; no second-admin countersignature. `audit()` for invite also doesn't record `before/after` so the audit row hides the target identity.
+- [x] ~~**Admin self-invite blocked.**~~ Returns `badRequest('cannot invite yourself; use the recovery flow')`. Audit row's `after_json` now carries `{ email, role }` for the target. (Second-admin countersignature still TODO if you want it.)
+- [x] ~~**Admin can't edit their own auto-approved entries.**~~ Flagged by route-integration-tests agent. Fixed: `assertEditable(entry, { user })` lets the approving admin PATCH their own approved labour/expense; the row reverts to `pending` (same precedent as rejected-entry edits).
 
 ## UI: missing / partial use cases
 
 Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs reference `docs/use-cases.md`.
 
-- [ ] [P1] **UC-R1 — Review queue scoping + bulk approve.**
-  - [x] ~~Render employee name + project title in the queue.~~
+- [x] ~~**UC-R1 — Review queue scoping + bulk approve.**~~ All 5 sub-tasks done.
+  - [x] ~~Render employee name + project title.~~
   - [x] ~~Replace `prompt()` for rejection reason with an inline textarea.~~
-  - [x] ~~Add per-claimant scope.~~ Honors `state.activeClaimantId`.
-  - [ ] Add row checkboxes + a "select all visible" header + an "Approve / Reject selected" action bar.
-  - [ ] Add period / project / employee filters.
+  - [x] ~~Add per-claimant scope.~~
+  - [x] ~~Bulk approve/reject action bar.~~ Sticky bar, per-kind select-all, shared rejection-reason textarea, `Promise.allSettled` with failure-count reporting.
+  - [x] ~~Period / project / employee filters.~~ Three dropdowns over the queue, filter selection persists across re-renders within the tab.
 - [x] ~~**UC-E4 — Employee dashboard period + claimant scope.**~~
   - [x] ~~Add a claimant column on labour / expense / evidence tables.~~
   - [x] ~~Add a period selector + per-period totals row on the activity tab.~~ Selector groups periods by claimant via `<optgroup>`; defaults to the unique open period (or "All periods" otherwise). Totals card sums approved/pending hours, expense amounts bucketed per-currency (no FX summation), and evidence count. New `/api/me/periods` endpoint (employees can't hit admin-only `/api/claimants/:id/periods`). `periodTotals()` unit-tested.
@@ -46,7 +47,7 @@ Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs refere
   - [x] ~~Look up existing user by email on Add-employee submit; switch form to attach mode if found.~~ Blur-triggered; inline Yes/No.
   - [x] ~~Add title + employment start date fields.~~ Migration 009 adds `user_claimants.employment_start_date`.
   - [ ] Surface the cross-claimant attachment path from a top-level button on the Employees tab, not just via the edit-user drill-in.
-- [ ] [P3] **UC-R2 — Comparative two-period export.** Side-by-side T661 export across two periods (alt flow R2.b).
+- [x] ~~**UC-R2 — Comparative two-period export.**~~ `POST /api/exports/t661/compare` returns `{ a, b, diff }` (ephemeral, no DB row). `GET /api/exports/compare/download?...` for json/csv/md/pdf. Per-project union with `missing_from: 'a' | 'b' | null`. New "Compare two periods" card on Exports tab.
 
 ## UI: usability
 
@@ -60,16 +61,10 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 - [x] ~~**Dollar inputs, not cent inputs.**~~ `dollarsToCents` helper in `public/api.js`; applied to Add-employee, Add-attachment, Add-comp-row, on-behalf expense, Submit-expense, and inline edit-expense forms. Unit-suffix flips `$/yr ↔ $/hr` with comp-type dropdown. API field `amount_cents` unchanged.
 - [x] ~~**Confirmation dialog before "Close period".**~~ Native `confirm()` with the date range, the three row counts (labour / expenses / evidence), and the consequence wording. Reopen stays unconfirmed.
 - [x] ~~**First-run empty state on Overview.**~~ When `state.claimants.length === 0` the body becomes a 5-step getting-started checklist with anchor links into the relevant tabs.
-- [ ] [P2] **Errors as inline banners, not `alert()`.**
-  - [ ] Build a shared banner helper (one CSS class + a `showError(cardEl, message)` function in `public/api.js`).
-  - [ ] Replace `alert(e.message)` in `onSubmit` (the shared form helper) — fixes most sites at once.
-  - [ ] Replace the remaining ad-hoc `alert()` call sites (search for `alert(` across `public/`).
+- [x] ~~**Errors as inline banners, not `alert()`.**~~ `showError`/`clearError`/`showTopBanner` helpers in `public/api.js`; `onSubmit` now uses inline banner. Six ad-hoc `alert()` sites replaced (passkey-remove, send-invite, deactivate, close-period, unassign, re-assign). Magic-link delivery confirmation alert left deliberately (notification, not error).
 - [ ] [P2] **Invite-link UX.** Replace `alert()` with a modal: copy-to-clipboard button, relative expiry, "Sent to <email>" indicator when SMTP is configured.
 - [ ] [P2] **Tooltips for jargon.** Hover help on "Specified employee", "SR&ED method" (proxy vs traditional), "Comp type", "Reporting currency".
-- [ ] [P2] **Mobile-friendly tables.**
-  - [ ] Wrap every `<table>` in `overflow-x: auto` (one CSS class applied via a small DOM pass or just in `style.css`).
-  - [ ] Add a `hide-on-narrow` class and apply it to non-essential columns; CSS hides them under 600px.
-  - [ ] Polish the employee tabs specifically (Log labour, Submit expense, Add evidence) — they're the actual phone-relevant flows.
+- [x] ~~**Mobile-friendly tables.**~~ CSS-selector approach (`.card > table { overflow-x: auto }` + scroll-shadow gradient) — zero per-render wrapping needed. `.hide-on-narrow` applied to All-employees `ID`, Project list `Field of science`, Audit log `#<entity_id>` suffix. Employee tabs: single-column grid + ≥44px tap targets under 600px; bar-chart labels tightened.
 - [x] ~~**Auto-approve visual indicator.**~~ On-behalf labour and expense forms now show a `pill.approved` note: "As an admin, this entry will be saved as approved and skip the review queue."
 - [x] ~~**Distinguish "locked" reasons.**~~ Replaced by `lockReason(entry)` returning `'approved' | 'period closed' | null`; `lockPill()` in `public/employee/activity.js` renders distinct pills.
 - [ ] [P3] **Search-bar discoverability.** Rename placeholder to "Jump to project or employee…", add a "See all projects" overflow link.

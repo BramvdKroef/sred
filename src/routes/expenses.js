@@ -45,7 +45,6 @@ router.get('/', (req, res, next) => {
     if (category)         { where.push('e.category = ?');         params.push(category); }
     if (from)             { where.push('e.expense_date >= ?');    params.push(from); }
     if (to)               { where.push('e.expense_date <= ?');    params.push(to); }
-    if (claimant_id)      { where.push('p.claimant_id = ?');      params.push(Number(claimant_id)); }
 
     if (req.user.role !== 'admin') {
       where.push('uc.user_id = ?');

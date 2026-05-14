@@ -28,7 +28,6 @@ router.get('/', (req, res, next) => {
     if (status)           { where.push('le.status = ?');            params.push(status); }
     if (from)             { where.push('le.work_date >= ?');        params.push(from); }
     if (to)               { where.push('le.work_date <= ?');        params.push(to); }
-    if (claimant_id)      { where.push('p.claimant_id = ?');        params.push(Number(claimant_id)); }
 
     if (req.user.role !== 'admin') {
       where.push('uc.user_id = ?');
