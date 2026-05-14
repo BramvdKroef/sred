@@ -668,6 +668,61 @@ test('schema rejects labour_entries with malformed work_date', () => {
   }
 });
 
+// --- overtime breakdown (reportorial only) ----------------------------------
+
+test('labour worksheet splits hours into regular/overtime; labour_cost is unchanged by the flag', () => {
+  // Two entries on the same comp row: one regular, one overtime. Per CRA
+  // T4088, OT hours are billed at the same hourly rate as regular hours,
+  // so labour cost should be identical regardless of how the hours split.
+  const s = scenario({
+    comp: { comp_type: 'salary', amount_cents: 10_400_000, hours_per_year: 2080 }, // $50/hr
+  });
+  insertLabourEntry(ctx.db, s.projectId, s.ucId, s.periodId, {
+    work_date: '2025-03-10', hours: 6,
+  });
+  // The shared insertLabourEntry helper omits is_overtime (defaults to 0);
+  // insert the overtime entry directly so we can flip the flag.
+  ctx.db.prepare(`
+    INSERT INTO labour_entries
+      (project_id, user_claimant_id, fiscal_period_id, work_date, hours,
+       description, status, is_overtime)
+    VALUES (?, ?, ?, '2025-03-11', 2, 'OT day', 'approved', 1)
+  `).run(s.projectId, s.ucId, s.periodId);
+
+  const out = computeT661({ claimant: s.claimant, period: s.period });
+  const project = out.projects[0];
+
+  // 8h * $50 = $400 = 40_000c — same as if both were regular.
+  assert.equal(project.totals.labour_cost_cents, 40_000);
+
+  // Worksheet row carries the regular/overtime split + total_hours backwards-compat.
+  assert.equal(project.labour_worksheet.length, 1);
+  const row = project.labour_worksheet[0];
+  assert.equal(row.total_hours, 8);
+  assert.equal(row.regular_hours, 6);
+  assert.equal(row.overtime_hours, 2);
+
+  // Per-project totals also expose the breakdown.
+  assert.equal(project.totals.labour_hours_total, 8);
+  assert.equal(project.totals.labour_hours_regular, 6);
+  assert.equal(project.totals.labour_hours_overtime, 2);
+});
+
+test('labour worksheet: a row with no overtime entries has overtime_hours = 0', () => {
+  const s = scenario({
+    comp: { comp_type: 'salary', amount_cents: 10_400_000 },
+  });
+  insertLabourEntry(ctx.db, s.projectId, s.ucId, s.periodId, {
+    work_date: '2025-03-15', hours: 8, // is_overtime defaults to 0
+  });
+  const out = computeT661({ claimant: s.claimant, period: s.period });
+  const row = out.projects[0].labour_worksheet[0];
+  assert.equal(row.regular_hours, 8);
+  assert.equal(row.overtime_hours, 0);
+  // Project-level totals likewise zeroed out.
+  assert.equal(out.projects[0].totals.labour_hours_overtime, 0);
+});
+
 test('schema accepts a well-formed labour_entries.work_date', () => {
   const s = scenario({ comp: { comp_type: 'salary', amount_cents: 10_400_000 } });
   // Sanity check: the GLOB check shouldn't block valid YYYY-MM-DD strings.

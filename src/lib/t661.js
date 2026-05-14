@@ -99,12 +99,21 @@ export function computeT661({ claimant, period }) {
           employee_email: uc.user_email,
           is_specified_employee: !!uc.is_specified_employee,
           total_hours: 0,
+          // Reportorial breakdown only: T4088 treats overtime hours at the
+          // same hourly rate as regular hours for SR&ED labour cost, so
+          // labour_cost_cents is computed identically for both. The split
+          // exists purely so the worksheet can show OT separately when
+          // present (e.g., for T661 line 305 vs 306 reporting).
+          regular_hours: 0,
+          overtime_hours: 0,
           labour_cost_cents: 0,
           cap_applied: false,
         };
         perUc.set(uc.id, row);
       }
       row.total_hours += entry.hours;
+      if (entry.is_overtime) row.overtime_hours += entry.hours;
+      else                   row.regular_hours  += entry.hours;
       row.labour_cost_cents += lineCents;
       row.cap_applied = row.cap_applied || rate.cap_applied;
     }
@@ -135,6 +144,18 @@ export function computeT661({ claimant, period }) {
       };
     });
 
+    // Per-project hours breakdown — sum of the per-employee rows. Carried on
+    // `totals` so consumers don't have to re-walk `labour_worksheet` to learn
+    // the project-level OT split.
+    const labourHoursBreakdown = Array.from(perUc.values()).reduce(
+      (acc, r) => ({
+        total:    acc.total    + r.total_hours,
+        regular:  acc.regular  + r.regular_hours,
+        overtime: acc.overtime + r.overtime_hours,
+      }),
+      { total: 0, regular: 0, overtime: 0 },
+    );
+
     const overhead = claimant.sred_method === 'proxy'
       ? Math.round(PROXY_OVERHEAD_RATE * projectLabourCents)
       : overheadExpenses;
@@ -161,6 +182,9 @@ export function computeT661({ claimant, period }) {
       },
       totals: {
         labour_cost_cents: projectLabourCents,
+        labour_hours_total:    labourHoursBreakdown.total,
+        labour_hours_regular:  labourHoursBreakdown.regular,
+        labour_hours_overtime: labourHoursBreakdown.overtime,
         materials_cents: materials,
         contract_expenditures_cents: contracts,
         third_party_payments_cents: thirdParty,
