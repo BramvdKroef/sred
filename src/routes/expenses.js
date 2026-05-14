@@ -48,8 +48,14 @@ router.get('/', (req, res, next) => {
     }
 
     const sql = `
-      SELECT e.*, fp.status AS period_status FROM expenses e
+      SELECT e.*, fp.status AS period_status,
+             p.title AS project_title,
+             u.name  AS user_name,
+             u.email AS user_email
+        FROM expenses e
         JOIN user_claimants uc ON uc.id = e.user_claimant_id
+        JOIN users u           ON u.id  = uc.user_id
+        JOIN projects p        ON p.id  = e.project_id
         LEFT JOIN fiscal_periods fp ON fp.id = e.fiscal_period_id
        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
        ORDER BY e.expense_date DESC, e.id DESC
