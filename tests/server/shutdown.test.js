@@ -90,7 +90,9 @@ async function bootServer(extraEnv = {}) {
 async function waitForBanner(child, timeoutMs, getStdout) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (/sred listening on/.test(getStdout())) return;
+    // The boot banner is now a JSON log line; "server_listening" is the
+    // canonical msg for "express bound the port".
+    if (/"msg":"server_listening"/.test(getStdout())) return;
     if (child.exitCode !== null) {
       throw new Error(`child exited before banner; stdout=${getStdout()}`);
     }
@@ -114,7 +116,7 @@ test('SIGTERM triggers graceful shutdown and exit 0 within 2s', async () => {
 
   assert.equal(result.code, 0, `expected exit code 0, got ${result.code}; stderr=${result.stderr}`);
   assert.ok(elapsed < 2000, `shutdown took ${elapsed}ms (>2s)`);
-  assert.match(result.stdout, /\[shutdown\] SIGTERM received, draining/);
+  assert.match(result.stdout, /"msg":"shutdown_draining"[^}]*"signal":"SIGTERM"/);
 });
 
 test('SIGINT also triggers graceful shutdown', async () => {
@@ -128,7 +130,7 @@ test('SIGINT also triggers graceful shutdown', async () => {
   ]);
 
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /\[shutdown\] SIGINT received, draining/);
+  assert.match(result.stdout, /"msg":"shutdown_draining"[^}]*"signal":"SIGINT"/);
 });
 
 test('in-flight request started before SIGTERM completes successfully', async () => {
@@ -175,7 +177,7 @@ test('double SIGTERM is idempotent (shutdown only fires once)', async () => {
     new Promise((_, rej) => setTimeout(() => rej(new Error('shutdown did not complete in 2s')), 2000)),
   ]);
   assert.equal(result.code, 0);
-  // Exactly one "draining" line — the second SIGTERM hit the guard.
-  const matches = result.stdout.match(/\[shutdown\] SIGTERM received, draining/g) || [];
+  // Exactly one shutdown_draining line — the second SIGTERM hit the guard.
+  const matches = result.stdout.match(/"msg":"shutdown_draining"/g) || [];
   assert.equal(matches.length, 1, `expected 1 draining log line, got ${matches.length}`);
 });

@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { randomToken, sha256 } from '../lib/random.js';
 import { unauthorized } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import { log } from '../lib/logger.js';
 
 export function mintRefreshToken(userId) {
   // Opportunistically prune this user's expired rows before minting a new
@@ -54,6 +55,10 @@ export function consumeRefreshToken(rawToken) {
       audit(row.user_id, 'refresh_replay_detected', 'refresh_token', row.id, before, undefined);
     });
     handleReplay();
+    // Replay is a credential-theft signal — surface it at warn so an
+    // operator triaging an account can grep `refresh_replay_detected` and
+    // see exactly which family was revoked.
+    log.warn('refresh_replay_detected', { user_id: row.user_id, token_id: row.id });
     throw unauthorized('refresh token already used');
   }
   // Expired tokens and deactivated users both surface as the same

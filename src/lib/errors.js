@@ -1,3 +1,5 @@
+import { log } from './logger.js';
+
 export class HttpError extends Error {
   constructor(status, code, message, details) {
     super(message);
@@ -20,6 +22,17 @@ export function errorMiddleware(err, req, res, _next) {
       error: { code: err.code, message: err.message, details: err.details },
     });
   }
-  console.error('unhandled error:', err);
+  // Prefer the per-request logger (carries request_id + user_id) so the
+  // operator can correlate a 500 to a specific incoming request. Fall back
+  // to the bare logger if the error fired before the request-id middleware
+  // attached one (shouldn't happen in normal flow, but keep the safety
+  // net — req.log is set by the very first middleware in src/server.js).
+  const logger = req?.log ?? log;
+  logger.error('unhandled_error', {
+    method: req?.method,
+    path: req?.originalUrl,
+    err: err?.message,
+    stack: err?.stack,
+  });
   res.status(500).json({ error: { code: 'internal_error', message: 'internal server error' } });
 }

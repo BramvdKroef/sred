@@ -4,7 +4,8 @@
 //   - Pure function, no DB / no env required. Just import and assert.
 //   - We cover every year hardcoded in the table, plus both out-of-range paths.
 //   - The module documents that gaps log a warning and fall back to the latest
-//     known year. We assert that contract, including the console.warn side effect.
+//     known year. We assert that contract, including the structured-log side
+//     effect (since the logger writes warn lines to stderr).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,17 +25,29 @@ const EXPECTED_CAPS = {
 const KNOWN_YEARS = Object.keys(EXPECTED_CAPS).map(Number).sort((a, b) => a - b);
 const LATEST = KNOWN_YEARS[KNOWN_YEARS.length - 1];
 
-// --- Helper: capture console.warn for a single call -------------------------
+// --- Helper: capture stderr writes (where the structured logger sends warns) -
 
 function withCapturedWarn(fn) {
-  const original = console.warn;
+  const original = process.stderr.write.bind(process.stderr);
   const calls = [];
-  console.warn = (...args) => { calls.push(args); };
+  process.stderr.write = (chunk, ...rest) => {
+    const text = typeof chunk === 'string' ? chunk : chunk.toString();
+    // Only structured JSON lines emitted by the logger are interesting;
+    // they are one-per-line and begin with `{`. We split on \n so any
+    // unrelated stderr noise (none expected here) doesn't pollute results.
+    for (const line of text.split('\n')) {
+      if (line.startsWith('{')) {
+        try { calls.push([JSON.parse(line)]); }
+        catch { /* not our JSON; ignore */ }
+      }
+    }
+    return original(chunk, ...rest);
+  };
   try {
     const result = fn();
     return { result, calls };
   } finally {
-    console.warn = original;
+    process.stderr.write = original;
   }
 }
 
@@ -63,12 +76,13 @@ test('for a year AFTER the table, falls back to the latest known year', () => {
     () => specifiedEmployeeCapCents(futureYear),
   );
   assert.equal(result, EXPECTED_CAPS[LATEST]);
-  // Module contract: gap is visible via console.warn.
+  // Module contract: gap is visible via a structured warn line.
   assert.equal(calls.length, 1);
-  const msg = String(calls[0][0]);
-  assert.match(msg, /wage-caps/);
-  assert.match(msg, new RegExp(String(futureYear)));
-  assert.match(msg, new RegExp(String(LATEST)));
+  const entry = calls[0][0];
+  assert.equal(entry.level, 'warn');
+  assert.equal(entry.msg, 'wage_caps_missing_year');
+  assert.equal(entry.year, futureYear);
+  assert.equal(entry.fallback_year, LATEST);
 });
 
 test('for a year BEFORE the table, also falls back to the latest known year (not the lowest)', () => {
@@ -82,7 +96,7 @@ test('for a year BEFORE the table, also falls back to the latest known year (not
   );
   assert.equal(result, EXPECTED_CAPS[LATEST]);
   assert.equal(calls.length, 1);
-  assert.match(String(calls[0][0]), new RegExp(String(ancientYear)));
+  assert.equal(calls[0][0].year, ancientYear);
 });
 
 test('accepts numeric year input (the documented contract)', () => {
