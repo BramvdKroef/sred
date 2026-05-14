@@ -6,3 +6,6 @@ uploads/
 *.log
 .DS_Store
 .claude/worktrees/
+screenshots/
+RENDER_REVIEW_ARTIFACTS/
+server.pid
