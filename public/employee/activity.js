@@ -18,7 +18,7 @@ export function render(main, ctx) {
       <h2>My labour (${state.labour.length})</h2>
       ${state.labour.length === 0 ? '<p class="empty">No entries.</p>' : `
       <table>
-        <thead><tr><th>Date</th><th>Project</th><th>Hours</th><th>Description</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Project</th><th>Claimant</th><th>Hours</th><th>Description</th><th>Status</th><th></th></tr></thead>
         <tbody>${state.labour.map(e => {
           const reason = lockReason(e);
           const editable = reason === null;
@@ -26,12 +26,13 @@ export function render(main, ctx) {
           <tr>
             <td>${esc(e.work_date)}</td>
             <td>${esc(projTitle(e.project_id))}</td>
+            <td>${esc(e.claimant_name ?? '')}</td>
             <td>${e.hours}${e.is_overtime ? ' <span class="pill overtime">OT</span>' : ''}</td>
             <td>${esc(e.description)}</td>
             <td><span class="pill ${e.status}">${esc(e.status)}</span>${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
             <td class="actions">${editable ? `<button class="small secondary" data-edit-labour="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
-          ${editable ? `<tr id="row-edit-labour-${e.id}" hidden><td colspan="6">${labourEditForm(e)}</td></tr>` : ''}
+          ${editable ? `<tr id="row-edit-labour-${e.id}" hidden><td colspan="7">${labourEditForm(e)}</td></tr>` : ''}
           `;
         }).join('')}
         </tbody>
@@ -41,7 +42,7 @@ export function render(main, ctx) {
       <h2>My expenses (${state.expenses.length})</h2>
       ${state.expenses.length === 0 ? '<p class="empty">None.</p>' : `
       <table>
-        <thead><tr><th>Date</th><th>Project</th><th>Category</th><th>Amount</th><th>Description</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Project</th><th>Claimant</th><th>Category</th><th>Amount</th><th>Description</th><th>Status</th><th></th></tr></thead>
         <tbody>${state.expenses.map(e => {
           const reason = lockReason(e);
           const editable = reason === null;
@@ -49,13 +50,14 @@ export function render(main, ctx) {
           <tr>
             <td>${esc(e.expense_date)}</td>
             <td>${esc(projTitle(e.project_id))}</td>
+            <td>${esc(e.claimant_name ?? '')}</td>
             <td>${esc(e.category)}</td>
             <td>${cents(e.amount_cents)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</td>
             <td>${esc(e.description)}</td>
             <td><span class="pill ${e.status}">${esc(e.status)}</span>${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
             <td class="actions">${editable ? `<button class="small secondary" data-edit-expense="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
-          ${editable ? `<tr id="row-edit-expense-${e.id}" hidden><td colspan="7">${expenseEditForm(e)}</td></tr>` : ''}
+          ${editable ? `<tr id="row-edit-expense-${e.id}" hidden><td colspan="8">${expenseEditForm(e)}</td></tr>` : ''}
           `;
         }).join('')}
         </tbody>
@@ -65,11 +67,12 @@ export function render(main, ctx) {
       <h2>My evidence (${state.evidence.length})</h2>
       ${state.evidence.length === 0 ? '<p class="empty">None.</p>' : `
       <table>
-        <thead><tr><th>Date</th><th>Project</th><th>Kind</th><th>Caption</th><th>Reference</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Project</th><th>Claimant</th><th>Kind</th><th>Caption</th><th>Reference</th><th></th></tr></thead>
         <tbody>${state.evidence.map(e => `
           <tr>
             <td>${esc(e.evidence_date)}</td>
             <td>${esc(projTitle(e.project_id))}</td>
+            <td>${esc(e.claimant_name ?? '')}</td>
             <td>${esc(e.kind)}</td>
             <td>${esc(e.caption)}</td>
             <td>${e.kind === 'file'
@@ -78,7 +81,7 @@ export function render(main, ctx) {
                   : `<span class="muted">${esc(e.note_text)}</span>`}</td>
             <td class="actions"><button class="small secondary" data-edit-evidence="${e.id}">Edit</button></td>
           </tr>
-          <tr id="row-edit-evidence-${e.id}" hidden><td colspan="6">${evidenceEditForm(e)}</td></tr>
+          <tr id="row-edit-evidence-${e.id}" hidden><td colspan="7">${evidenceEditForm(e)}</td></tr>
           `).join('')}
         </tbody>
       </table>`}
