@@ -16,15 +16,72 @@ router.use(requireAuth);
 fs.mkdirSync(config.uploadsDir, { recursive: true });
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+// Allowlist of MIME types accepted by the evidence upload route. An SR&ED
+// evidence package realistically contains PDFs, screenshots/photos, plain
+// text / CSV / markdown notes, common Office docs, and zipped bundles of
+// supporting material. Everything else (HTML, SVG, executables, …) is
+// rejected at the multer layer so the file is never written to disk.
+const ALLOWED_MIME = new Set([
+  'application/pdf',
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+  'text/plain', 'text/csv', 'text/markdown',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/zip',
+]);
+
+// Canonical extension per allowed MIME. The browser-supplied originalname
+// (and therefore path.extname of it) is attacker-controlled — an .html file
+// can be submitted with a Content-Type of application/pdf and would otherwise
+// land on disk as `<random>.html`. We normalise to one extension per MIME so
+// downstream consumers (admins opening the evidence ZIP locally, the CRA
+// reviewer) can't be tricked into double-clicking active content.
+const MIME_TO_EXT = new Map([
+  ['application/pdf', '.pdf'],
+  ['image/png', '.png'],
+  ['image/jpeg', '.jpg'],
+  ['image/gif', '.gif'],
+  ['image/webp', '.webp'],
+  ['text/plain', '.txt'],
+  ['text/csv', '.csv'],
+  ['text/markdown', '.md'],
+  ['application/msword', '.doc'],
+  ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.docx'],
+  ['application/vnd.ms-excel', '.xls'],
+  ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsx'],
+  ['application/zip', '.zip'],
+]);
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, config.uploadsDir),
     filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).slice(0, 10);
-      cb(null, `${randomToken(16)}${ext}`);
+      // Normalise the stored extension against the (allowlisted) MIME. We
+      // ignore originalname entirely here — fileFilter has already approved
+      // the MIME, so MIME_TO_EXT will have an entry for it. The MIME_TO_EXT
+      // values are constants in this file, so there's no path-separator
+      // risk from this lookup.
+      const ext = MIME_TO_EXT.get(file.mimetype) ?? '';
+      // Belt-and-braces: strip any path separators that snuck into ext (and
+      // would still be inert here, since ext only comes from the constant
+      // map above, but this defends a future change that derives ext from
+      // a less-trusted source).
+      const safeExt = ext.replace(/[\\/]/g, '');
+      cb(null, `${randomToken(16)}${safeExt}`);
     },
   }),
   limits: { fileSize: MAX_UPLOAD_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_MIME.has(file.mimetype)) {
+      // multer requires an Error here, but we wrap it in our HttpError shape
+      // so the API response matches every other 400 in this app.
+      return cb(badRequest(`file type not allowed: ${file.mimetype}`));
+    }
+    cb(null, true);
+  },
 });
 
 // --- helpers ---------------------------------------------------------------

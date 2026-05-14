@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
+import { config } from '../config.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
@@ -237,11 +238,26 @@ router.post('/:id/invite', (req, res, next) => {
     const purpose = user.status === 'pending' ? 'invite' : 'add_device';
     const { raw, expiresAt } = mintEmailToken(user.id, purpose);
     const magicLink = buildMagicLink(raw);
+
+    // SMTP-disabled paths still need to surface the link somewhere so an
+    // operator running locally can complete enrollment, but NOT in the
+    // response body — that would let any admin silently mint a sign-in link
+    // for any other admin (and step through it themselves) without leaving
+    // a trail beyond the audit row. sendMagicLink already logs to stderr
+    // when SMTP is disabled, so we just relay its `delivered` flag.
     sendMagicLink({ to: user.email, name: user.name, purpose, link: magicLink })
       .catch(err => console.warn('[invite] email send error:', err));
 
     audit(req.user.id, purpose, 'user', user.id);
-    res.json({ user_id: user.id, purpose, magic_link: magicLink, expires_at: expiresAt });
+    // Response body deliberately omits the raw magic link. The `delivered`
+    // flag reflects SMTP configuration at request time; when false, the
+    // link has been logged to stderr (see src/lib/email.js).
+    res.json({
+      user_id: user.id,
+      purpose,
+      expires_at: expiresAt,
+      delivered: Boolean(config.smtp.host),
+    });
   } catch (e) { next(e); }
 });
 
