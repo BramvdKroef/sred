@@ -176,12 +176,21 @@ function buildCases(state) {
         work_performed: 'c',
       },
       expectedAction: 'create', expectedEntityType: 'project',
-      capture: r => { state.newProjectId = r.body.id; },
+      capture: r => {
+        state.newProjectId = r.body.id;
+        state.newProjectUpdatedAt = r.body.updated_at;
+      },
     },
     {
+      // Project PATCH requires an `__updated_at` precondition (strict
+      // optimistic-concurrency: missing token = 400). The capture from the
+      // preceding POST stashed the row's updated_at; pass it through here.
       name: 'PATCH /api/projects/:id → audit update project',
       method: 'PATCH', path: () => `/api/projects/${state.newProjectId}`,
-      body: { title: 'New Audit Project (v2)' },
+      body: () => ({
+        __updated_at: state.newProjectUpdatedAt,
+        title: 'New Audit Project (v2)',
+      }),
       expectedAction: 'update', expectedEntityType: 'project',
     },
     {

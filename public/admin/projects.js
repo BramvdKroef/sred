@@ -492,23 +492,69 @@ function bindEditProjectForm(project, ctx) {
   });
   if (cancel) cancel.addEventListener('click', () => { card.hidden = true; });
 
-  onSubmit(form, async fd => {
-    const managerRaw = fd.get('manager_user_id');
-    const endDate = fd.get('end_date');
-    await api('PATCH', `/api/projects/${project.id}`, {
-      title: fd.get('title'),
-      field_of_science: fd.get('field_of_science') || null,
-      start_date: fd.get('start_date'),
-      end_date: endDate || null,
-      status: fd.get('status'),
-      type: fd.get('type'),
-      manager_user_id: managerRaw ? Number(managerRaw) : null,
-      advancement_sought: fd.get('advancement_sought') || null,
-      uncertainties: fd.get('uncertainties') || null,
-      work_performed: fd.get('work_performed') || null,
-    });
-    await ctx.reloadAll();
+  // Snapshot the updated_at at form-bind time. We pass it on PATCH so the
+  // server can reject (409) if another admin saved a newer version while
+  // this form was open. We deliberately don't auto-reload on conflict —
+  // the user has typed work they may want to copy out before reloading.
+  const loadedUpdatedAt = project.updated_at;
+
+  // Replace the default onSubmit error handler with one that branches on
+  // 409 — the rest of the error surface (400, 422, 500) still flows
+  // through the inline banner with the server's message.
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    clearEditProjectError(form);
+    try {
+      const fd = new FormData(form);
+      const managerRaw = fd.get('manager_user_id');
+      const endDate = fd.get('end_date');
+      await api('PATCH', `/api/projects/${project.id}`, {
+        __updated_at: loadedUpdatedAt,
+        title: fd.get('title'),
+        field_of_science: fd.get('field_of_science') || null,
+        start_date: fd.get('start_date'),
+        end_date: endDate || null,
+        status: fd.get('status'),
+        type: fd.get('type'),
+        manager_user_id: managerRaw ? Number(managerRaw) : null,
+        advancement_sought: fd.get('advancement_sought') || null,
+        uncertainties: fd.get('uncertainties') || null,
+        work_performed: fd.get('work_performed') || null,
+      });
+      await ctx.reloadAll();
+    } catch (err) {
+      // 409 conflict: prefer the explicit reload-and-retry message over the
+      // server's text; the original is still useful but the actionable
+      // verb-leading copy belongs to the client.
+      if (err && err.status === 409) {
+        showEditProjectError(form,
+          'This project was modified by another admin since you opened the form. '
+          + 'Reload to see the latest version, then re-apply your changes.');
+        return;
+      }
+      showEditProjectError(form, err.message);
+    }
   });
+}
+
+// Inline-banner helpers scoped to the edit-project form. Mirrors api.js's
+// showError/clearError but kept local so the conflict path can target the
+// right container without leaking that helper's internals.
+function showEditProjectError(form, message) {
+  let banner = form.querySelector(':scope > .error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = 'error-banner';
+    banner.setAttribute('role', 'alert');
+    form.insertBefore(banner, form.firstChild);
+  }
+  banner.textContent = message;
+  banner.hidden = false;
+}
+
+function clearEditProjectError(form) {
+  const banner = form.querySelector(':scope > .error-banner');
+  if (banner) { banner.hidden = true; banner.textContent = ''; }
 }
 
 // --- Narrative revisions card (UC-A4) --------------------------------------
