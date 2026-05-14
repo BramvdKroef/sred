@@ -22,7 +22,8 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 - [ ] [P3] **CSV / MD / PDF export shapes differ.** `toCsv` emits one row per *category* per project (labour, materials, contract, third_party_payment, overhead, project_total); `toMarkdown` and `toPdf` iterate `labour_worksheet` and `expense_lines` row-by-row. Probably intentional (CSV is for accountant rollups) but someone diffing outputs across formats will be confused. Document the contract or normalize.
 - [x] ~~`refresh.js` follow-ups.~~ `last_used_at` column dropped (migration 010); `mintRefreshToken` prunes expired siblings; expired and deactivated paths now share `unauthorized('refresh token invalid')`.
 - [x] ~~`route-helpers.js` subtleties.~~ `resolveUserClaimant` casts stringified ints; `assertEditable` throws `notFound` if the period row is missing; `isOwnerOrAdmin` documents the missing-uc-returns-false contract (grep confirmed no caller relies on it as a not-found signal).
-- [ ] [P3] **Content-sniff MIME on evidence uploads.** Allowlist verifies the multipart-supplied MIME, but a `.html`-content file with `Content-Type: application/pdf` still slips through (and now lands on disk as `.pdf`, worse for an admin double-clicking the bundle locally). Add magic-byte detection (`file-type` library) as a follow-up.
+- [x] ~~**Content-sniff MIME on evidence uploads.**~~ `file-type@22` integrated. HTML-pretending-to-be-PDF rejects via the text-family fallback (HTML has no magic bytes). When supplied≠detected and both are allowlisted, detected MIME wins and the on-disk extension is renamed accordingly.
+- [ ] [P3] **Flaky cleanup race in content-sniff test.** The disk-unlink on rejection is async-ish; the test occasionally sees the file still on disk and fails. Make the cleanup synchronous, or `await` the unlink before the assertion. (Test count fluctuates 228 ↔ 229 on rerun.)
 - [x] ~~**Admin self-invite blocked.**~~ Returns `badRequest('cannot invite yourself; use the recovery flow')`. Audit row's `after_json` now carries `{ email, role }` for the target. (Second-admin countersignature still TODO if you want it.)
 - [x] ~~**Admin can't edit their own auto-approved entries.**~~ Flagged by route-integration-tests agent. Fixed: `assertEditable(entry, { user })` lets the approving admin PATCH their own approved labour/expense; the row reverts to `pending` (same precedent as rejected-entry edits).
 
@@ -43,10 +44,10 @@ Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs refere
   - [x] ~~List prior revisions on the project detail page.~~ New "Narrative revisions (N)" card; `/revisions` endpoint joins users for `revised_by_name` + `manager_name`.
   - [x] ~~Click-to-view a revision (read-only inline expansion).~~
   - [ ] *(optional)* Diff against current — only if list+view proves valuable.
-- [ ] [P2] **UC-A3 — Employee onboarding: look-up-by-email.**
-  - [x] ~~Look up existing user by email on Add-employee submit; switch form to attach mode if found.~~ Blur-triggered; inline Yes/No.
-  - [x] ~~Add title + employment start date fields.~~ Migration 009 adds `user_claimants.employment_start_date`.
-  - [ ] Surface the cross-claimant attachment path from a top-level button on the Employees tab, not just via the edit-user drill-in.
+- [x] ~~**UC-A3 — Employee onboarding: look-up-by-email.**~~ All 3 sub-tasks done.
+  - [x] ~~Look up existing user by email on Add-employee submit; switch form to attach mode if found.~~
+  - [x] ~~Add title + employment start date fields.~~
+  - [x] ~~Surface the cross-claimant attachment path from a top-level button.~~ New "＋ Attach existing employee to claimant" button in the Add-employee card head, expands an inline attach-only form.
 - [x] ~~**UC-R2 — Comparative two-period export.**~~ `POST /api/exports/t661/compare` returns `{ a, b, diff }` (ephemeral, no DB row). `GET /api/exports/compare/download?...` for json/csv/md/pdf. Per-project union with `missing_from: 'a' | 'b' | null`. New "Compare two periods" card on Exports tab.
 
 ## UI: usability
@@ -62,16 +63,16 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 - [x] ~~**Confirmation dialog before "Close period".**~~ Native `confirm()` with the date range, the three row counts (labour / expenses / evidence), and the consequence wording. Reopen stays unconfirmed.
 - [x] ~~**First-run empty state on Overview.**~~ When `state.claimants.length === 0` the body becomes a 5-step getting-started checklist with anchor links into the relevant tabs.
 - [x] ~~**Errors as inline banners, not `alert()`.**~~ `showError`/`clearError`/`showTopBanner` helpers in `public/api.js`; `onSubmit` now uses inline banner. Six ad-hoc `alert()` sites replaced (passkey-remove, send-invite, deactivate, close-period, unassign, re-assign). Magic-link delivery confirmation alert left deliberately (notification, not error).
-- [ ] [P2] **Invite-link UX.** Replace `alert()` with a modal: copy-to-clipboard button, relative expiry, "Sent to <email>" indicator when SMTP is configured.
-- [ ] [P2] **Tooltips for jargon.** Hover help on "Specified employee", "SR&ED method" (proxy vs traditional), "Comp type", "Reporting currency".
+- [x] ~~**Invite-link UX.**~~ `<dialog>` modal showing name/email/purpose/relative-expiry and SMTP-delivery line. Copy-link button dropped because V-06 removed the raw link from the API response (post-V-06 there's nothing to copy).
+- [x] ~~**Tooltips for jargon.**~~ `title=` attribute hover help on Specified-employee, Comp-type, SR&ED method, Reporting currency. No CSS, no library.
 - [x] ~~**Mobile-friendly tables.**~~ CSS-selector approach (`.card > table { overflow-x: auto }` + scroll-shadow gradient) — zero per-render wrapping needed. `.hide-on-narrow` applied to All-employees `ID`, Project list `Field of science`, Audit log `#<entity_id>` suffix. Employee tabs: single-column grid + ≥44px tap targets under 600px; bar-chart labels tightened.
 - [x] ~~**Auto-approve visual indicator.**~~ On-behalf labour and expense forms now show a `pill.approved` note: "As an admin, this entry will be saved as approved and skip the review queue."
 - [x] ~~**Distinguish "locked" reasons.**~~ Replaced by `lockReason(entry)` returning `'approved' | 'period closed' | null`; `lockPill()` in `public/employee/activity.js` renders distinct pills.
-- [ ] [P3] **Search-bar discoverability.** Rename placeholder to "Jump to project or employee…", add a "See all projects" overflow link.
+- [x] ~~**Search-bar discoverability.**~~ Placeholder "Jump to project or employee…", SVG magnifying-glass `::before`, dropdown cap raised to 30 with a "See all N matches" footer.
 - [x] ~~**Disabled+spinning state on "Build" evidence package.**~~ Click handler in `public/admin/exports.js` now disables the button and swaps the label to "Building…" while the POST is in flight; restores on error (success re-renders the row to a download link).
-- [ ] [P3] **Loading vs empty-state distinction.** Currently both render `<p class="empty">…</p>`. Pick distinct copy or classes.
-- [ ] [P3] **Hash-route key alignment.** `#claimants` is labeled "Projects" and `#users` is labeled "Employees". Either rename keys to match labels (with a redirect from the legacy hash) or rename labels to match keys.
-- [ ] [P3] **Standardize form button labels.** "Save" / "Save changes" / "Create project" / "Generate" vary across forms. Pick a consistent verb-object pattern.
+- [x] ~~**Loading vs empty-state distinction.**~~ New `.loading` class (italic + gentle pulse) swapped in across 5 files.
+- [x] ~~**Hash-route key alignment.**~~ `#claimants` → `#projects`, `#users` → `#employees`. `migrateLegacyHash` extracted + unit-tested.
+- [x] ~~**Standardize form button labels.**~~ Verb-object pattern (Save/Create/Add/Generate) across 15 buttons in 5 files. Two documented exceptions (`Add assignment`, `Submit rejection`).
 - [x] ~~**`fiscal_period_id` as a number** in the Exports list.~~ Exports table now shows `start_date → end_date` via a client-side lookup against `state.periods` (already loaded for the active claimant).
 
 ## Tests to add
