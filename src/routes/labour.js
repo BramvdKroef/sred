@@ -15,7 +15,7 @@ router.use(requireAuth);
 
 router.get('/', (req, res, next) => {
   try {
-    const { project_id, period_id, user_claimant_id, status, from, to } = req.query;
+    const { project_id, period_id, user_claimant_id, status, from, to, claimant_id } = req.query;
     const where = [];
     const params = [];
     if (project_id)       { where.push('le.project_id = ?');        params.push(Number(project_id)); }
@@ -24,6 +24,7 @@ router.get('/', (req, res, next) => {
     if (status)           { where.push('le.status = ?');            params.push(status); }
     if (from)             { where.push('le.work_date >= ?');        params.push(from); }
     if (to)               { where.push('le.work_date <= ?');        params.push(to); }
+    if (claimant_id)      { where.push('p.claimant_id = ?');        params.push(Number(claimant_id)); }
 
     if (req.user.role !== 'admin') {
       where.push('uc.user_id = ?');

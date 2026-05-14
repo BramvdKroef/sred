@@ -7,19 +7,27 @@ export async function render(main, ctx) {
   }
   main.innerHTML = '<p class="empty">Loading overview…</p>';
   const week = currentWeek();
+  // Honour the page-header claimant selector (hoist step 4). When set, every
+  // panel below shows only that claimant's data; null = cross-claimant.
+  const activeClaimantId = ctx && ctx.state ? (ctx.state.activeClaimantId ?? null) : null;
+  const scope = activeClaimantId !== null ? `&claimant_id=${activeClaimantId}` : '';
   const [weekLabour, pendingLab, pendingExp, activity] = await Promise.all([
-    api('GET', `/api/labour?from=${week.from}&to=${week.to}`),
-    api('GET', '/api/labour?status=pending'),
-    api('GET', '/api/expenses?status=pending'),
-    api('GET', '/api/activity?limit=15'),
+    api('GET', `/api/labour?from=${week.from}&to=${week.to}${scope}`),
+    api('GET', `/api/labour?status=pending${scope}`),
+    api('GET', `/api/expenses?status=pending${scope}`),
+    api('GET', `/api/activity?limit=15${scope}`),
   ]);
   const nonRejected = weekLabour.items.filter(l => l.status !== 'rejected');
   const totalHours = nonRejected.reduce((s, e) => s + e.hours, 0);
   const bars = weekBars(nonRejected, week.days);
   const contributors = new Set(nonRejected.map(l => l.user_claimant_id)).size;
+  const scopeName = activeClaimantId === null
+    ? 'All claimants'
+    : (ctx.state.claimants.find(c => c.id === activeClaimantId)?.legal_name ?? `#${activeClaimantId}`);
   main.innerHTML = `
     <div class="card">
       <h2>This week — ${esc(week.from)} → ${esc(week.to)}</h2>
+      <p class="muted" style="margin:-0.2rem 0 0.6rem; font-size:0.85rem">${esc(scopeName)}</p>
       <div class="metrics">
         <div><div class="metric">${totalHours.toFixed(2)}</div><div class="muted">hours logged (all employees)</div></div>
         <div><div class="metric">${contributors}</div><div class="muted">contributor${contributors === 1 ? '' : 's'}</div></div>

@@ -371,6 +371,34 @@ td.actions { white-space: nowrap; }
 
 .pill.overtime { background: #ffe4cc; color: #8a4400; border: 1px solid #f5c79b; }
 
+/* --- App-level banner (dismissable inline notice) ---------------------- */
+
+/* Used for one-shot notices that aren't tied to a single card: e.g. the
+   "your selected claimant no longer exists" fallback fired by reloadAll().
+   Sits between <nav> and <main>; the close button removes it from the DOM. */
+.app-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0 0 0.8rem;
+  padding: 0.55rem 0.9rem;
+  background: #fff4d6;
+  color: #5c4400;
+  border: 1px solid #f5e0a0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.app-banner button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
 /* --- Inline-style replacements ----------------------------------------- */
 
 /* White link in the dark header. */

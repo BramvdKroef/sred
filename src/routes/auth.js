@@ -148,6 +148,9 @@ router.get('/me', requireAuth, (req, res) => {
 router.get('/activity', requireAuth, (req, res) => {
   const limit = Math.min(Number(req.query.limit || 20), 100);
   const projectId = req.query.project_id ? Number(req.query.project_id) : null;
+  // Optional claimant scope (header selector). All three feeds join through
+  // projects, so the filter is `p.claimant_id = ?` in every sub-query.
+  const claimantId = req.query.claimant_id ? Number(req.query.claimant_id) : null;
   const isAdmin = req.user.role === 'admin';
   // Admins can scope to a specific user; employees are auto-scoped to themselves.
   const targetUserId = isAdmin
@@ -162,6 +165,8 @@ router.get('/activity', requireAuth, (req, res) => {
   const projFilterEX  = projectId ? 'AND e.project_id = ?'  : '';
   const projFilterEV  = projectId ? 'AND ei.project_id = ?' : '';
   const projParam     = projectId ? [projectId] : [];
+  const claimantFilter = claimantId ? 'AND p.claimant_id = ?' : '';
+  const claimantParam  = claimantId ? [claimantId] : [];
 
   const labour = db.prepare(`
     SELECT 'labour' AS type, le.id, le.created_at, le.work_date AS event_date,
@@ -172,9 +177,9 @@ router.get('/activity', requireAuth, (req, res) => {
       JOIN user_claimants uc ON uc.id = le.user_claimant_id
       JOIN users u           ON u.id  = uc.user_id
       JOIN projects p        ON p.id  = le.project_id
-     WHERE 1=1 ${userFilter} ${projFilterLE}
+     WHERE 1=1 ${userFilter} ${projFilterLE} ${claimantFilter}
      ORDER BY le.created_at DESC LIMIT ?
-  `).all(...userParam, ...projParam, limit);
+  `).all(...userParam, ...projParam, ...claimantParam, limit);
 
   const expenses = db.prepare(`
     SELECT 'expense' AS type, e.id, e.created_at, e.expense_date AS event_date,
@@ -185,9 +190,9 @@ router.get('/activity', requireAuth, (req, res) => {
       JOIN user_claimants uc ON uc.id = e.user_claimant_id
       JOIN users u           ON u.id  = uc.user_id
       JOIN projects p        ON p.id  = e.project_id
-     WHERE 1=1 ${userFilter} ${projFilterEX}
+     WHERE 1=1 ${userFilter} ${projFilterEX} ${claimantFilter}
      ORDER BY e.created_at DESC LIMIT ?
-  `).all(...userParam, ...projParam, limit);
+  `).all(...userParam, ...projParam, ...claimantParam, limit);
 
   const evidence = db.prepare(`
     SELECT 'evidence' AS type, ei.id, ei.created_at, ei.evidence_date AS event_date,
@@ -197,9 +202,9 @@ router.get('/activity', requireAuth, (req, res) => {
       FROM evidence_items ei
       JOIN users u    ON u.id = ei.uploaded_by_user_id
       JOIN projects p ON p.id = ei.project_id
-     WHERE 1=1 ${evUserFilter} ${projFilterEV}
+     WHERE 1=1 ${evUserFilter} ${projFilterEV} ${claimantFilter}
      ORDER BY ei.created_at DESC LIMIT ?
-  `).all(...evUserParam, ...projParam, limit);
+  `).all(...evUserParam, ...projParam, ...claimantParam, limit);
 
   const items = [...labour, ...expenses, ...evidence]
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
