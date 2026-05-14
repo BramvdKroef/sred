@@ -21,8 +21,13 @@ export function mintEmailToken(userId, purpose) {
   return { raw, expiresAt };
 }
 
-export function findValidEmailToken(rawToken) {
+export function findValidEmailToken(rawToken, expectedPurpose) {
   if (!rawToken) throw unauthorized('missing token');
+  if (!expectedPurpose) throw badRequest('expected purpose required');
+  const accepted = Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose];
+  for (const p of accepted) {
+    if (!TTL_MINUTES[p]) throw badRequest(`unknown token purpose: ${p}`);
+  }
   const tokenHash = sha256(rawToken);
   const row = db.prepare(
     `SELECT t.*, u.email, u.name, u.role, u.status AS user_status
@@ -32,6 +37,9 @@ export function findValidEmailToken(rawToken) {
   if (!row) throw unauthorized('invalid token');
   if (row.consumed_at) throw unauthorized('token already used');
   if (new Date(row.expires_at).getTime() < Date.now()) throw unauthorized('token expired');
+  // Purpose mismatch is reported with the same "invalid token" shape as an
+  // unknown token, so callers can't enumerate purposes by error message.
+  if (!accepted.includes(row.purpose)) throw unauthorized('invalid token');
   return row;
 }
 

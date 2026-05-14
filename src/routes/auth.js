@@ -17,7 +17,9 @@ router.post('/webauthn/register/start', async (req, res, next) => {
     const { token } = req.body ?? {};
     let user;
     if (token) {
-      const tok = findValidEmailToken(token);
+      // All three magic-link flows (initial invite, recovery, add-device)
+      // funnel through this register endpoint.
+      const tok = findValidEmailToken(token, ['invite', 'recovery', 'add_device']);
       user = { id: tok.user_id, email: tok.email, name: tok.name, role: tok.role };
     } else if (req.headers.authorization) {
       // add-device flow — require an existing session
@@ -41,7 +43,7 @@ router.post('/webauthn/register/finish', async (req, res, next) => {
     let consumeToken = false;
     let tokenRow;
     if (token) {
-      tokenRow = findValidEmailToken(token);
+      tokenRow = findValidEmailToken(token, ['invite', 'recovery', 'add_device']);
       user = { id: tokenRow.user_id, email: tokenRow.email, name: tokenRow.name, role: tokenRow.role };
       consumeToken = true;
     } else if (req.headers.authorization) {
