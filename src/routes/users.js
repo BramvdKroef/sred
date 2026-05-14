@@ -5,6 +5,7 @@ import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { mintEmailToken, buildMagicLink } from '../auth/tokens.js';
 import { sendMagicLink } from '../lib/email.js';
+import { inviteLimiter } from '../lib/rate-limit.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -227,7 +228,7 @@ router.post('/:id/reactivate', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/:id/invite', (req, res, next) => {
+router.post('/:id/invite', inviteLimiter, (req, res, next) => {
   try {
     const userId = Number(req.params.id);
     const user = db.prepare(`SELECT id, email, name, status FROM users WHERE id = ?`).get(userId);

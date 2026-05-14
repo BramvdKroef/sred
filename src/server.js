@@ -3,9 +3,11 @@ import path from 'node:path';
 import { config, ROOT_DIR } from './config.js';
 import api from './routes/index.js';
 import { errorMiddleware } from './lib/errors.js';
+import { cspMiddleware } from './lib/csp.js';
 
 const app = express();
 app.disable('x-powered-by');
+app.use(cspMiddleware);
 app.use(express.json({ limit: '2mb' }));
 
 app.use('/api', api);
