@@ -12,7 +12,8 @@
     "migrate": "node src/db/migrate.js",
     "seed:admin": "node src/scripts/seed-admin.js",
     "seed:etc": "node src/scripts/seed-etc.js",
-    "seed:data": "node src/scripts/seed-data.js"
+    "seed:data": "node src/scripts/seed-data.js",
+    "test": "node --test 'tests/**/*.test.js'"
   },
   "dependencies": {
     "@simplewebauthn/server": "^11.0.0",
