@@ -145,16 +145,70 @@ export function bindEvidenceKindToggle(form) {
   update();
 }
 
+// Render or clear an inline error banner inside a form (or any container).
+// The banner is appended once and reused on subsequent errors — kept above
+// the rest of the container so the user sees it without scrolling. Pairs
+// with the .error-banner class in style.css.
+export function showError(container, message) {
+  if (!container) return;
+  let banner = container.querySelector(':scope > .error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = 'error-banner';
+    banner.setAttribute('role', 'alert');
+    container.insertBefore(banner, container.firstChild);
+  }
+  banner.textContent = message;
+  banner.hidden = false;
+}
+
+export function clearError(container) {
+  const banner = container?.querySelector(':scope > .error-banner');
+  if (banner) { banner.hidden = true; banner.textContent = ''; }
+}
+
+// Page-level error banner — for per-row table actions (Approve, Reject,
+// Close-period, Delete, etc.) where there's no obvious form-shaped
+// container to mount on. Prefers the admin shell's #app-banner-host (which
+// already sits between <nav> and <main>); falls back to inserting a host
+// just above <main>. Auto-dismisses after 6s so the page doesn't stay
+// permanently red after a transient failure.
+let topBannerTimer = null;
+export function showTopBanner(message) {
+  let host = document.getElementById('app-banner-host');
+  if (!host) {
+    const main = document.getElementById('main');
+    if (!main || !main.parentNode) return;
+    host = document.createElement('div');
+    host.id = 'app-banner-host';
+    main.parentNode.insertBefore(host, main);
+  }
+  host.innerHTML = `
+    <div class="app-banner error-banner" role="alert">
+      <span></span>
+      <button type="button" aria-label="Dismiss" data-banner-dismiss>&times;</button>
+    </div>
+  `;
+  host.querySelector('span').textContent = message;
+  host.querySelector('[data-banner-dismiss]').addEventListener('click', () => {
+    host.innerHTML = '';
+    if (topBannerTimer) { clearTimeout(topBannerTimer); topBannerTimer = null; }
+  });
+  if (topBannerTimer) clearTimeout(topBannerTimer);
+  topBannerTimer = setTimeout(() => { host.innerHTML = ''; topBannerTimer = null; }, 6000);
+}
+
 // Attach a submit handler that preventDefaults, hands you a FormData,
-// alerts on error, and otherwise gets out of the way. Use bindForm(sel,…)
-// when you have a selector, onSubmit(formEl,…) when you already have the
-// element.
+// renders an inline error banner on error, and otherwise gets out of the
+// way. Use bindForm(sel,…) when you have a selector, onSubmit(formEl,…)
+// when you already have the element.
 export function onSubmit(form, handler) {
   if (!form) return;
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    clearError(form);
     try { await handler(new FormData(form), form); }
-    catch (err) { alert(err.message); }
+    catch (err) { showError(form, err.message); }
   });
 }
 
@@ -239,7 +293,7 @@ function bindPrefs(main) {
       try {
         await api('DELETE', `/api/me/credentials/${btn.dataset.credRemove}`);
         await refreshPrefs(main);
-      } catch (err) { alert(err.message); }
+      } catch (err) { showTopBanner(err.message); }
     });
   });
 }

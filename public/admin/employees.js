@@ -1,5 +1,5 @@
 import { api, esc, cents, dollarsToCents, bindForm, onSubmit, activityHtml,
-         wireActivityDetails, TYPE_LABEL, STATUS_LABEL } from '../api.js';
+         wireActivityDetails, showTopBanner, TYPE_LABEL, STATUS_LABEL } from '../api.js';
 
 let allUsers = [];
 
@@ -254,7 +254,7 @@ function bindUserRowActions(el, ctx) {
           : 'Logged to server console (SMTP disabled)';
         alert(`${where}\n\nPurpose: ${r.purpose}\nExpires: ${r.expires_at}`);
       } catch (e) {
-        alert(e.message);
+        showTopBanner(e.message);
       } finally {
         btn.disabled = false;
       }
@@ -275,7 +275,7 @@ function bindUserRowActions(el, ctx) {
         redrawAllUsers(ctx);
         if (ctx.state.tab === 'users') await ctx.reloadAll();
       } catch (e) {
-        alert(e.message);
+        showTopBanner(e.message);
       } finally {
         btn.disabled = false;
       }
