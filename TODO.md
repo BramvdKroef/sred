@@ -35,9 +35,9 @@ Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs refere
   - [x] ~~Add per-claimant scope.~~ Honors `state.activeClaimantId`.
   - [ ] Add row checkboxes + a "select all visible" header + an "Approve / Reject selected" action bar.
   - [ ] Add period / project / employee filters.
-- [ ] [P1] **UC-E4 — Employee dashboard period + claimant scope.**
+- [x] ~~**UC-E4 — Employee dashboard period + claimant scope.**~~
   - [x] ~~Add a claimant column on labour / expense / evidence tables.~~
-  - [ ] Add a period selector + per-period totals row on the activity tab.
+  - [x] ~~Add a period selector + per-period totals row on the activity tab.~~ Selector groups periods by claimant via `<optgroup>`; defaults to the unique open period (or "All periods" otherwise). Totals card sums approved/pending hours, expense amounts bucketed per-currency (no FX summation), and evidence count. New `/api/me/periods` endpoint (employees can't hit admin-only `/api/claimants/:id/periods`). `periodTotals()` unit-tested.
 - [ ] [P2] **UC-A4 — Project narrative revision viewer.**
   - [x] ~~List prior revisions on the project detail page.~~ New "Narrative revisions (N)" card; `/revisions` endpoint joins users for `revised_by_name` + `manager_name`.
   - [x] ~~Click-to-view a revision (read-only inline expansion).~~

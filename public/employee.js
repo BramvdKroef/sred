@@ -11,6 +11,8 @@ const state = {
   signOut: null,
   tab: 'overview',
   projects: [],
+  periods: [],          // flat list across all claimants the user is attached to
+  periodFilter: null,   // selected fiscal_period_id, or null for "All periods"
   labour: [],
   expenses: [],
   evidence: [],
@@ -67,19 +69,50 @@ function onHashChange() {
 const tabBtn = (key, label) =>
   `<button data-tab="${key}" class="${state.tab === key ? 'active' : ''}">${esc(label)}</button>`;
 
-async function reload() {
-  const [projects, labour, expenses, evidence, activityFeed] = await Promise.all([
-    api('GET', '/api/me/projects'),
-    api('GET', '/api/labour'),
-    api('GET', '/api/expenses'),
-    api('GET', '/api/evidence'),
-    api('GET', '/api/activity?limit=15'),
+// Re-fetch labour / expenses / evidence honouring state.periodFilter.
+// state.projects, state.periods, and state.activity don't depend on the
+// period selector, so they aren't refetched here.
+async function reloadEntries() {
+  const q = state.periodFilter ? `?period_id=${state.periodFilter}` : '';
+  const [labour, expenses, evidence] = await Promise.all([
+    api('GET', `/api/labour${q}`),
+    api('GET', `/api/expenses${q}`),
+    api('GET', `/api/evidence${q}`),
   ]);
-  state.projects = projects.items;
   state.labour = labour.items;
   state.expenses = expenses.items;
   state.evidence = evidence.items;
+}
+
+async function reload() {
+  const [projects, periods, activityFeed] = await Promise.all([
+    api('GET', '/api/me/projects'),
+    api('GET', '/api/me/periods'),
+    api('GET', '/api/activity?limit=15'),
+  ]);
+  state.projects = projects.items;
+  state.periods = periods.items;
   state.activity = activityFeed.items;
+
+  // Default-period heuristic, applied once: if exactly one period is
+  // currently "open" across all the user's claimants, preselect it.
+  // Otherwise fall back to "All periods". Once the user makes a choice,
+  // state.periodFilter is preserved on subsequent reloads.
+  if (!state._defaulted) {
+    const openPeriods = state.periods.filter(p => p.status === 'open');
+    if (openPeriods.length === 1) state.periodFilter = openPeriods[0].id;
+    state._defaulted = true;
+  }
+
+  await reloadEntries();
+  render();
+}
+
+// Called by the activity tab when the period <select> changes. Lives on the
+// employee shell so the totals card and three tables stay in sync.
+async function setPeriodFilter(periodId) {
+  state.periodFilter = periodId;
+  await reloadEntries();
   render();
 }
 
@@ -88,7 +121,7 @@ function render() {
     b.classList.toggle('active', b.dataset.tab === state.tab);
   });
   const main = $('#main');
-  const ctx = { state, render, reload };
+  const ctx = { state, render, reload, setPeriodFilter };
   switch (state.tab) {
     case 'overview':    return overview.render(main, ctx);
     case 'activity':    return activity.render(main, ctx);

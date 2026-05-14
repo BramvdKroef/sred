@@ -1,5 +1,34 @@
 import { api, esc, cents, dollarsToCents, onSubmit, wireJwtDownloads, safeHref, lockReason } from '../api.js';
 
+// Pure reducer over the three lists currently in state. Sums approved-vs-
+// pending hours, expense amounts (in cents, grouped per-currency since FX
+// rates aren't always populated and currencies don't add up at face value),
+// and an evidence row count. Exported for unit tests.
+export function periodTotals(labour, expenses, evidence) {
+  const hours = { approved: 0, pending: 0 };
+  for (const l of labour ?? []) {
+    if (l.status === 'approved')      hours.approved += Number(l.hours) || 0;
+    else if (l.status === 'pending')  hours.pending  += Number(l.hours) || 0;
+  }
+  // amount_cents bucketed by currency. mixed-currency totals are surfaced
+  // per-currency rather than fudged through an FX conversion — claimant
+  // reporting_currency lives on the claimant, but FX is per-expense and may
+  // be null on pending entries.
+  const amountByCurrency = {};
+  for (const e of expenses ?? []) {
+    if (e.status !== 'approved' && e.status !== 'pending') continue;
+    const cur = e.currency || 'CAD';
+    if (!amountByCurrency[cur]) amountByCurrency[cur] = { approved: 0, pending: 0 };
+    if (e.status === 'approved') amountByCurrency[cur].approved += Number(e.amount_cents) || 0;
+    else                         amountByCurrency[cur].pending  += Number(e.amount_cents) || 0;
+  }
+  return {
+    hours,
+    amountByCurrency,
+    evidenceCount: (evidence ?? []).length,
+  };
+}
+
 export function render(main, ctx) {
   const { state } = ctx;
   const projTitle = id => state.projects.find(p => p.id === id)?.title ?? `#${id}`;
@@ -14,6 +43,8 @@ export function render(main, ctx) {
         `).join('')}</tbody>
       </table>`}
     </div>
+    ${periodSelectorCard(state)}
+    ${totalsCard(state)}
     <div class="card">
       <h2>My labour (${state.labour.length})</h2>
       ${state.labour.length === 0 ? '<p class="empty">No entries.</p>' : `
@@ -99,6 +130,85 @@ function lockPill(reason) {
   return '<span class="muted">locked</span>';
 }
 
+// --- Period selector + totals card ---------------------------------------
+
+// Single source of truth: one <select> drives the labour, expense, and
+// evidence tables. Periods are grouped by claimant via <optgroup> so a
+// multi-claimant employee can tell which fiscal year is which.
+function periodSelectorCard(state) {
+  if (!state.periods || state.periods.length === 0) {
+    // No periods at all (likely no claimant attachments). Skip the card.
+    return '';
+  }
+  // Group periods by claimant_name preserving insertion order.
+  const byClaimant = new Map();
+  for (const p of state.periods) {
+    const key = p.claimant_name ?? `Claimant #${p.claimant_id}`;
+    if (!byClaimant.has(key)) byClaimant.set(key, []);
+    byClaimant.get(key).push(p);
+  }
+  const selected = state.periodFilter;
+  const groups = [...byClaimant.entries()].map(([cname, periods]) => `
+    <optgroup label="${esc(cname)}">
+      ${periods.map(p => `
+        <option value="${p.id}" ${selected === p.id ? 'selected' : ''}>
+          ${esc(p.start_date)} → ${esc(p.end_date)}${p.status === 'closed' ? ' (closed)' : ''}
+        </option>`).join('')}
+    </optgroup>
+  `).join('');
+  return `
+    <div class="card">
+      <div class="row" style="gap:0.6rem; align-items:center; flex-wrap:wrap">
+        <label for="period-filter"><strong>Period</strong></label>
+        <select id="period-filter">
+          <option value="">All periods</option>
+          ${groups}
+        </select>
+        <span class="muted">Filters labour, expenses, and evidence below.</span>
+      </div>
+    </div>`;
+}
+
+// Compact metrics card above the labour table. Hours and amount split into
+// approved/pending sub-figures; expense totals are per-currency since the
+// data set may contain entries in different currencies (CAD vs USD etc.).
+function totalsCard(state) {
+  // Skip if there are zero periods (i.e. the selector wasn't rendered).
+  if (!state.periods || state.periods.length === 0) return '';
+  const t = periodTotals(state.labour, state.expenses, state.evidence);
+  const scopeLabel = state.periodFilter
+    ? (() => {
+        const p = state.periods.find(p => p.id === state.periodFilter);
+        return p ? `${p.start_date} → ${p.end_date}` : `period #${state.periodFilter}`;
+      })()
+    : 'all periods';
+  const currencies = Object.keys(t.amountByCurrency);
+  const amountBlocks = currencies.length === 0
+    ? `<div><div class="metric">0.00</div><div class="muted">expenses</div></div>`
+    : currencies.map(cur => {
+        const v = t.amountByCurrency[cur];
+        return `<div>
+          <div class="metric">${(v.approved / 100).toFixed(2)} <span style="font-size:0.7em">${esc(cur)}</span></div>
+          <div class="muted">expenses approved${v.pending ? ` · ${(v.pending / 100).toFixed(2)} pending` : ''}</div>
+        </div>`;
+      }).join('');
+  return `
+    <div class="card">
+      <h2>Totals — <span class="muted" style="font-weight:normal">${esc(scopeLabel)}</span></h2>
+      <div class="metrics">
+        <div>
+          <div class="metric">${t.hours.approved.toFixed(2)}</div>
+          <div class="muted">hours approved${t.hours.pending ? ` · ${t.hours.pending.toFixed(2)} pending` : ''}</div>
+        </div>
+        ${amountBlocks}
+        <div>
+          <div class="metric">${t.evidenceCount}</div>
+          <div class="muted">evidence item${t.evidenceCount === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
 // --- Inline row-edit forms (one per type) ---------------------------------
 
 function labourEditForm(e) {
@@ -139,6 +249,12 @@ function evidenceEditForm(e) {
 // --- Bindings: row-edit toggles + form submits ----------------------------
 
 function bindActivity(main, ctx) {
+  const sel = main.querySelector('#period-filter');
+  if (sel) sel.addEventListener('change', () => {
+    const v = sel.value;
+    ctx.setPeriodFilter(v === '' ? null : Number(v));
+  });
+
   for (const kind of ['labour', 'expense', 'evidence']) {
     main.querySelectorAll(`[data-edit-${kind}]`).forEach(btn => {
       btn.addEventListener('click', () => {

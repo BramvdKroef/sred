@@ -250,4 +250,21 @@ router.get('/me/projects', requireAuth, (req, res) => {
   res.json({ items });
 });
 
+// Fiscal periods for every claimant the caller is attached to. Drives the
+// period selector on the employee My-activity tab. The /api/claimants/:id
+// router is admin-only, so non-admin callers couldn't otherwise list
+// periods; this is the scoped read for them.
+router.get('/me/periods', requireAuth, (req, res) => {
+  const items = db.prepare(`
+    SELECT fp.*, c.legal_name AS claimant_name
+      FROM fiscal_periods fp
+      JOIN claimants c ON c.id = fp.claimant_id
+      JOIN user_claimants uc ON uc.claimant_id = c.id AND uc.status = 'active'
+     WHERE uc.user_id = ?
+     GROUP BY fp.id
+     ORDER BY c.legal_name, fp.start_date DESC
+  `).all(req.user.id);
+  res.json({ items });
+});
+
 export default router;
