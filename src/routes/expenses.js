@@ -123,7 +123,7 @@ router.patch('/:id', (req, res, next) => {
   try {
     const before = getExpense(req.params.id);
     if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
-    assertEditable(before);
+    assertEditable(before, { user: req.user });
 
     const { expense_date, category, amount_cents, currency, fx_rate, description } = req.body ?? {};
     const updates = {};
@@ -156,7 +156,14 @@ router.patch('/:id', (req, res, next) => {
       newPeriodId = findOpenPeriod(claimant.id, updates.expense_date).id;
     }
 
-    const clearReview = before.status === 'rejected';
+    // Admin self-edits of their own auto-approved entry follow the
+    // rejected-edit precedent: revert to pending so the change is
+    // re-approved deliberately. (assertEditable already restricts who
+    // can reach this branch.)
+    const clearReview =
+      before.status === 'rejected' ||
+      (before.status === 'approved' && req.user.role === 'admin' &&
+       before.reviewed_by_user_id === req.user.id);
 
     const setParts = keys.map(k => `${k} = ?`);
     setParts.push(`fiscal_period_id = ?`);
@@ -178,7 +185,7 @@ router.delete('/:id', (req, res, next) => {
   try {
     const before = getExpense(req.params.id);
     if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
-    assertEditable(before);
+    assertEditable(before, { user: req.user });
     db.prepare(`DELETE FROM expenses WHERE id = ?`).run(before.id);
     audit(req.user.id, 'delete', 'expense', before.id, before, undefined);
     res.status(204).end();

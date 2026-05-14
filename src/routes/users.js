@@ -243,7 +243,14 @@ router.post('/:id/reactivate', (req, res, next) => {
 router.post('/:id/invite', inviteLimiter, (req, res, next) => {
   try {
     const userId = Number(req.params.id);
-    const user = db.prepare(`SELECT id, email, name, status FROM users WHERE id = ?`).get(userId);
+    // An admin can't mint an enrollment / add-device link for themselves —
+    // that bypasses any second-admin oversight on their own account and
+    // also makes self-recovery look indistinguishable from peer enrollment
+    // in the audit log. If the actor is locked out of their own passkey,
+    // the dedicated recovery flow exists for exactly this case.
+    if (req.user.id === userId)
+      throw badRequest('cannot invite yourself; use the recovery flow');
+    const user = db.prepare(`SELECT id, email, name, role, status FROM users WHERE id = ?`).get(userId);
     if (!user) throw notFound('user not found');
     if (user.status === 'disabled') throw badRequest('user is disabled');
 
@@ -260,7 +267,12 @@ router.post('/:id/invite', inviteLimiter, (req, res, next) => {
     sendMagicLink({ to: user.email, name: user.name, purpose, link: magicLink })
       .catch(err => console.warn('[invite] email send error:', err));
 
-    audit(req.user.id, purpose, 'user', user.id);
+    // Capture target identity in the audit row so the log shows who was
+    // invited rather than just the user id (the id alone is useless if the
+    // user row is later renamed or its email changes).
+    audit(req.user.id, purpose, 'user', user.id, undefined, {
+      email: user.email, role: user.role,
+    });
     // Response body deliberately omits the raw magic link. The `delivered`
     // flag reflects SMTP configuration at request time; when false, the
     // link has been logged to stderr (see src/lib/email.js).

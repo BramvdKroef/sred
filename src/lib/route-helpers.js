@@ -80,9 +80,22 @@ export function isOwnerOrAdmin(user, userClaimantId) {
 
 // Labour & expense rows are immutable once approved, and locked while the
 // containing fiscal period is closed.
-export function assertEditable(entry) {
+//
+// Exception: an admin who PATCHes their own auto-approved on-behalf entry
+// (the labour/expense POST handlers auto-approve when the actor is admin)
+// would otherwise be locked out of fixing a typo without going through
+// reject → edit → re-approve. When `user` is passed and the entry was
+// reviewed_by that same admin, we allow the edit; the route then mirrors
+// the rejected-entry path (revert to pending, clear review fields) so
+// the entry has to be re-approved deliberately rather than silently
+// retaining its approved status across an edit.
+export function assertEditable(entry, { user } = {}) {
   if (entry.status === 'approved') {
-    throw badRequest('entry is approved and locked; reject it first');
+    const isAdminSelfApproved =
+      user?.role === 'admin' && entry.reviewed_by_user_id === user.id;
+    if (!isAdminSelfApproved) {
+      throw badRequest('entry is approved and locked; reject it first');
+    }
   }
   const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(entry.fiscal_period_id);
   // FK protects us in practice, but an orphan period shouldn't fall

@@ -18,6 +18,7 @@ let ctx;
 let server;
 let baseUrl;
 let adminToken;
+let adminUserId;
 let targetUserId;
 
 before(async () => {
@@ -35,14 +36,14 @@ before(async () => {
 
   // An admin who calls /invite, and a target user (also admin) who is being
   // invited — the exact V-06 scenario (admin inviting another admin).
-  const adminId = insertUser(ctx.db, {
+  adminUserId = insertUser(ctx.db, {
     role: 'admin', status: 'active', email: 'inviter@example.com',
   });
   targetUserId = insertUser(ctx.db, {
     role: 'admin', status: 'pending', email: 'target-admin@example.com',
   });
 
-  adminToken = signSession({ id: adminId, role: 'admin' });
+  adminToken = signSession({ id: adminUserId, role: 'admin' });
 
   const app = express();
   app.disable('x-powered-by');
@@ -94,4 +95,48 @@ test('POST /api/users/:id/invite does not leak magic_link and returns user_id/pu
   ).get(targetUserId);
   assert.equal(row.user_id, targetUserId);
   assert.equal(row.purpose, 'invite');
+});
+
+test('POST /api/users/:id/invite rejects self-invite with 400', async () => {
+  // An admin can't mint a passkey-enrollment / add-device link for their
+  // own account. The recovery flow exists for the locked-out case.
+  const before = ctx.db.prepare(`SELECT COUNT(*) AS n FROM email_tokens WHERE user_id = ?`).get(adminUserId).n;
+
+  const res = await fetch(`${baseUrl}/api/users/${adminUserId}/invite`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const text = await res.text();
+  assert.equal(res.status, 400, `expected 400, got ${res.status}: ${text}`);
+  const body = JSON.parse(text);
+  assert.match(body.error?.message || '', /yourself/i);
+
+  // No token should have been minted.
+  const after = ctx.db.prepare(`SELECT COUNT(*) AS n FROM email_tokens WHERE user_id = ?`).get(adminUserId).n;
+  assert.equal(after, before, 'self-invite must not mint a token');
+});
+
+test('POST /api/users/:id/invite writes audit row with target email + role in after_json', async () => {
+  // Snapshot before so we can pick out the exact row this call appended.
+  const beforeId = ctx.db.prepare(`SELECT COALESCE(MAX(id), 0) AS m FROM audit_log`).get().m;
+
+  const res = await fetch(`${baseUrl}/api/users/${targetUserId}/invite`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  assert.equal(res.status, 200);
+
+  const row = ctx.db.prepare(
+    `SELECT action, entity_type, entity_id, after_json
+       FROM audit_log
+      WHERE id > ? AND entity_type = 'user' AND entity_id = ?
+      ORDER BY id DESC LIMIT 1`
+  ).get(beforeId, targetUserId);
+  assert.ok(row, 'expected an audit row for the invite');
+  // Action mirrors the purpose (invite vs add_device); target is pending so 'invite'.
+  assert.equal(row.action, 'invite');
+  assert.ok(row.after_json, 'after_json must be populated for invite audit');
+  const after = JSON.parse(row.after_json);
+  assert.equal(after.email, 'target-admin@example.com');
+  assert.equal(after.role, 'admin');
 });
