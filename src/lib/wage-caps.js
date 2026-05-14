@@ -3,6 +3,8 @@
 // If a labour-entry year is missing here, fall back to the latest known year
 // and log a warning so the gap is visible.
 
+import { log } from './logger.js';
+
 const CAPS_BY_YEAR = {
   2023: 33150000, // $331,500
   2024: 34250000, // $342,500
@@ -16,6 +18,6 @@ const LATEST_YEAR = KNOWN_YEARS[KNOWN_YEARS.length - 1];
 
 export function specifiedEmployeeCapCents(year) {
   if (CAPS_BY_YEAR[year] !== undefined) return CAPS_BY_YEAR[year];
-  console.warn(`[wage-caps] no cap for ${year}; falling back to ${LATEST_YEAR}`);
+  log.warn('wage_caps_missing_year', { year, fallback_year: LATEST_YEAR });
   return CAPS_BY_YEAR[LATEST_YEAR];
 }

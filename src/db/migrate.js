@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db } from './index.js';
+import { log } from '../lib/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -33,11 +34,15 @@ for (const file of files) {
   db.pragma('foreign_keys = ON');
   const violations = db.prepare('PRAGMA foreign_key_check').all();
   if (violations.length) {
-    console.error(`FK violations introduced by ${file}:`, violations);
+    log.error('migration_fk_violation', { file, violations });
     process.exit(1);
   }
-  console.log(`applied ${file}`);
+  log.info('migration_applied', { name: file });
   ran++;
 }
 
-console.log(ran === 0 ? 'no migrations to apply' : `applied ${ran} migration(s)`);
+if (ran === 0) {
+  log.info('migrations_none_pending');
+} else {
+  log.info('migrations_complete', { applied: ran });
+}

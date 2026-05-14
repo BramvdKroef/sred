@@ -7,6 +7,7 @@ import { startRegistration, finishRegistration, startLogin, finishLogin } from '
 import { mintRefreshToken, consumeRefreshToken, revokeRefreshToken } from '../auth/refresh.js';
 import { sendMagicLink } from '../lib/email.js';
 import { badRequest, unauthorized, notFound } from '../lib/errors.js';
+import { log } from '../lib/logger.js';
 import {
   webauthnLimiter,
   recoveryShortLimiter,
@@ -122,7 +123,7 @@ router.post('/recovery', recoveryShortLimiter, recoveryHourLimiter, (req, res, n
       const { raw } = mintEmailToken(user.id, 'recovery');
       const link = buildMagicLink(raw);
       sendMagicLink({ to: user.email, name: user.name, purpose: 'recovery', link })
-        .catch(err => console.warn('[recovery] email send error:', err));
+        .catch(err => (req.log ?? log).warn('recovery_email_error', { err: err.message }));
     }
     // Always 200 to avoid account enumeration.
     res.json({ ok: true });

@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config.js';
+import { log } from './logger.js';
 
 // Default nodemailer timeouts are ~2 minutes per phase, which is far too long
 // for a synchronous, admin-triggered action like /invite. We cap the transport
@@ -54,7 +55,10 @@ function withTimeout(promise, ms, label) {
 
 export async function sendMagicLink({ to, name, purpose, link }) {
   if (!mailer) {
-    console.log(`[email] (no SMTP configured) ${purpose} link for ${to}: ${link}`);
+    // Dev mode (SMTP_HOST empty): the link itself is the operator's only
+    // way to consume the just-minted token, so log it at info. In a real
+    // deployment SMTP_HOST is set and this branch never fires.
+    log.info('email_smtp_disabled', { to, purpose, link });
     return { delivered: false, reason: 'smtp_disabled' };
   }
   const subject = SUBJECTS[purpose] ?? 'SR&ED tracker';
@@ -70,12 +74,16 @@ export async function sendMagicLink({ to, name, purpose, link }) {
       SEND_TIMEOUT_MS,
       'sendMail',
     );
-    console.log(`[email] sent ${purpose} to ${to} (messageId=${info.messageId})`);
+    log.info('email_sent', { to, purpose, message_id: info.messageId });
     return { delivered: true, messageId: info.messageId };
   } catch (err) {
     const reason = err.code === 'ESENDTIMEOUT' ? 'timeout' : 'send_failed';
-    console.warn(`[email] failed to send ${purpose} to ${to} (${reason}): ${err.message}`);
-    console.log(`[email] fallback link: ${link}`);
+    // The failure log carries enough context to triage SMTP issues; the
+    // fallback link is logged at info so an operator who notices the
+    // failure can deliver it out-of-band. (Production SMTP failure should
+    // page; for now, "the link is in the journal" is the recovery path.)
+    log.error('email_failed', { to, purpose, reason, err: err.message });
+    log.info('email_fallback_link', { to, purpose, link });
     return { delivered: false, reason, error: err.message };
   }
 }

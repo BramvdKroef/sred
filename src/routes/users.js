@@ -7,6 +7,7 @@ import { audit } from '../lib/audit.js';
 import { mintEmailToken, buildMagicLink } from '../auth/tokens.js';
 import { sendMagicLink } from '../lib/email.js';
 import { inviteLimiter } from '../lib/rate-limit.js';
+import { log } from '../lib/logger.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -309,7 +310,7 @@ router.post('/:id/invite', inviteLimiter, async (req, res, next) => {
 
     if (!config.smtp.host) {
       sendMagicLink({ to: user.email, name: user.name, purpose, link: magicLink })
-        .catch(err => console.warn('[invite] email send error:', err));
+        .catch(err => (req.log ?? log).warn('invite_email_error', { err: err.message }));
     } else {
       const result = await sendMagicLink({
         to: user.email, name: user.name, purpose, link: magicLink,

@@ -7,6 +7,7 @@ import {
 import { db } from '../db/index.js';
 import { config } from '../config.js';
 import { unauthorized, badRequest } from '../lib/errors.js';
+import { log } from '../lib/logger.js';
 
 // Challenge lifetime — short, since both halves of the ceremony fire within seconds.
 const CHALLENGE_TTL_MS = 5 * 60_000;
@@ -119,8 +120,17 @@ export async function finishLogin({ response }) {
     },
   });
   if (!verification.verified) throw unauthorized('login verification failed');
-  // Counter regression check + bump
+  // Counter regression check + bump. A regression means the authenticator
+  // returned a counter lower than what we have on file — the spec calls
+  // this out as a cloning indicator. Log it at warn so an operator can
+  // see which credential tripped without grepping audit rows.
   if (verification.authenticationInfo.newCounter < credRow.counter) {
+    log.warn('webauthn_counter_regression', {
+      user_id: credRow.user_id,
+      credential_db_id: credRow.id,
+      stored_counter: credRow.counter,
+      presented_counter: verification.authenticationInfo.newCounter,
+    });
     throw unauthorized('counter regression — possible cloned authenticator');
   }
   db.prepare(
