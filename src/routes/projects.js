@@ -125,9 +125,17 @@ router.patch('/:id', (req, res, next) => {
 router.get('/:id/revisions', (req, res, next) => {
   try {
     const project = getProject(req.params.id);
-    const items = db.prepare(
-      `SELECT * FROM project_revisions WHERE project_id = ? ORDER BY id DESC`
-    ).all(project.id);
+    // Join users so the UI can render the reviser's name without a
+    // second round-trip. Left join because revised_by_user_id is
+    // nullable (system-generated snapshots set it null).
+    const items = db.prepare(`
+      SELECT pr.*, u.name AS revised_by_name, mu.name AS manager_name
+        FROM project_revisions pr
+        LEFT JOIN users u  ON u.id  = pr.revised_by_user_id
+        LEFT JOIN users mu ON mu.id = pr.manager_user_id
+       WHERE pr.project_id = ?
+       ORDER BY pr.id DESC
+    `).all(project.id);
     res.json({ items });
   } catch (e) { next(e); }
 });
