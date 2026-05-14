@@ -25,6 +25,24 @@ export async function render(main, ctx) {
       <p class="muted">Draft means the period need not be closed.</p>
     </div>
     <div class="card">
+      <h2>Compare two periods</h2>
+      <p class="muted">Side-by-side T661 totals for continuity narratives. Not persisted — re-runs are cheap.</p>
+      <form id="compare-form" class="row">
+        <label>Period A <select name="period_a_id" required>${periodOpts}</select></label>
+        <label>Period B <select name="period_b_id" required>${periodOpts}</select></label>
+        <label>Format
+          <select name="format">
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+            <option value="md" selected>Markdown</option>
+            <option value="pdf">PDF</option>
+          </select>
+        </label>
+        <button>Generate</button>
+      </form>
+      <div id="compare-result"></div>
+    </div>
+    <div class="card">
       <h2>Exports for this claimant</h2>
       ${exports.length === 0 ? '<p class="empty">None yet.</p>' : `
       <table>
@@ -59,6 +77,59 @@ export async function render(main, ctx) {
       draft: fd.get('draft') === 'on',
     });
     ctx.render();
+  });
+
+  bindForm('#compare-form', async fd => {
+    const periodA = Number(fd.get('period_a_id'));
+    const periodB = Number(fd.get('period_b_id'));
+    const format = fd.get('format') || 'md';
+    const result = await api('POST', '/api/exports/t661/compare', {
+      claimant_id: state.activeClaimantId,
+      period_a_id: periodA,
+      period_b_id: periodB,
+    });
+    // Render a tiny summary + a download link for each format. Using the
+    // POST response avoids a second compute on the server when the user
+    // just wants the numbers in the UI.
+    const ccy = result.a.claimant.reporting_currency;
+    const fmt = c => `${(c / 100).toFixed(2)} ${ccy}`;
+    const fmtPct = p => p === null ? 'n/a' : `${p > 0 ? '+' : ''}${p.toFixed(1)}%`;
+    const fmtSigned = c => `${c >= 0 ? '+' : '-'}${(Math.abs(c) / 100).toFixed(2)} ${ccy}`;
+    const g = result.diff.grand_total;
+    const baseQs = `claimant_id=${state.activeClaimantId}&period_a=${periodA}&period_b=${periodB}`;
+    const out = main.querySelector('#compare-result');
+    out.innerHTML = `
+      <h3>Grand totals</h3>
+      <table>
+        <thead><tr><th>Line</th><th>A</th><th>B</th><th>Δ</th><th>Δ%</th></tr></thead>
+        <tbody>
+          ${[
+            ['Labour', 'labour_cost_cents'],
+            ['Materials', 'materials_cents'],
+            ['Contract', 'contract_expenditures_cents'],
+            ['Third-party', 'third_party_payments_cents'],
+            ['Overhead', 'overhead_cents'],
+            ['<strong>Total</strong>', 'total_cents'],
+          ].map(([label, f]) => `
+            <tr>
+              <td>${label}</td>
+              <td>${fmt(result.a.grand_total[f])}</td>
+              <td>${fmt(result.b.grand_total[f])}</td>
+              <td>${fmtSigned(g[f].delta_cents)}</td>
+              <td>${fmtPct(g[f].delta_pct)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <p>
+        Download:
+        <a href="/api/exports/compare/download?${baseQs}&format=${esc(format)}" data-jwt-dl>${esc(format)}</a>
+        · <a href="/api/exports/compare/download?${baseQs}&format=json" data-jwt-dl>json</a>
+        · <a href="/api/exports/compare/download?${baseQs}&format=csv" data-jwt-dl>csv</a>
+        · <a href="/api/exports/compare/download?${baseQs}&format=md" data-jwt-dl>md</a>
+        · <a href="/api/exports/compare/download?${baseQs}&format=pdf" data-jwt-dl>pdf</a>
+      </p>
+    `;
+    wireJwtDownloads(out);
   });
 
   main.querySelectorAll('[data-build-bundle]').forEach(btn => {

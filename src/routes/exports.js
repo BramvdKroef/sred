@@ -8,7 +8,11 @@ import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { computeT661, snapshotProjectRevisions, collectEvidenceManifest } from '../lib/t661.js';
-import { toMarkdown, toCsv, toPdf } from '../lib/format.js';
+import {
+  toMarkdown, toCsv, toPdf,
+  toMarkdownCompare, toCsvCompare, toPdfCompare,
+  buildCompareDiff,
+} from '../lib/format.js';
 import { getT661Export } from '../lib/route-helpers.js';
 
 const router = Router();
@@ -71,6 +75,81 @@ router.post('/t661', (req, res, next) => {
       { claimant_id, fiscal_period_id, is_draft: draft, total_cents: totals.grand_total.total_cents });
 
     res.status(201).json({ ...exportRow, totals });
+  } catch (e) { next(e); }
+});
+
+// --- Comparative two-period export (UC-R2 alt flow R2.b) ------------------
+//
+// Loads claimant + both fiscal periods, asserts they belong to the claimant,
+// computes T661 totals for each, and builds the per-field / per-project diff.
+// Comparative runs are intentionally NOT persisted in `t661_exports` — that
+// table is reserved for filing snapshots. The download endpoint below
+// re-computes on demand from the period ids passed in the query string.
+function loadComparePayload({ claimant_id, period_a_id, period_b_id }) {
+  if (!Number.isInteger(claimant_id)) throw badRequest('claimant_id required');
+  if (!Number.isInteger(period_a_id)) throw badRequest('period_a_id required');
+  if (!Number.isInteger(period_b_id)) throw badRequest('period_b_id required');
+  if (period_a_id === period_b_id) throw badRequest('period_a_id and period_b_id must differ');
+
+  const claimant = db.prepare(`SELECT * FROM claimants WHERE id = ?`).get(claimant_id);
+  if (!claimant) throw notFound('claimant not found');
+  const periodA = db.prepare(`SELECT * FROM fiscal_periods WHERE id = ?`).get(period_a_id);
+  if (!periodA) throw notFound('period A not found');
+  const periodB = db.prepare(`SELECT * FROM fiscal_periods WHERE id = ?`).get(period_b_id);
+  if (!periodB) throw notFound('period B not found');
+  if (periodA.claimant_id !== claimant.id)
+    throw badRequest('period A does not belong to claimant');
+  if (periodB.claimant_id !== claimant.id)
+    throw badRequest('period B does not belong to claimant');
+
+  const a = computeT661({ claimant, period: periodA });
+  const b = computeT661({ claimant, period: periodB });
+  const diff = buildCompareDiff(a, b);
+  return { claimant, periodA, periodB, a, b, diff };
+}
+
+router.post('/t661/compare', (req, res, next) => {
+  try {
+    const { claimant_id, period_a_id, period_b_id } = req.body ?? {};
+    const { a, b, diff } = loadComparePayload({
+      claimant_id: Number(claimant_id),
+      period_a_id: Number(period_a_id),
+      period_b_id: Number(period_b_id),
+    });
+    res.json({ a, b, diff });
+  } catch (e) { next(e); }
+});
+
+router.get('/compare/download', (req, res, next) => {
+  try {
+    const { claimant_id, period_a, period_b } = req.query;
+    const { claimant, a, b, diff } = loadComparePayload({
+      claimant_id: Number(claimant_id),
+      period_a_id: Number(period_a),
+      period_b_id: Number(period_b),
+    });
+    const format = String(req.query.format ?? 'json').toLowerCase();
+    const baseName = `t661-compare-${claimant.id}-${period_a}-vs-${period_b}`;
+
+    if (format === 'json') {
+      res.setHeader('content-disposition', `attachment; filename="${baseName}.json"`);
+      res.setHeader('content-type', 'application/json');
+      res.send(JSON.stringify({ a, b, diff }, null, 2));
+    } else if (format === 'csv') {
+      res.setHeader('content-disposition', `attachment; filename="${baseName}.csv"`);
+      res.setHeader('content-type', 'text/csv');
+      res.send(toCsvCompare(a, b, diff));
+    } else if (format === 'md' || format === 'markdown') {
+      res.setHeader('content-disposition', `attachment; filename="${baseName}.md"`);
+      res.setHeader('content-type', 'text/markdown');
+      res.send(toMarkdownCompare(a, b, diff));
+    } else if (format === 'pdf') {
+      res.setHeader('content-disposition', `attachment; filename="${baseName}.pdf"`);
+      res.setHeader('content-type', 'application/pdf');
+      toPdfCompare(a, b, diff).pipe(res);
+    } else {
+      throw badRequest('format must be json|csv|md|pdf');
+    }
   } catch (e) { next(e); }
 });
 
