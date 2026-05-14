@@ -13,6 +13,8 @@
     "seed:admin": "node src/scripts/seed-admin.js",
     "seed:etc": "node src/scripts/seed-etc.js",
     "seed:data": "node src/scripts/seed-data.js",
+    "backup": "node tools/backup.js",
+    "cleanup:bundles": "node tools/cleanup-bundles.js",
     "test": "node --test 'tests/**/*.test.js'"
   },
   "dependencies": {

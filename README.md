@@ -39,6 +39,8 @@ npm run seed:data         # ~150 labour entries, 12 expenses, 11 evidence items 
 | `npm run seed:admin -- --email=... --name="..."` | Create or re-invite the first admin; prints a fresh magic link. |
 | `npm run seed:etc` | Idempotent: create/rename claimant 1 to ETC, FY2026 period, four employees with comp rows, and four SR&ED projects with realistic narratives. |
 | `npm run seed:data` | Idempotent demo data on top of `seed:etc`: project assignments, labour, expenses, evidence files. |
+| `npm run backup` | Online snapshot of `data/sred.db` (WAL-safe) plus a tarball of `uploads/` into `data/backups/<timestamp>.db`. Prunes snapshots older than `BACKUP_RETENTION_DAYS` (default 30). |
+| `npm run cleanup:bundles` | Delete `data/bundles/*.zip` older than `BUNDLE_RETENTION_DAYS` (default 90) and null the matching `t661_exports.bundle_path` so the API rebuilds on demand. |
 
 ## Environment
 
@@ -106,6 +108,48 @@ uploads/                   Evidence files (gitignored)
 - **Revision-versioned narratives.** Editing a project's title / narrative / type / phase / manager appends a row to `project_revisions`, so a filed T661's `project_revisions_json` snapshot is bit-identical to what the tax preparer received.
 - **Admin self-actions auto-approve.** Labour and expenses an admin submits skip the review queue and land in `status='approved'`, with the admin recorded as the reviewer.
 - **One person → many claimants.** A single `users` row can attach to several claimants via `user_claimants`, each with its own compensation history and specified-employee flag.
+
+## Backup and restore
+
+`data/sred.db` is the entire system of record — claimants, projects, labour, expenses, evidence metadata, audit log, refresh tokens, passkey credentials. Hot-copying the file while WAL is in use produces a torn snapshot; always use `npm run backup`, which calls SQLite's online-backup API (`db.backup(...)`) and cooperates with concurrent writers.
+
+```sh
+npm run backup                      # one-off snapshot
+BACKUP_RETENTION_DAYS=14 npm run backup   # tighter retention
+```
+
+Outputs land under `data/backups/`:
+
+- `<YYYY-MM-DDTHH-MM-SS>.db` — the database snapshot
+- `uploads-<YYYY-MM-DDTHH-MM-SS>.tar.gz` — tarball of `uploads/` (skipped if empty / `tar` not on `$PATH`)
+
+Snapshots and their matching upload tarballs older than `BACKUP_RETENTION_DAYS` (default **30**) are pruned on each run.
+
+**Recommended cadence.** A nightly cron is enough for most deployments — the DB is small and `db.backup()` is cheap. Example:
+
+```cron
+# /etc/cron.d/sred-backup
+0 3 * * *  sred-user  cd /opt/sred && /usr/bin/npm run backup >> /var/log/sred-backup.log 2>&1
+```
+
+Or via a systemd timer: a `OnCalendar=daily` unit invoking `ExecStart=/usr/bin/npm run backup` from `WorkingDirectory=/opt/sred`. For off-host durability, point cron at a script that runs `npm run backup` and then `rsync`s `data/backups/` to S3 / an offsite host.
+
+### Restoring
+
+1. Stop the server (`systemctl stop sred` or whatever your supervisor uses).
+2. Move the live DB and its WAL/SHM sidecars out of the way: `mv data/sred.db{,.broken} && rm -f data/sred.db-wal data/sred.db-shm`.
+3. Copy the chosen snapshot into place: `cp data/backups/2026-05-14T03-00-00.db data/sred.db`.
+4. (Optional) Restore the matching uploads tarball: `tar -xzf data/backups/uploads-2026-05-14T03-00-00.tar.gz` from the repo root (the tarball preserves the `uploads/` prefix).
+5. Start the server.
+
+### What's NOT backed up
+
+- `data/bundles/*.zip` — these are evidence-package zips built on demand from `t661_exports` rows. The DB carries the totals, project revisions, and the evidence manifest, so any bundle can be rebuilt by POSTing `/api/exports/:id/evidence-package` again. Skipping them keeps the backup tarball small and avoids re-snapshotting the same content nightly.
+- `data/sred.db-wal` / `data/sred.db-shm` — these are SQLite's WAL companions. The online-backup API captures their state atomically into the snapshot, so the restored file is internally consistent without them.
+
+### Disk pressure
+
+`uploads/` (25 MB × N) and `data/bundles/` (the export zips) are the two unbounded directories. Run `npm run cleanup:bundles` periodically to prune old bundles; closed fiscal periods retain their evidence by design, so `uploads/` only shrinks via the regular delete path (open periods) or operator action.
 
 ## Docs
 
