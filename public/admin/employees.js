@@ -134,7 +134,16 @@ function bindUserRowActions(el, ctx) {
       btn.disabled = true;
       try {
         const r = await api('POST', `/api/users/${id}/invite`);
-        alert(`Magic link (also emailed):\n\n${r.magic_link}\n\nPurpose: ${r.purpose}\nExpires: ${r.expires_at}`);
+        // The raw magic link is no longer returned by the API (it would let
+        // any admin silently mint a sign-in link for another admin). Surface
+        // delivery status instead. When SMTP is disabled the link is logged
+        // to the server console.
+        const target = allUsers.find(u => String(u.id) === String(id));
+        const email = target?.email || 'the user';
+        const where = r.delivered
+          ? `Sent to ${email}`
+          : 'Logged to server console (SMTP disabled)';
+        alert(`${where}\n\nPurpose: ${r.purpose}\nExpires: ${r.expires_at}`);
       } catch (e) {
         alert(e.message);
       } finally {
