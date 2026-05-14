@@ -67,13 +67,26 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 - [ ] [P3] Inline SQL is fine at this scale, but if the schema keeps growing, a thin `repositories/` layer would make handlers more testable.
 - [ ] [P3] Three different "new X" form patterns coexist (toggle-card, inline-expansion, separate page). Pick one.
 
-## Reviews to run
+## Security
 
-- [ ] [P1] **Vulnerability review.** Audit the codebase for security issues — OWASP top 10 surface (authn/authz gaps, SQL injection, XSS in the SPA renderers, path traversal in evidence downloads / bundle paths, IDOR on tenant-scoped resources, JWT/refresh handling, WebAuthn ceremony correctness, file-upload validation, rate limiting, secret handling, CORS, error-message leakage). Produce a ranked report with severity + concrete fix suggestion per finding.
+Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 critical, 2 high, 5 medium, 4 low/info (11 findings). High-priority items below; full evidence + fix suggestions in the report.
+
+- [ ] [P1] **V-01 (High) Stored XSS via `javascript:` URLs in evidence link items.** `public/api.js:423,437` and `public/employee/activity.js:75` render `<a href="${esc(url)}">` without validating the URL scheme. `esc()` doesn't strip `javascript:`/`data:`/`vbscript:`. An employee can hand an admin clickable script execution. Fix: scheme allowlist (`http:`/`https:`/`mailto:`) at both write and render time, plus a CSP header.
+- [ ] [P1] **V-02 (High) Default `JWT_SECRET=change-me` boots without complaint.** `src/config.js:10` only rejects empty values. A deploy that forgets to override the env var signs JWTs with the known string → unauthenticated total compromise. Fix: reject known weak values + enforce ≥32 chars at startup.
+- [ ] [P2] **V-03 (Med) Refresh-token replay doesn't invalidate the family.** `src/auth/refresh.js:18-36` revokes the replayed token but leaves siblings live. Treat replay as theft: revoke all `WHERE user_id = ? AND revoked_at IS NULL`.
+- [ ] [P2] **V-04 (Med) No rate limiting anywhere.** Recovery flood, magic-link spam, `webauthn_challenges` table-fill DoS. Add `express-rate-limit` on the auth endpoints and a reaper for stale challenges.
+- [ ] [P2] **V-05 (Med) Evidence upload accepts any MIME / any extension.** Compounds V-01 for offline bundle consumers. Add `fileFilter` allowlist + normalize stored extension against detected MIME.
+- [ ] [P2] **V-06 (Med) `POST /api/users/:id/invite` returns the raw magic-link in the response body.** Lets any admin silently mint a sign-in link for any other admin and impersonate them. Stop returning the link; rely on SMTP. Consider a second-admin countersignature on admin-targeted invites.
+- [ ] [P3] **V-07 (Low) Single-origin WebAuthn `expectedOrigin`** — hardening only; accept a frozen array if multi-tunnel deployment is anticipated.
+- [ ] [P3] **V-08 (Low) `audit_log` has no append-only enforcement at the DB layer.** Add `RAISE(ABORT)` triggers on `UPDATE`/`DELETE`. Optionally hash-chain rows.
+- [ ] [P3] **V-09 (Low) Stale WebAuthn challenges accumulate.** Delete expired rows on each new `storeChallenge`.
+- [ ] [P3] **V-10 (Low) `nodemailer` 6.x DoS advisory `GHSA-rcmh-qjqh-p98v`.** Bump to ^7.0.11 or ^8.0.4. Realistic exposure is low (we only feed it server-constructed addresses).
+- [ ] [P3] **V-11 (Low) Refresh token in `localStorage`; JWT in `sessionStorage`.** Exfiltrated by any XSS (V-01 makes this realisable today). Long-term: move refresh to `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/api/auth/refresh`. Short-term: ship a CSP banning inline scripts.
 
 ## Done
 
 - [x] **UI use-case audit** — see [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). 8 of 12 use cases fully reachable, 4 partial, 0 missing; action items distilled into "UI: missing / partial use cases" above.
 - [x] **UI usability review** — see [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top 10 ranked recommendations + detailed findings by category; action items distilled into "UI: usability" above.
+- [x] **Vulnerability review** — see [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). 11 findings tracked in "Security" section above.
 - [x] **Unit tests for `lib/format.js`** — 9 tests added.
 - [x] **Unit tests for `auth/tokens.js`** — 10 tests added, uncovered a real purpose-enforcement gap (tracked in "Correctness / bugs" above).
