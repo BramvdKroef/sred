@@ -8,9 +8,9 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 
 From [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md). Verdict: not ready for production; pilot-acceptable after these.
 
-- [ ] [P1] **`app.set('trust proxy', …)` is missing.** Behind any reverse proxy every IP-keyed rate limiter collapses into one shared bucket (`req.ip` becomes the proxy's loopback) — silently voids V-04.
-- [ ] [P1] **No SIGTERM/SIGINT shutdown hook.** `systemctl restart` cuts in-flight ZIP/PDF streams, leaves partials in `data/bundles/`, never calls `db.close()` to flush WAL. Also: no `unhandledRejection` handler.
-- [ ] [P1] **No backup or retention strategy.** `cp data/sred.db` is unsafe under WAL — use `db.backup()` or `VACUUM INTO`. `uploads/` + `data/bundles/` + `email_tokens` grow unboundedly; `email_tokens` is never reaped.
+- [x] ~~**`app.set('trust proxy', …)`.**~~ Honours `TRUST_PROXY` env var (default 1, single proxy hop). `req.ip` now resolves to the real client; V-04 rate limiters work as intended.
+- [x] ~~**SIGTERM/SIGINT shutdown hook.**~~ `shutdown()` closes the listener, drains in-flight, calls `db.close()` to flush WAL. 10s force-exit safety. Also: `unhandledRejection` exits 1 so a supervisor restarts.
+- [x] ~~**Backup + retention strategy.**~~ `npm run backup` (WAL-safe via `db.backup()`, tars `uploads/`, default 30-day retention). `npm run cleanup:bundles` (default 90-day). `email_tokens` is reaped on each mint (V-09 pattern). README has a Backup-and-restore section.
 - [ ] [P2] **Structured logging.** Currently `console.log` / `console.error`. Operators need request-id, user-id, route correlation.
 - [ ] [P2] **Health / readiness endpoints** (`/healthz`, `/ready`) for load-balancer probes.
 - [ ] [P3] Error-monitoring hook (Sentry/Honeybadger integration point).
@@ -20,16 +20,16 @@ From [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md). Verdict: 
 
 From [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md) and [RENDER_REVIEW.md](RENDER_REVIEW.md) (24 axe-critical + 301 axe-serious violations across 64 page captures).
 
-- [ ] [P1] **`--text-muted` (`#6b7480`) fails WCAG AA contrast across the SPA.** 4.04:1 on `--surface`, 3.79:1 on `--bg`. Affects every `.muted` paragraph, form label, inactive tab, metric caption. Pick a darker grey (≥4.5:1 on both backgrounds) and the rest of the SPA inherits the fix.
-- [ ] [P1] **`<select>` and form inputs lack accessible names** on review/employees/audit/Add-employee. 14 + 10 axe-critical nodes. Add `<label for="…">` or `aria-label=`.
-- [ ] [P1] **Missing `:focus` styles** on `button`, `nav.tabs button`, `.summary-link`, `<summary>`. Only `<input>` gets a focus ring today.
-- [ ] [P1] **`.pill.kind-sred` fails AA contrast** (`#0078b5` on `#e6f2f9` = 4.23:1). Single CSS fix.
-- [ ] [P1] **Mobile tables overflow page-level scroll** on `#review`, `#employees`, `#activity` (577/495/612 px). The mobile-tables CSS-selector approach skipped these three for some reason — verify and apply.
+- [x] ~~**`--text-muted` contrast.**~~ Token bumped to `#5a6470` (4.93:1 on surface, 4.62:1 on bg).
+- [x] ~~**`<select>` and form inputs without accessible names.**~~ 9 `aria-label` adds on filter selects/textarea; ~120 controls converted from sibling-label to wrapping-label across 8 files.
+- [x] ~~**`:focus` styles.**~~ Unified `:focus-visible` outline (brand-blue on light backgrounds, white on the header gradient) for buttons, tabs, `.summary-link`, `<summary>`, `.card a`.
+- [x] ~~**`.pill.kind-sred` contrast.**~~ Foreground now `--brand-dark` (~5.4:1).
+- [x] ~~**Mobile tables overflow.**~~ Selector broadened from `.card > table` to `.card table` so the `#all-users-table` wrapper div doesn't escape the rule.
 - [ ] [P2] **Two `<h1>`s per page.** The brand strip "Precision SR&ED" is an `<h1>`, plus each page emits its own. Demote one.
-- [ ] [P2] **No `<main>` wrapper** on overview + login. Wrap content for screen readers / landmark navigation.
-- [ ] [P2] **`.loading` (`#9aa3ad` ≈ 2.36:1)** and **`.error-banner` text (`--accent-dark` ≈ 3.96:1)** fail AA. Pick stronger values.
-- [ ] [P2] **CSP `connect-src 'self'` blocks Google Fonts.** The font-src allows fonts.googleapis.com / fonts.gstatic.com but the fetch URL goes through connect-src. Add the two font hosts there.
-- [ ] [P3] **Employee Overview speculatively hits `/api/claimants` (admin-only)** → 403 + console error on every page load. Remove or guard the call.
+- [ ] [P2] **No `<main>` wrapper** on overview + login.
+- [x] ~~**`.loading` and `.error-banner` contrast.**~~ `.loading` uses `--text-muted` now; `.error-banner` text bumped to `#8a2521` (~7:1).
+- [x] ~~**CSP fonts**.~~ `connect-src` now allows `fonts.googleapis.com` + `fonts.gstatic.com`.
+- [ ] [P3] **Employee Overview speculatively hits `/api/claimants` (admin-only)** → 403 + console error on every page load.
 
 ## Correctness / bugs
 
@@ -108,7 +108,7 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 
 From [RELIABILITY_REVIEW.md](RELIABILITY_REVIEW.md).
 
-- [ ] [P2] **Concurrent narrative PATCH silently overwrites.** `src/routes/projects.js:65` is read-modify-write with no version check. Two admins editing the same narrative produce last-write-wins (only `project_revisions` records the loss). Add an `If-Match: <updated_at>` precondition.
+- [x] ~~**Concurrent narrative PATCH silently overwrites.**~~ Fixed: strict `__updated_at` precondition (missing = 400, mismatch = 409). Server uses millisecond-precision `strftime('%Y-%m-%d %H:%M:%f', 'now')` to handle same-second PATCHes. Client snapshots `updated_at` at form-bind and shows a "reload-and-retry" banner on 409. Other PATCH routes audited — only `projects` has the narrative co-edit risk; others target narrow scalars where loss is small/visible.
 - [ ] [P2] **SMTP invite returns lying `delivered:true`.** `src/routes/users.js:292` fires `sendMagicLink(...).catch(...)` unawaited; response goes before the send completes; nodemailer has no timeout. On 5xx/timeout the link only appears on stderr. Either await with a timeout, or return `delivery_status: 'queued'`.
 - [ ] [P2] **`isOwnerOrAdmin` doesn't check `user_claimants.status`.** Deactivated employees can still PATCH/DELETE their own rows for the JWT TTL. Add the status check.
 - [ ] [P3] **SQLITE_BUSY** under concurrent writers — no retry; user gets a 500. Wrap mutations with a small retry-on-busy.
@@ -143,7 +143,7 @@ From [SRED_DOMAIN_REVIEW.md](SRED_DOMAIN_REVIEW.md). **The agent did this withou
 - [x] ~~`auth/jwt.js`~~ (7 tests)
 - [x] ~~`lib/wage-caps.js`~~ (6 tests)
 - [x] ~~**Route-level integration tests.**~~ 18 new tests across three files: `close-period.test.js` (10), `t661-export-roundtrip.test.js` (7), `audit-log-writes.test.js` (1 parameterised covering 11 endpoints). Caught: admin-logged labour auto-approves into `status='approved'` which immediately locks it from PATCH via `assertEditable` — admin can't fix a typo on their own on-behalf entry without reject-then-edit-then-re-approve. Flagged for follow-up.
-- [ ] [P1] **`src/auth/middleware.js` is untested.** Every protected route runs through it; cover missing/expired/bad-signature tokens, deactivated users, role mismatches. Test-strategy agent flagged this as the highest single-test ROI.
+- [x] ~~**`src/auth/middleware.js` is untested.**~~ 19 new negative-path tests added. `requireAuth` does validate user status (`!== 'active'` → 401). Worth flagging: every JWT-library error surfaces as generic `"unauthorized"` but the deactivated path leaks `"user not active"` — a 401 with that exact message confirms the token was crypto-valid + the user exists (minor enumeration vector).
 - [ ] [P2] **Cross-tenant isolation tests.** Seed 2 claimants + walk every endpoint as a wrong-claimant employee to prove `isOwnerOrAdmin`/`assertAttached` are wired everywhere.
 - [ ] [P2] **`src/auth/webauthn.js` is untested** — counter regression, expired/replayed challenges, unknown credential.
 - [ ] [P3] **`src/lib/email.js` is untested** — silent invite regressions would slip through.
