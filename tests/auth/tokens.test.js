@@ -277,6 +277,41 @@ test('expires_at on a freshly-minted token reflects the configured TTL for the p
   assert.equal(row.expires_at, expiresAt);
 });
 
+// --- On-the-fly reaper -------------------------------------------------------
+
+test('mintEmailToken reaps rows whose expires_at is in the past', () => {
+  // Mirrors the V-09 webauthn_challenges reaper pattern: each mint sweeps
+  // out rows whose TTL has elapsed so the table cannot grow unbounded.
+  const userId = insertUser(ctx.db);
+  const { raw: firstRaw } = mintEmailToken(userId, 'invite');
+
+  // Force the first row's expiry into the past.
+  ctx.db.prepare(
+    `UPDATE email_tokens SET expires_at = '2020-01-01' WHERE token_hash = ?`
+  ).run(sha256Hex(firstRaw));
+
+  // Sanity: the expired row still exists before the next mint runs.
+  const rowsBefore = ctx.db.prepare(`SELECT * FROM email_tokens`).all();
+  assert.equal(rowsBefore.length, 1);
+
+  // A second mint should both insert a fresh row AND sweep the expired one.
+  const { raw: secondRaw } = mintEmailToken(userId, 'invite');
+  const rowsAfter = ctx.db.prepare(`SELECT * FROM email_tokens`).all();
+  assert.equal(rowsAfter.length, 1, 'expired row should have been reaped');
+  assert.equal(rowsAfter[0].token_hash, sha256Hex(secondRaw),
+    'only the freshly-minted token should remain');
+
+  // The old raw token is no longer findable.
+  assert.throws(
+    () => findValidEmailToken(firstRaw, 'invite'),
+    err => {
+      assert.equal(err.status, 401);
+      assert.match(err.message, /invalid token/);
+      return true;
+    }
+  );
+});
+
 // --- Unknown / malformed token ----------------------------------------------
 
 test('findValidEmailToken rejects an unknown token string', () => {

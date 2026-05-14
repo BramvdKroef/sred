@@ -11,6 +11,11 @@ const TTL_MINUTES = {
 
 export function mintEmailToken(userId, purpose) {
   if (!TTL_MINUTES[purpose]) throw badRequest(`unknown token purpose: ${purpose}`);
+  // Opportunistic reaper: every mint clears any rows whose TTL has elapsed.
+  // Mirrors the V-09 pattern used for webauthn_challenges. Negligible cost
+  // (indexed scan over a small table bounded by rate limiters) and avoids
+  // the operator chore of a periodic cleanup job.
+  db.prepare(`DELETE FROM email_tokens WHERE expires_at < datetime('now')`).run();
   const raw = randomToken(32);
   const tokenHash = sha256(raw);
   const ttl = TTL_MINUTES[purpose]();
