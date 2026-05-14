@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { getProject } from '../lib/route-helpers.js';
 
@@ -66,6 +66,26 @@ router.patch('/:id', (req, res, next) => {
   try {
     const before = getProject(req.params.id);
 
+    // Optimistic-concurrency precondition. The client MUST send back the
+    // `updated_at` it saw when it loaded the edit form. If it doesn't match
+    // the current row, somebody else has saved a newer version in the
+    // intervening window — reject with 409 so the user is told to reload
+    // instead of silently clobbering the other admin's edit.
+    //
+    // Strict mode: a missing `__updated_at` is a 400 (not silent acceptance).
+    // The bug we're closing is data loss; better to fail loudly on misuse
+    // than to leave the door open for legacy callers to clobber.
+    const expectedUpdatedAt = req.body?.__updated_at;
+    if (expectedUpdatedAt === undefined || expectedUpdatedAt === null) {
+      throw badRequest('__updated_at required on PATCH (optimistic-concurrency precondition)');
+    }
+    if (expectedUpdatedAt !== before.updated_at) {
+      throw conflict(
+        'project was modified by another admin since you loaded the form — reload to see the latest version, then re-apply your changes',
+        { current_updated_at: before.updated_at },
+      );
+    }
+
     const updates = {};
     for (const k of EDITABLE_FIELDS) {
       if (req.body && k in req.body) updates[k] = req.body[k];
@@ -89,10 +109,38 @@ router.patch('/:id', (req, res, next) => {
 
     const snapshotNeeded = SNAPSHOT_FIELDS.some(k => k in updates && updates[k] !== before[k]);
 
+    // Re-check the precondition inside the transaction so the read of
+    // updated_at and the UPDATE are serialised by SQLite's writer lock.
+    // Without this, two requests could both pass the precondition above
+    // before either lands its UPDATE. better-sqlite3 is synchronous so
+    // the window is sub-millisecond, but the transactional re-check is
+    // free insurance and makes the contract independent of the driver's
+    // execution model.
+    //
+    // We also generate the new `updated_at` with millisecond precision
+    // (strftime('%Y-%m-%d %H:%M:%f') instead of datetime('now')) and
+    // guarantee it's strictly greater than the previous value. SQLite's
+    // datetime('now') has only second precision, so two PATCHes that
+    // land in the same second would produce identical updated_at values
+    // and break the optimistic-concurrency contract for any subsequent
+    // request that observed the post-first-write state.
+    let raceLost = false;
     const tx = db.transaction(() => {
-      const setClause = keys.map(k => `${k} = ?`).join(', ') + `, updated_at = datetime('now')`;
+      const current = db.prepare(`SELECT updated_at FROM projects WHERE id = ?`).get(before.id);
+      if (!current || current.updated_at !== expectedUpdatedAt) {
+        raceLost = true;
+        return;
+      }
+      // Strictly-monotonic next stamp. If wall-clock ms <= current, bump
+      // current by 1 ms and use that. Otherwise use wall-clock ms.
+      const nowMs = db.prepare(`SELECT strftime('%Y-%m-%d %H:%M:%f', 'now') AS t`).get().t;
+      const bumped = db.prepare(`SELECT strftime('%Y-%m-%d %H:%M:%f', ?, '+0.001 second') AS t`)
+        .get(current.updated_at).t;
+      const newUpdatedAt = nowMs > current.updated_at ? nowMs : bumped;
+
+      const setClause = keys.map(k => `${k} = ?`).join(', ') + `, updated_at = ?`;
       db.prepare(`UPDATE projects SET ${setClause} WHERE id = ?`)
-        .run(...keys.map(k => updates[k]), before.id);
+        .run(...keys.map(k => updates[k]), newUpdatedAt, before.id);
 
       if (snapshotNeeded) {
         const merged = { ...before, ...updates };
@@ -115,6 +163,14 @@ router.patch('/:id', (req, res, next) => {
       }
     });
     tx();
+
+    if (raceLost) {
+      const current = getProject(before.id);
+      throw conflict(
+        'project was modified by another admin since you loaded the form — reload to see the latest version, then re-apply your changes',
+        { current_updated_at: current.updated_at },
+      );
+    }
 
     const after = getProject(before.id);
     audit(req.user.id, 'update', 'project', before.id, before, after);

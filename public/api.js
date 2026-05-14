@@ -71,7 +71,17 @@ export async function api(method, path, body, { _retry = false } = {}) {
   }
   if (r.status === 204) return null;
   let data; try { data = await r.json(); } catch { data = {}; }
-  if (!r.ok) throw new Error(data.error?.message || `HTTP ${r.status}`);
+  if (!r.ok) {
+    // Attach the HTTP status + error code so callers that need to branch
+    // (e.g. 409 conflict on optimistic-concurrency PATCHes) can do so
+    // without parsing the message. The .message stays as the server's
+    // human-readable text so the default inline-banner path keeps working.
+    const err = new Error(data.error?.message || `HTTP ${r.status}`);
+    err.status = r.status;
+    err.code = data.error?.code;
+    err.details = data.error?.details;
+    throw err;
+  }
   return data;
 }
 
