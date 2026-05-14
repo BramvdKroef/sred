@@ -144,25 +144,28 @@ function renderFilterBar(state, employees, current) {
     <div class="card" style="padding:0.6rem 0.9rem; margin-bottom:0.6rem">
       <form id="review-filters" class="row" style="gap:0.6rem; align-items:flex-end; flex-wrap:wrap; margin:0">
         <div>
-          <label style="display:block; font-size:0.85rem">Period</label>
-          <select name="period_id">
-            <option value="">Any period</option>
-            ${state.periods.map(periodOpt).join('')}
-          </select>
+          <label style="display:block; font-size:0.85rem">Period
+            <select name="period_id" aria-label="Filter by period">
+              <option value="">Any period</option>
+              ${state.periods.map(periodOpt).join('')}
+            </select>
+          </label>
         </div>
         <div>
-          <label style="display:block; font-size:0.85rem">Project</label>
-          <select name="project_id">
-            <option value="">Any project</option>
-            ${state.projects.map(projectOpt).join('')}
-          </select>
+          <label style="display:block; font-size:0.85rem">Project
+            <select name="project_id" aria-label="Filter by project">
+              <option value="">Any project</option>
+              ${state.projects.map(projectOpt).join('')}
+            </select>
+          </label>
         </div>
         <div>
-          <label style="display:block; font-size:0.85rem">Employee</label>
-          <select name="employee_uc_id">
-            <option value="">Any employee</option>
-            ${employees.map(employeeOpt).join('')}
-          </select>
+          <label style="display:block; font-size:0.85rem">Employee
+            <select name="employee_uc_id" aria-label="Filter by employee">
+              <option value="">Any employee</option>
+              ${employees.map(employeeOpt).join('')}
+            </select>
+          </label>
         </div>
         <button type="button" class="small secondary" data-filter-reset>Reset</button>
       </form>
@@ -276,6 +279,7 @@ function bulkReject(main, selected, ctx) {
     <div style="display:flex; flex-direction:column; gap:0.4rem; width:100%">
       <div><strong>${selected.length}</strong> selected · enter a single rejection reason (applied to all)</div>
       <textarea data-bulk-reason rows="2" style="width:100%; box-sizing:border-box"
+                aria-label="Rejection reason (applied to all selected entries)"
                 placeholder="Why these entries are being rejected (visible to the submitter)"></textarea>
       <div class="actions">
         <button class="small danger" data-bulk-reject-go>Reject ${selected.length}</button>
@@ -337,8 +341,9 @@ function openRejectEditor(main, kind, id, ctx) {
 
   cell.innerHTML = `
     <form data-reject-form="${kind}-${id}" class="reject-editor" style="padding:0.6rem 0.9rem; background:#fafbfc; border:1px solid var(--border); border-radius:4px">
-      <label style="display:block; font-size:0.88rem; margin-bottom:0.3rem">Rejection reason</label>
-      <textarea name="reason" rows="2" required style="width:100%; box-sizing:border-box" placeholder="Why this entry is being rejected (visible to the submitter)"></textarea>
+      <label style="display:block; font-size:0.88rem; margin-bottom:0.3rem">Rejection reason
+        <textarea name="reason" rows="2" required style="width:100%; box-sizing:border-box" placeholder="Why this entry is being rejected (visible to the submitter)"></textarea>
+      </label>
       <div class="actions" style="margin-top:0.4rem">
         <button type="submit" class="small danger">Submit rejection</button>
         <button type="button" class="small secondary" data-reject-cancel>Cancel</button>

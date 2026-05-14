@@ -48,25 +48,25 @@ function renderUsersTab(ctx, users) {
       </div>
       <form id="add-employee-form" data-mode="create">
         <div class="grid">
-          <div><label>Email</label><input name="email" type="email" required
-            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
-          <div data-only-create><label>Name</label><input name="name"
-            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
-          <div data-only-create><label>Role</label>
+          <div><label>Email <input name="email" type="email" required
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label></div>
+          <div data-only-create><label>Name <input name="name"
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label></div>
+          <div data-only-create><label>Role
             <select name="role">
               <option value="employee" selected>Employee</option>
               <option value="manager">Manager</option>
             </select>
-          </div>
-          <div><label>Claimant</label><select name="claimant_id">${claimantOpts}</select></div>
-          <div><label>Title</label><input name="title"
-            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
-          <div><label>Employment start date</label><input name="employment_start_date" type="date"></div>
-          <div><label title="${esc(TIP_COMP_TYPE)}">Comp type</label>
+          </label></div>
+          <div><label>Claimant <select name="claimant_id">${claimantOpts}</select></label></div>
+          <div><label>Title <input name="title"
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label></div>
+          <div><label>Employment start date <input name="employment_start_date" type="date"></label></div>
+          <div><label title="${esc(TIP_COMP_TYPE)}">Comp type
             <select name="comp_type" data-comp-type-for="add-employee" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select>
-          </div>
-          <div><label>Amount <span class="muted" data-comp-unit-for="add-employee">($/yr)</span></label><input name="amount" type="number" step="0.01" min="0" placeholder="e.g. 95000.00" required></div>
-          <div><label>Effective from</label><input name="effective_from" type="date"></div>
+          </label></div>
+          <div><label>Amount <span class="muted" data-comp-unit-for="add-employee">($/yr)</span> <input name="amount" type="number" step="0.01" min="0" placeholder="e.g. 95000.00" required></label></div>
+          <div><label>Effective from <input name="effective_from" type="date"></label></div>
           <div><label title="${esc(TIP_SPECIFIED)}"><input name="is_specified_employee" type="checkbox" title="${esc(TIP_SPECIFIED)}"> Specified employee</label></div>
         </div>
         <div id="add-employee-existing" class="muted" hidden style="margin:0.4rem 0; padding:0.5rem; border:1px solid var(--accent, #bbb); border-radius:4px"></div>
@@ -78,17 +78,17 @@ function renderUsersTab(ctx, users) {
         <p class="muted" style="margin-top:0">Use this when the person already exists under another claimant. Enter their email, fill in the per-claimant details, and submit.</p>
         <form id="attach-existing-form">
           <div class="grid">
-            <div><label>Email</label><input name="email" type="email" required
-              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
-            <div><label>Claimant</label><select name="claimant_id">${claimantOpts}</select></div>
-            <div><label>Title</label><input name="title"
-              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
-            <div><label>Employment start date</label><input name="employment_start_date" type="date"></div>
-            <div><label title="${esc(TIP_COMP_TYPE)}">Comp type</label>
+            <div><label>Email <input name="email" type="email" required
+              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label></div>
+            <div><label>Claimant <select name="claimant_id">${claimantOpts}</select></label></div>
+            <div><label>Title <input name="title"
+              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></label></div>
+            <div><label>Employment start date <input name="employment_start_date" type="date"></label></div>
+            <div><label title="${esc(TIP_COMP_TYPE)}">Comp type
               <select name="comp_type" data-comp-type-for="attach-existing" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select>
-            </div>
-            <div><label>Amount <span class="muted" data-comp-unit-for="attach-existing">($/yr)</span></label><input name="amount" type="number" step="0.01" min="0" placeholder="e.g. 95000.00" required></div>
-            <div><label>Effective from</label><input name="effective_from" type="date"></div>
+            </label></div>
+            <div><label>Amount <span class="muted" data-comp-unit-for="attach-existing">($/yr)</span> <input name="amount" type="number" step="0.01" min="0" placeholder="e.g. 95000.00" required></label></div>
+            <div><label>Effective from <input name="effective_from" type="date"></label></div>
             <div><label title="${esc(TIP_SPECIFIED)}"><input name="is_specified_employee" type="checkbox" title="${esc(TIP_SPECIFIED)}"> Specified employee</label></div>
           </div>
           <div class="actions"><button class="small">Attach</button></div>
@@ -444,12 +444,12 @@ function renderUserEditForm(u, ctx) {
 
       <form data-form="user-fields" data-user="${u.id}">
         <div class="grid">
-          <div><label>Name</label><input name="name" required value="${esc(u.name)}"></div>
-          <div><label>Role${isSelf ? ' (locked — you)' : ''}</label>
+          <div><label>Name <input name="name" required value="${esc(u.name)}"></label></div>
+          <div><label>Role${isSelf ? ' (locked — you)' : ''}
             <select name="role" ${isSelf ? 'disabled' : ''}>
               ${ROLES.map(r => `<option ${r === u.role ? 'selected' : ''}>${r}</option>`).join('')}
             </select>
-          </div>
+          </label></div>
         </div>
         <div class="actions"><button class="small">Save user fields</button></div>
       </form>
@@ -462,13 +462,13 @@ function renderUserEditForm(u, ctx) {
       <h3>Add attachment</h3>
       <form data-form="add-attachment" data-user="${u.id}">
         <div class="grid">
-          <div><label>Claimant</label><select name="claimant_id" required>${claimantOpts}</select></div>
-          <div><label>Title</label><input name="title"></div>
-          <div><label title="${esc(TIP_COMP_TYPE)}">Comp type</label>
+          <div><label>Claimant <select name="claimant_id" required>${claimantOpts}</select></label></div>
+          <div><label>Title <input name="title"></label></div>
+          <div><label title="${esc(TIP_COMP_TYPE)}">Comp type
             <select name="comp_type" data-comp-type-for="add-att-${u.id}" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select>
-          </div>
-          <div><label>Amount <span class="muted" data-comp-unit-for="add-att-${u.id}">($/yr)</span></label><input type="number" step="0.01" min="0" name="amount" placeholder="e.g. 95000.00" required></div>
-          <div><label>Effective from</label><input type="date" name="effective_from" required></div>
+          </label></div>
+          <div><label>Amount <span class="muted" data-comp-unit-for="add-att-${u.id}">($/yr)</span> <input type="number" step="0.01" min="0" name="amount" placeholder="e.g. 95000.00" required></label></div>
+          <div><label>Effective from <input type="date" name="effective_from" required></label></div>
           <div><label title="${esc(TIP_SPECIFIED)}"><input type="checkbox" name="is_specified_employee" title="${esc(TIP_SPECIFIED)}"> Specified</label></div>
         </div>
         <div class="actions"><button class="small">Add attachment</button></div>
@@ -486,16 +486,17 @@ function renderAttachmentEditor(a) {
       <form data-form="uc-fields" data-uc="${a.id}">
         <div class="row" style="gap:0.6rem; align-items:flex-end; flex-wrap:wrap">
           <div class="input-grow">
-            <label>${esc(a.claimant_name)} · attachment ${a.id}</label>
-            <input name="title" placeholder="Title" value="${esc(a.title ?? '')}">
+            <label>${esc(a.claimant_name)} · attachment ${a.id}
+              <input name="title" placeholder="Title" value="${esc(a.title ?? '')}">
+            </label>
           </div>
           <div><label class="checkbox-label" title="${esc(TIP_SPECIFIED)}"><input type="checkbox" name="is_specified_employee" ${a.is_specified_employee ? 'checked' : ''} title="${esc(TIP_SPECIFIED)}"> Specified</label></div>
-          <div><label>Status</label>
+          <div><label>Status
             <select name="status">
               <option ${a.status === 'active' ? 'selected' : ''}>active</option>
               <option ${a.status === 'inactive' ? 'selected' : ''}>inactive</option>
             </select>
-          </div>
+          </label></div>
           <div><button class="small">Save</button></div>
         </div>
       </form>
@@ -504,9 +505,9 @@ function renderAttachmentEditor(a) {
         <ul style="font-size:0.85rem; margin:0.4rem 0 0.6rem 1rem">${compHistory || '<li class="empty">none</li>'}</ul>
         <form data-form="add-comp" data-uc="${a.id}">
           <div class="row" style="gap:0.5rem; align-items:flex-end">
-            <div><label title="${esc(TIP_COMP_TYPE)}">Type</label><select name="comp_type" data-comp-type-for="add-comp-${a.id}" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select></div>
-            <div><label>Amount <span class="muted" data-comp-unit-for="add-comp-${a.id}">($/yr)</span></label><input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 95000.00" required style="width:9rem"></div>
-            <div><label>Effective from</label><input type="date" name="effective_from" required></div>
+            <div><label title="${esc(TIP_COMP_TYPE)}">Type <select name="comp_type" data-comp-type-for="add-comp-${a.id}" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select></label></div>
+            <div><label>Amount <span class="muted" data-comp-unit-for="add-comp-${a.id}">($/yr)</span> <input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 95000.00" required style="width:9rem"></label></div>
+            <div><label>Effective from <input type="date" name="effective_from" required></label></div>
             <div><button class="small secondary">＋ Add comp row</button></div>
           </div>
         </form>

@@ -33,13 +33,13 @@ function renderClaimantsTab(ctx) {
         <div id="new-claimant-form" hidden style="margin-top: 0.75rem">
           <form id="claimant-form">
             <div class="grid">
-              <div><label>Legal name</label><input name="legal_name" required></div>
-              <div><label>Business number</label><input name="business_number"></div>
-              <div><label>Fiscal year end (MM-DD)</label><input name="fye" placeholder="12-31" required></div>
-              <div><label title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate.">Reporting currency</label><input name="reporting_currency" value="CAD" title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate."></div>
-              <div class="full"><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked once set)</label>
+              <div><label>Legal name <input name="legal_name" required></label></div>
+              <div><label>Business number <input name="business_number"></label></div>
+              <div><label>Fiscal year end (MM-DD) <input name="fye" placeholder="12-31" required></label></div>
+              <div><label title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate.">Reporting currency <input name="reporting_currency" value="CAD" title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate."></label></div>
+              <div class="full"><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked once set)
                 <select name="sred_method" title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set."><option>proxy</option><option>traditional</option></select>
-              </div>
+              </label></div>
             </div>
             <div class="actions"><button class="small">Create claimant</button></div>
           </form>
@@ -58,8 +58,8 @@ function renderClaimantsTab(ctx) {
               return `
               <div id="new-period-form" hidden style="margin-top: 0.6rem">
                 <form id="period-form" class="row">
-                  <input type="date" name="start_date" required value="${start}">
-                  <input type="date" name="end_date" required value="${end}">
+                  <input type="date" name="start_date" required value="${start}" aria-label="Period start date">
+                  <input type="date" name="end_date" required value="${end}" aria-label="Period end date">
                   <button class="small">Add period</button>
                 </form>
               </div>`;
@@ -84,37 +84,37 @@ function renderProjectsAndUsers(state) {
       <div id="new-project-form" hidden style="margin-top: 1rem">
         <form id="project-form">
           <div class="grid">
-            <div class="full"><label>Title</label><input name="title" required></div>
-            <div><label>Type</label>
+            <div class="full"><label>Title <input name="title" required></label></div>
+            <div><label>Type
               <select name="type">
                 <option value="sred" selected>SR&amp;ED</option>
                 <option value="internal">Internal</option>
               </select>
-            </div>
-            <div><label>Manager</label>
+            </label></div>
+            <div><label>Manager
               <select name="manager_user_id">
                 <option value="">— none —</option>
                 ${managerOpts}
               </select>
-            </div>
-            <div><label>Field of science</label><input name="field_of_science" placeholder="e.g. Computer science"></div>
-            <div><label>Start date</label><input type="date" name="start_date" required></div>
-            <div><label>Status</label>
+            </label></div>
+            <div><label>Field of science <input name="field_of_science" placeholder="e.g. Computer science"></label></div>
+            <div><label>Start date <input type="date" name="start_date" required></label></div>
+            <div><label>Status
               <select name="status">
                 <option value="concept">Concept</option>
                 <option value="development" selected>Development</option>
                 <option value="complete">Complete</option>
               </select>
-            </div>
-            <div class="full"><label>Advancement sought</label>
+            </label></div>
+            <div class="full"><label>Advancement sought
               <textarea name="advancement_sought" rows="3" placeholder="What technological advancement is this project trying to achieve?"></textarea>
-            </div>
-            <div class="full"><label>Technological uncertainties</label>
+            </label></div>
+            <div class="full"><label>Technological uncertainties
               <textarea name="uncertainties" rows="3" placeholder="What is uncertain or not knowable from existing knowledge?"></textarea>
-            </div>
-            <div class="full"><label>Work performed</label>
+            </label></div>
+            <div class="full"><label>Work performed
               <textarea name="work_performed" rows="4" placeholder="Systematic investigation: experiments, hypotheses tested, outcomes."></textarea>
-            </div>
+            </label></div>
           </div>
           <div class="actions"><button>Create project</button></div>
         </form>
@@ -181,11 +181,11 @@ function renderEditClaimantForm(c) {
     <div id="edit-claimant-form" hidden style="margin-top: 0.75rem">
       <form id="form-edit-claimant">
         <div class="grid">
-          <div class="full"><label>Legal name</label><input name="legal_name" required value="${esc(c.legal_name)}"></div>
-          <div><label>Business number</label><input name="business_number" value="${esc(c.business_number ?? '')}"></div>
-          <div><label>Fiscal year end (MM-DD)</label><input name="fye" required value="${esc(fye)}" pattern="\\d{2}-\\d{2}"></div>
-          <div><label title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate.">Reporting currency</label><input name="reporting_currency" required value="${esc(c.reporting_currency)}" title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate."></div>
-          <div><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked)</label><input value="${esc(c.sred_method)}" disabled title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set."></div>
+          <div class="full"><label>Legal name <input name="legal_name" required value="${esc(c.legal_name)}"></label></div>
+          <div><label>Business number <input name="business_number" value="${esc(c.business_number ?? '')}"></label></div>
+          <div><label>Fiscal year end (MM-DD) <input name="fye" required value="${esc(fye)}" pattern="\\d{2}-\\d{2}"></label></div>
+          <div><label title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate.">Reporting currency <input name="reporting_currency" required value="${esc(c.reporting_currency)}" title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate."></label></div>
+          <div><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked) <input value="${esc(c.sred_method)}" disabled title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set."></label></div>
         </div>
         <div class="actions row" style="gap:0.4rem">
           <button class="small">Save claimant</button>
@@ -428,46 +428,46 @@ function renderEditProjectForm(project, managers) {
       <h2>Edit project</h2>
       <form id="form-edit-project">
         <div class="grid">
-          <div class="full"><label>Title</label>
+          <div class="full"><label>Title
             <input name="title" required value="${esc(project.title)}">
-          </div>
-          <div><label>Type</label>
+          </label></div>
+          <div><label>Type
             <select name="type">
               <option value="sred" ${selected(project.type,'sred')}>SR&amp;ED</option>
               <option value="internal" ${selected(project.type,'internal')}>Internal</option>
             </select>
-          </div>
-          <div><label>Manager</label>
+          </label></div>
+          <div><label>Manager
             <select name="manager_user_id">
               <option value="" ${!project.manager_user_id ? 'selected' : ''}>— none —</option>
               ${managerOpts}
             </select>
-          </div>
-          <div><label>Field of science</label>
+          </label></div>
+          <div><label>Field of science
             <input name="field_of_science" value="${esc(project.field_of_science ?? '')}">
-          </div>
-          <div><label>Start date</label>
+          </label></div>
+          <div><label>Start date
             <input type="date" name="start_date" required value="${esc(project.start_date)}">
-          </div>
-          <div><label>End date</label>
+          </label></div>
+          <div><label>End date
             <input type="date" name="end_date" value="${esc(project.end_date ?? '')}">
-          </div>
-          <div><label>Status</label>
+          </label></div>
+          <div><label>Status
             <select name="status">
               <option value="concept" ${selected(project.status,'concept')}>Concept</option>
               <option value="development" ${selected(project.status,'development')}>Development</option>
               <option value="complete" ${selected(project.status,'complete')}>Complete</option>
             </select>
-          </div>
-          <div class="full"><label>Advancement sought</label>
+          </label></div>
+          <div class="full"><label>Advancement sought
             <textarea name="advancement_sought" rows="3">${esc(project.advancement_sought ?? '')}</textarea>
-          </div>
-          <div class="full"><label>Technological uncertainties</label>
+          </label></div>
+          <div class="full"><label>Technological uncertainties
             <textarea name="uncertainties" rows="3">${esc(project.uncertainties ?? '')}</textarea>
-          </div>
-          <div class="full"><label>Work performed</label>
+          </label></div>
+          <div class="full"><label>Work performed
             <textarea name="work_performed" rows="4">${esc(project.work_performed ?? '')}</textarea>
-          </div>
+          </label></div>
         </div>
         <div class="actions row" style="gap:0.5rem">
           <button>Save project</button>
@@ -599,27 +599,27 @@ function renderLogOnBehalfCards(project, claimant) {
         <div id="behalf-labour-form" hidden>
           <form id="form-behalf-labour">
             <div class="grid">
-              <div class="full"><label>Employee</label>
+              <div class="full"><label>Employee
                 <select name="user_claimant_id" required>${employeeOpts}</select>
-              </div>
-              <div><label>Date</label><input type="date" name="work_date" required></div>
-              <div><label>Hours</label><input type="number" name="hours" step="0.25" min="0.25" max="24" required></div>
+              </label></div>
+              <div><label>Date <input type="date" name="work_date" required></label></div>
+              <div><label>Hours <input type="number" name="hours" step="0.25" min="0.25" max="24" required></label></div>
               <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime"> Overtime</label></div>
-              <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
+              <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
             </div>
             <details style="margin-top:0.5rem">
               <summary class="summary-link">＋ Attach evidence (optional)</summary>
               <div class="grid" style="margin-top:0.5rem">
-                <div><label>Kind</label>
+                <div><label>Kind
                   <select name="ev_kind" class="ev-kind">
                     <option value="">— none —</option>
                     <option value="file">File</option>
                     <option value="link">Link</option>
                   </select>
-                </div>
-                <div style="flex:1"><label>Caption</label><input name="ev_caption"></div>
-                <div class="full ev-file" hidden><label>File</label><input type="file" name="ev_file"></div>
-                <div class="full ev-url"  hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
+                </label></div>
+                <div style="flex:1"><label>Caption <input name="ev_caption"></label></div>
+                <div class="full ev-file" hidden><label>File <input type="file" name="ev_file"></label></div>
+                <div class="full ev-url"  hidden><label>URL <input type="url" name="ev_url" placeholder="https://…"></label></div>
               </div>
             </details>
             <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
@@ -635,28 +635,28 @@ function renderLogOnBehalfCards(project, claimant) {
         <div id="behalf-expense-form" hidden>
           <form id="form-behalf-expense">
             <div class="grid">
-              <div class="full"><label>Employee</label>
+              <div class="full"><label>Employee
                 <select name="user_claimant_id" required>${employeeOpts}</select>
-              </div>
-              <div><label>Date</label><input type="date" name="expense_date" required></div>
-              <div><label>Category</label>
+              </label></div>
+              <div><label>Date <input type="date" name="expense_date" required></label></div>
+              <div><label>Category
                 <select name="category">
                   <option value="material">material</option>
                   <option value="contract">contract</option>
                   <option value="third_party_payment">third-party payment</option>
                   <option value="overhead">overhead</option>
                 </select>
-              </div>
-              <div><label>Amount <span class="muted">(${esc(reportingCcy)})</span></label><input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></div>
-              <div><label>Currency</label><input name="currency" value="${esc(reportingCcy)}" required></div>
-              <div><label>FX rate (if not ${esc(reportingCcy)})</label><input type="number" step="0.0001" name="fx_rate"></div>
-              <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
+              </label></div>
+              <div><label>Amount <span class="muted">(${esc(reportingCcy)})</span> <input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></label></div>
+              <div><label>Currency <input name="currency" value="${esc(reportingCcy)}" required></label></div>
+              <div><label>FX rate (if not ${esc(reportingCcy)}) <input type="number" step="0.0001" name="fx_rate"></label></div>
+              <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
             </div>
             <details style="margin-top:0.5rem" open>
               <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
               <div class="grid" style="margin-top:0.5rem">
-                <div style="flex:1"><label>Caption</label><input name="receipt_caption" placeholder="e.g. Invoice #INV-..."></div>
-                <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
+                <div style="flex:1"><label>Caption <input name="receipt_caption" placeholder="e.g. Invoice #INV-..."></label></div>
+                <div class="full"><label>File <input type="file" name="receipt_file"></label></div>
               </div>
             </details>
             <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
@@ -726,12 +726,12 @@ function renderAssignForm(project, users) {
   }
   return `<div id="assign-form" hidden style="margin-bottom:0.6rem">
     <form id="form-assign" class="row" style="gap:0.5rem; align-items:flex-end">
-      <div class="input-grow"><label>Employee</label>
+      <div class="input-grow"><label>Employee
         <select name="user_claimant_id" required>
           ${candidates.map(u =>
             `<option value="${u.user_claimant_id}">${esc(u.name)} (${esc(u.role)})</option>`).join('')}
         </select>
-      </div>
+      </label></div>
       <div><button class="small">Add assignment</button></div>
     </form>
   </div>`;
