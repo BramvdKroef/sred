@@ -73,10 +73,10 @@ function redrawAllUsers(ctx) {
   if (!el) return;
   el.innerHTML = !allUsers.length ? '<p class="empty">No users yet.</p>' : `
     <table>
-      <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th class="hide-on-narrow">ID</th><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>${allUsers.map(u => `
         <tr>
-          <td>${u.id}</td>
+          <td class="hide-on-narrow">${u.id}</td>
           <td>${esc(u.email)}</td>
           <td><a href="#users/${u.id}"><strong>${esc(u.name)}</strong></a></td>
           <td>${esc(u.role)}</td>
