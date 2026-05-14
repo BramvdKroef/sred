@@ -6,6 +6,13 @@ export async function render(main, ctx) {
   const periodOpts = state.periods
     .map(p => `<option value="${p.id}">${esc(p.start_date)} → ${esc(p.end_date)} (${p.status})</option>`).join('');
   const exports = (await api('GET', `/api/exports?claimant_id=${state.claimantId}`)).items;
+  // Client-side lookup: state.periods is already loaded for this claimant
+  // and is small. Cheaper than adding a join on the list endpoint.
+  const periodsById = new Map(state.periods.map(p => [p.id, p]));
+  const periodLabel = id => {
+    const p = periodsById.get(id);
+    return p ? `${esc(p.start_date)} → ${esc(p.end_date)}` : `#${id}`;
+  };
 
   main.innerHTML = `
     <div class="card">
@@ -25,7 +32,7 @@ export async function render(main, ctx) {
         <tbody>${exports.map(x => `
           <tr>
             <td>${x.id}</td>
-            <td>${x.fiscal_period_id}</td>
+            <td>${periodLabel(x.fiscal_period_id)}</td>
             <td>${x.is_draft ? 'yes' : 'no'}</td>
             <td>${esc(x.generated_at)}</td>
             <td>
@@ -56,10 +63,18 @@ export async function render(main, ctx) {
 
   main.querySelectorAll('[data-build-bundle]').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Building…';
       try {
         await api('POST', `/api/exports/${btn.dataset.buildBundle}/evidence-package`);
         ctx.render();
-      } catch (e) { alert(e.message); }
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
     });
   });
 
