@@ -21,5 +21,5 @@ app.get(['/enroll', '/login'], (_req, res) => {
 app.use(errorMiddleware);
 
 app.listen(config.port, () => {
-  console.log(`sred listening on ${config.origin} (port ${config.port})`);
+  console.log(`sred listening on ${config.origins.join(', ')} (port ${config.port})`);
 });
