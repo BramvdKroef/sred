@@ -55,10 +55,23 @@ export function toMarkdown(totals) {
     if (proj.labour_worksheet.length) {
       lines.push(`### Labour worksheet`);
       lines.push(``);
-      lines.push(`| Employee | Specified | Hours | Cost | Cap applied |`);
-      lines.push(`| --- | :-: | ---: | ---: | :-: |`);
-      for (const r of proj.labour_worksheet) {
-        lines.push(`| ${r.employee_name} | ${r.is_specified_employee ? '✓' : ''} | ${r.total_hours.toFixed(2)} | ${dollars(r.labour_cost_cents, c.reporting_currency)} | ${r.cap_applied ? '✓' : ''} |`);
+      // Surface the OT breakdown only when at least one worksheet row in
+      // this project has overtime hours — otherwise the extra columns are
+      // just noise. Labour cost is identical with or without the split
+      // (overtime hours are billed at the same hourly rate as regular).
+      const anyOt = proj.labour_worksheet.some(r => (r.overtime_hours ?? 0) > 0);
+      if (anyOt) {
+        lines.push(`| Employee | Specified | Hours | Regular | Overtime | Cost | Cap applied |`);
+        lines.push(`| --- | :-: | ---: | ---: | ---: | ---: | :-: |`);
+        for (const r of proj.labour_worksheet) {
+          lines.push(`| ${r.employee_name} | ${r.is_specified_employee ? '✓' : ''} | ${r.total_hours.toFixed(2)} | ${(r.regular_hours ?? r.total_hours).toFixed(2)} | ${(r.overtime_hours ?? 0).toFixed(2)} | ${dollars(r.labour_cost_cents, c.reporting_currency)} | ${r.cap_applied ? '✓' : ''} |`);
+        }
+      } else {
+        lines.push(`| Employee | Specified | Hours | Cost | Cap applied |`);
+        lines.push(`| --- | :-: | ---: | ---: | :-: |`);
+        for (const r of proj.labour_worksheet) {
+          lines.push(`| ${r.employee_name} | ${r.is_specified_employee ? '✓' : ''} | ${r.total_hours.toFixed(2)} | ${dollars(r.labour_cost_cents, c.reporting_currency)} | ${r.cap_applied ? '✓' : ''} |`);
+        }
       }
       lines.push(``);
     }
@@ -82,6 +95,14 @@ export function toCsv(totals) {
   ];
   for (const p of totals.projects) {
     rows.push(['labour', p.id, p.title, totals.claimant.reporting_currency, p.totals.labour_cost_cents]);
+    // Surface OT only when there's something to surface — emit hours-bucket
+    // rows alongside the cost row (currency column is empty: these are
+    // unit-less hour counts, not dollars). Skipped entirely if the project
+    // has no overtime in the period.
+    if ((p.totals.labour_hours_overtime ?? 0) > 0) {
+      rows.push(['labour_regular_hours',  p.id, p.title, '', p.totals.labour_hours_regular]);
+      rows.push(['labour_overtime_hours', p.id, p.title, '', p.totals.labour_hours_overtime]);
+    }
     rows.push(['materials', p.id, p.title, totals.claimant.reporting_currency, p.totals.materials_cents]);
     rows.push(['contract', p.id, p.title, totals.claimant.reporting_currency, p.totals.contract_expenditures_cents]);
     rows.push(['third_party_payment', p.id, p.title, totals.claimant.reporting_currency, p.totals.third_party_payments_cents]);
@@ -167,10 +188,16 @@ export function toPdf(totals) {
     if (proj.labour_worksheet.length) {
       doc.fontSize(10).font('Helvetica-Bold').fillColor(BRAND).text('Labour worksheet'); doc.fillColor('black');
       doc.fontSize(9).font('Helvetica');
+      // Same conditional split as the markdown formatter — only surface the
+      // OT breakdown when there's something to surface.
+      const anyOt = proj.labour_worksheet.some(r => (r.overtime_hours ?? 0) > 0);
       for (const r of proj.labour_worksheet) {
         const flags = [r.is_specified_employee ? 'specified' : null, r.cap_applied ? 'cap applied' : null].filter(Boolean).join(', ');
         const tail  = flags ? `  [${flags}]` : '';
-        doc.text(`  ${r.employee_name}: ${r.total_hours.toFixed(2)}h  ·  ${cents(r.labour_cost_cents)}${tail}`);
+        const hoursStr = anyOt
+          ? `${r.total_hours.toFixed(2)}h (reg ${(r.regular_hours ?? r.total_hours).toFixed(2)} / OT ${(r.overtime_hours ?? 0).toFixed(2)})`
+          : `${r.total_hours.toFixed(2)}h`;
+        doc.text(`  ${r.employee_name}: ${hoursStr}  ·  ${cents(r.labour_cost_cents)}${tail}`);
       }
       doc.moveDown(0.4);
     }

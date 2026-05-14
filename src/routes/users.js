@@ -213,9 +213,20 @@ router.post('/:id/deactivate', (req, res, next) => {
     if (before.id === req.user.id) throw badRequest("you can't deactivate your own account");
     if (before.status === 'disabled') return res.json(before);
 
+    // Bulk-flip every currently-active attachment AND tag it with this
+    // user_id so reactivate can later distinguish "deactivated together
+    // with the user" from "deactivated independently for some other
+    // reason" (e.g. the employee left one claimant while still active on
+    // another). Already-inactive rows are left alone — they keep
+    // whatever provenance they had, including a NULL marker.
     const tx = db.transaction(() => {
       db.prepare(`UPDATE users SET status = 'disabled' WHERE id = ?`).run(userId);
-      db.prepare(`UPDATE user_claimants SET status = 'inactive' WHERE user_id = ?`).run(userId);
+      db.prepare(`
+        UPDATE user_claimants
+           SET status = 'inactive',
+               deactivated_with_user_id = ?
+         WHERE user_id = ? AND status = 'active'
+      `).run(userId, userId);
     });
     tx();
 
@@ -232,7 +243,21 @@ router.post('/:id/reactivate', (req, res, next) => {
     if (!before) throw notFound('user not found');
     if (before.status === 'active') return res.json(before);
 
-    db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).run(userId);
+    // Symmetric to deactivate: flip back only the user_claimants rows that
+    // were taken inactive by the same user-level deactivate (identified by
+    // `deactivated_with_user_id = userId`), and clear the marker. Rows that
+    // had been independently set to inactive (no marker) keep their state —
+    // the admin can re-activate them individually if desired.
+    const tx = db.transaction(() => {
+      db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).run(userId);
+      db.prepare(`
+        UPDATE user_claimants
+           SET status = 'active',
+               deactivated_with_user_id = NULL
+         WHERE user_id = ? AND deactivated_with_user_id = ?
+      `).run(userId, userId);
+    });
+    tx();
 
     const after = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
     audit(req.user.id, 'reactivate', 'user', userId, before, after);
