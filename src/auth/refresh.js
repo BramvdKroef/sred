@@ -2,6 +2,7 @@ import { db } from '../db/index.js';
 import { config } from '../config.js';
 import { randomToken, sha256 } from '../lib/random.js';
 import { unauthorized } from '../lib/errors.js';
+import { audit } from '../lib/audit.js';
 
 export function mintRefreshToken(userId) {
   const raw = randomToken(32);
@@ -15,6 +16,12 @@ export function mintRefreshToken(userId) {
 
 // Verify the presented refresh token, mark it revoked (rotation), and
 // return the user it belongs to. Throws unauthorized if invalid.
+//
+// Refresh-token theft handling: if the presented token is found but is
+// already revoked, treat it as evidence of theft. Atomically revoke every
+// still-active refresh token for that user (forcing both the legitimate
+// user and the attacker to re-authenticate) and write an audit-log row,
+// then surface the standard unauthorized error.
 export function consumeRefreshToken(rawToken) {
   if (!rawToken || typeof rawToken !== 'string') throw unauthorized('refresh_token required');
   const tokenHash = sha256(rawToken);
@@ -24,7 +31,25 @@ export function consumeRefreshToken(rawToken) {
       WHERE rt.token_hash = ?`
   ).get(tokenHash);
   if (!row) throw unauthorized('invalid refresh token');
-  if (row.revoked_at) throw unauthorized('refresh token already used');
+  if (row.revoked_at) {
+    // Replay of an already-rotated token => suspected theft. Revoke the
+    // whole family for this user and audit, atomically.
+    const handleReplay = db.transaction(() => {
+      db.prepare(
+        `UPDATE refresh_tokens
+            SET revoked_at = datetime('now')
+          WHERE user_id = ? AND revoked_at IS NULL`
+      ).run(row.user_id);
+      const before = {
+        token_id: row.id,
+        user_id: row.user_id,
+        original_revoked_at: row.revoked_at,
+      };
+      audit(row.user_id, 'refresh_replay_detected', 'refresh_token', row.id, before, undefined);
+    });
+    handleReplay();
+    throw unauthorized('refresh token already used');
+  }
   if (new Date(row.expires_at).getTime() < Date.now()) throw unauthorized('refresh token expired');
   if (row.status !== 'active') throw unauthorized('user not active');
 
