@@ -261,6 +261,18 @@ export const safeHref = u => {
 
 export const cents = n => (n == null) ? '' : (n / 100).toFixed(2);
 
+// Reason a labour/expense row can't be edited, or null if it's editable.
+// Mirrors the server's assertEditable (route-helpers.js): approved entries
+// or entries in a closed period are locked. `period` is the matching
+// fiscal_periods row (or undefined). The entry may also expose
+// `period_status` directly (added by some list endpoints).
+export function lockReason(entry, period) {
+  if (entry?.status === 'approved') return 'approved';
+  const periodStatus = period?.status ?? entry?.period_status;
+  if (periodStatus === 'closed') return 'period closed';
+  return null;
+}
+
 export const $ = sel => document.querySelector(sel);
 export const $$ = sel => document.querySelectorAll(sel);
 
@@ -428,7 +440,6 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
     body += `
       <div><strong>Date:</strong> ${esc(e.evidence_date)}</div>
       <div><strong>Kind:</strong> ${esc(e.kind)}</div>
-      <div><strong>Uploaded by:</strong> user #${e.uploaded_by_user_id}</div>
       <div class="full"><strong>Caption:</strong> ${esc(e.caption)}</div>
       ${e.kind === 'file' ? `<div class="full"><strong>File:</strong> <a href="/api/evidence/${e.id}/download" data-jwt-dl>${esc(e.file_path)}</a> (${e.file_size ?? '?'} bytes, ${esc(e.file_mime ?? '')})</div>` : ''}
       ${e.kind === 'link' ? `<div class="full"><strong>URL:</strong> <a href="${esc(safeHref(e.url))}" target="_blank" rel="noopener">${esc(e.url)}</a></div>` : ''}

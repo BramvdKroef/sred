@@ -1,5 +1,10 @@
 import { api, esc } from '../api.js';
 
+// Cache the "universe" of facet values from the first (unfiltered) fetch.
+// Without this, narrowing the filter would shrink the dropdown options
+// (a future server change could start filtering facets by the WHERE clause).
+let universeFacets = null;
+
 export async function render(main, ctx) {
   main.innerHTML = '<p class="empty">Loading audit log…</p>';
   const f = ctx.state.auditFilter ?? {};
@@ -9,6 +14,16 @@ export async function render(main, ctx) {
   qs.set('limit', f.limit ?? '100');
   const data = await api('GET', '/api/audit-log?' + qs);
 
+  // First (likely unfiltered) call seeds the dropdown options. Subsequent
+  // calls fall back to the cached set so narrowing the filter never strips
+  // options. If the user lands on a filter on first load, expand the cache
+  // to include the currently-selected value so it doesn't disappear.
+  if (!universeFacets) universeFacets = { ...data.facets };
+  const facets = {
+    entity_types: mergeFacet(universeFacets.entity_types, f.entity_type),
+    actions:      mergeFacet(universeFacets.actions,      f.action),
+  };
+
   main.innerHTML = `
     <div class="card">
       <div class="card-head">
@@ -16,12 +31,12 @@ export async function render(main, ctx) {
         <div class="row" style="gap:0.4rem">
           <select id="audit-entity-filter">
             <option value="">all entities</option>
-            ${data.facets.entity_types.map(t =>
+            ${facets.entity_types.map(t =>
               `<option value="${t}" ${f.entity_type === t ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
           <select id="audit-action-filter">
             <option value="">all actions</option>
-            ${data.facets.actions.map(a =>
+            ${facets.actions.map(a =>
               `<option value="${a}" ${f.action === a ? 'selected' : ''}>${a}</option>`).join('')}
           </select>
         </div>
@@ -48,6 +63,11 @@ export async function render(main, ctx) {
       btn.textContent = details.hidden ? 'details' : 'hide';
     });
   });
+}
+
+function mergeFacet(values, selected) {
+  if (selected && !values.includes(selected)) return [...values, selected].sort();
+  return values;
 }
 
 function renderAuditRow(it) {

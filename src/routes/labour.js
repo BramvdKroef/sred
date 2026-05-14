@@ -31,9 +31,10 @@ router.get('/', (req, res, next) => {
     }
 
     const sql = `
-      SELECT le.*
+      SELECT le.*, fp.status AS period_status
         FROM labour_entries le
         JOIN user_claimants uc ON uc.id = le.user_claimant_id
+        LEFT JOIN fiscal_periods fp ON fp.id = le.fiscal_period_id
        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
        ORDER BY le.work_date DESC, le.id DESC
     `;
