@@ -10,7 +10,7 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 - [x] ~~`compensation_rows.effective_until`.~~ Added in migration 007. `findEffectiveComp` now respects it.
 - [x] ~~`claimant.reporting_currency` FX path.~~ Resolved: kept the column and documented its semantics in `t661.js` (`fx_rate` converts native currency to `reporting_currency`).
 - [x] ~~Proxy `expense_lines` includes overhead rows.~~ Fixed: under proxy mode, `expense_lines` is filtered to exclude `category='overhead'`. Test added.
-- [ ] [P2] `consumeEmailToken(tokenId)` is a blind UPDATE — silently succeeds for non-existent or already-consumed ids. Either make it return rows-affected, or validate first.
+- [x] ~~`consumeEmailToken(tokenId)` silent UPDATE.~~ Now returns rows-affected; register/finish throws `unauthorized` when consume returns 0.
 - [ ] [P2] **Employees tab race / stale state.** `public/admin/employees.js:52-87` returns a placeholder and resolves the user list via `.then()`; the module-level `let allUsers` survives tab switches. Await the fetch inside `render()` and drop the module-level state.
 - [x] ~~`onHashChange` drops state silently.~~ Fixed in `public/admin.js`: reverts to last valid hash via `history.replaceState`. Unit-tested.
 - [ ] [P2] **Field-of-science is free-text** but CRA T661 expects a categorical T4088 code. Misspellings won't match what the tax preparer pastes. **(Needs human — picking the right CRA categories.)**
@@ -20,8 +20,8 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 - [x] ~~Evidence detail shows `user #{id}` as a raw ID.~~ Line dropped (the audit-log section of the detail panel already shows actor names).
 - [x] ~~"Locked" label collapses three states.~~ Fixed: `lockReason(entry)` helper in `public/api.js` returns `'approved' | 'period closed' | null`. Server adds `period_status` to labour/expense list endpoints. Unit-tested.
 - [ ] [P3] **CSV / MD / PDF export shapes differ.** `toCsv` emits one row per *category* per project (labour, materials, contract, third_party_payment, overhead, project_total); `toMarkdown` and `toPdf` iterate `labour_worksheet` and `expense_lines` row-by-row. Probably intentional (CSV is for accountant rollups) but someone diffing outputs across formats will be confused. Document the contract or normalize.
-- [ ] [P3] **`refresh.js` follow-ups** (flagged by V-03 agent): `last_used_at` column is effectively dead (set in same UPDATE that revokes), `mintRefreshToken` never prunes expired siblings (unbounded growth over years), expired-vs-deactivated error messages differ slightly (minor enumeration vector).
-- [ ] [P3] **`route-helpers.js` subtleties** (flagged by test agent): `resolveUserClaimant` rejects stringified ints (tight contract); `assertEditable` silently no-ops if the period row is missing; `isOwnerOrAdmin` swallows missing-uc into `false` (callers must not use it as a not-found signal).
+- [x] ~~`refresh.js` follow-ups.~~ `last_used_at` column dropped (migration 010); `mintRefreshToken` prunes expired siblings; expired and deactivated paths now share `unauthorized('refresh token invalid')`.
+- [x] ~~`route-helpers.js` subtleties.~~ `resolveUserClaimant` casts stringified ints; `assertEditable` throws `notFound` if the period row is missing; `isOwnerOrAdmin` documents the missing-uc-returns-false contract (grep confirmed no caller relies on it as a not-found signal).
 - [ ] [P3] **Content-sniff MIME on evidence uploads.** Allowlist verifies the multipart-supplied MIME, but a `.html`-content file with `Content-Type: application/pdf` still slips through (and now lands on disk as `.pdf`, worse for an admin double-clicking the bundle locally). Add magic-byte detection (`file-type` library) as a follow-up.
 - [ ] [P3] **Admin can invite themselves** via `/api/users/:id/invite`; no second-admin countersignature. `audit()` for invite also doesn't record `before/after` so the audit row hides the target identity.
 
@@ -30,21 +30,21 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs reference `docs/use-cases.md`.
 
 - [ ] [P1] **UC-R1 — Review queue scoping + bulk approve.**
-  - [ ] Render employee name + project title in the queue (currently raw IDs). The labour/expense list endpoints already join through `user_claimants` for some routes — extend consistently.
-  - [ ] Replace `prompt()` for rejection reason with an inline textarea + Cancel/Submit.
+  - [x] ~~Render employee name + project title in the queue.~~ List endpoints now join `users`/`projects`; review queue renders names.
+  - [x] ~~Replace `prompt()` for rejection reason with an inline textarea + Cancel/Submit.~~
   - [ ] Add row checkboxes + a "select all visible" header + an "Approve / Reject selected" action bar.
-  - [ ] Add per-claimant scope ← blocked by hoist step 2 (selection plumbing).
+  - [ ] Add per-claimant scope ← unblocked: hoist step 2 is done. Selector is in the header; tab needs to read `state.activeClaimantId`.
   - [ ] Add period / project / employee filters.
 - [ ] [P1] **UC-E4 — Employee dashboard period + claimant scope.**
-  - [ ] Add a claimant column on labour / expense / evidence tables (multi-claimant employees can't filter without it).
+  - [x] ~~Add a claimant column on labour / expense / evidence tables.~~
   - [ ] Add a period selector + per-period totals row on the activity tab.
 - [ ] [P2] **UC-A4 — Project narrative revision viewer.**
   - [ ] List prior revisions on the project detail page (date, reviser, title at the time).
   - [ ] Click-to-view a revision (read-only side panel or modal).
   - [ ] *(optional)* Diff against current — only if list+view is shipped and proves valuable.
 - [ ] [P2] **UC-A3 — Employee onboarding: look-up-by-email.**
-  - [ ] On Add-employee submit, look up existing user by email; if found, switch the form to "attach to claimant" mode (asks for the per-claimant fields only).
-  - [ ] Add title + employment start date fields to the initial form (currently only collected post-hoc).
+  - [x] ~~Look up existing user by email on Add-employee submit; switch form to attach mode if found.~~ Blur-triggered; inline Yes/No.
+  - [x] ~~Add title + employment start date fields.~~ Migration 009 adds `user_claimants.employment_start_date`.
   - [ ] Surface the cross-claimant attachment path from a top-level button on the Employees tab, not just via the edit-user drill-in.
 - [ ] [P3] **UC-R2 — Comparative two-period export.** Side-by-side T661 export across two periods (alt flow R2.b).
 
@@ -52,10 +52,10 @@ Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs refere
 
 Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact items first.
 
-- [ ] [P1] **Hoist active-claimant selector into page header.** Currently only on the Projects tab; Overview / Review / Audit silently aggregate across all claimants while other tabs are per-claimant scoped.
-  - [ ] Step 1: move selector visually into the header. Behaviour identical — only the Projects tab consults it, like today. Shippable on its own.
-  - [ ] Step 2: persist selection (localStorage + a tiny `state.activeClaimantId` source of truth) and add an "All claimants" sentinel. ← blocked by step 1.
-  - [ ] Step 3: scope the Review tab to the selection (highest user-visible value). ← blocked by step 2.
+- [ ] [P1] **Hoist active-claimant selector into page header.**
+  - [x] ~~Step 1: move selector visually into the header.~~ Class `.header-claimant-select`. Found Exports + Employees were already claimant-scoped (audit was wrong on those).
+  - [x] ~~Step 2: persist selection + add "All claimants" sentinel.~~ `state.activeClaimantId` plumbed; localStorage key `sred-active-claimant`; deleted-claimant falls back to null.
+  - [ ] Step 3: scope the Review tab to the selection.
   - [ ] Step 4: scope Audit and Overview tabs; handle deleted-claimant fallback. ← blocked by step 3.
 - [ ] [P1] **Dollar inputs, not cent inputs.** People are typing `9500000` for $95k salaries.
   - [ ] Build a shared `<dollar-input>` helper (vanilla — a small wrapper around `<input type="number" step="0.01">`) that emits the cents value on form submit.
@@ -126,16 +126,16 @@ Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 c
 
 ## Docs to update
 
-The UI use-case audit found these features in the SPA without a corresponding entry in `docs/use-cases.md`. Each is "decide: document it as a UC, or drop it from the UI."
+The UI use-case audit found 8 features in the SPA without a corresponding entry in `docs/use-cases.md`. Proposed UC drafts now live in [`docs/use-cases-drafts.md`](docs/use-cases-drafts.md) — each has a `[DRAFT]` header, the actor/flow/postconditions, and a "Keep or drop" subsection with both sides. Decision is the owner's; agent did not make the call.
 
-- [ ] [P3] **Global search bar** (admin top nav) — useful, just unmodeled.
-- [ ] [P3] **Overview dashboards** (admin + employee) — this-week chart, recent activity feed. Cross-cuts UC-E4 / UC-R1 but is its own surface; consider an explicit "at-a-glance dashboard" UC.
-- [ ] [P3] **User deactivate / reactivate** — lifecycle action absent from UC-A3 (which only covers onboarding). Either extend A3 or add an offboarding UC.
-- [ ] [P3] **Project `type` (sred/internal) and `phase` (concept/development/complete)** — present on the project form, not in UC-A4. Either document or drop.
-- [ ] [P3] **Log labour on behalf** (admin → project detail). Alt flow E3.a covers the expense case; there's no equivalent in UC-E1 for labour. Add or remove.
-- [ ] [P3] **Overtime flag** on labour entries. Surfaced on the form but absent from UC-E1; also unclear how it interacts with the T661 labour cost calc in UC-R2.
-- [ ] [P3] **Project manager assignment** (`manager_user_id`) — not in UC-A4.
-- [ ] [P3] **Audit-log tab** — §5 cross-cutting requirement only says actions are logged, not that there's a dedicated UI. The UI is fine; just confirm it's intentional and document.
+Drafted IDs: UC-A6 (deactivate/reactivate), UC-A7 (project type+phase), UC-A8 (project manager), UC-A9 (audit-log tab), UC-E5 (overview dashboards), UC-E6 (overtime flag), UC-E7 (log-on-behalf), UC-R4 (global search).
+
+Notable corrections caught by the draft agent:
+- **Project `type` is load-bearing** (gates T661 inclusion in `lib/t661.js`); `phase` is decorative. The audit treated them as equivalent.
+- **`reactivate` is incomplete** — flips `users.status` only, not the `user_claimants` rows that `deactivate` bulk-flipped.
+- **Overtime flag is a marker only** — `is_overtime` is not consulted by the labour-cost calc.
+
+- [ ] [P3] Decide keep-or-drop for each of the 8 drafts; promote accepted ones into `docs/use-cases.md` and delete the drafts file.
 
 ## Done
 
