@@ -42,9 +42,13 @@ export function findOpenPeriod(claimantId, date) {
 // it explicitly; employees use their own attachment to the project's claimant.
 export function resolveUserClaimant({ user, project, requestedUcId }) {
   if (user.role === 'admin') {
-    if (!Number.isInteger(requestedUcId))
+    // Accept stringified ints from JSON callers (the body is typically
+    // parsed JSON, but route params and some clients send numbers as
+    // strings). Number.isInteger("5") is false, so we cast first.
+    const id = Number(requestedUcId);
+    if (!Number.isInteger(id) || id < 1)
       throw badRequest('admin must specify user_claimant_id');
-    const uc = getUserClaimant(requestedUcId);
+    const uc = getUserClaimant(id);
     if (uc.claimant_id !== project.claimant_id)
       throw badRequest("user_claimant does not belong to this project's claimant");
     if (uc.status !== 'active')
@@ -61,6 +65,13 @@ export function resolveUserClaimant({ user, project, requestedUcId }) {
 
 // Admins see everything; employees only their own rows (joined through
 // user_claimants.user_id). Used by labour/expense view/edit/delete.
+//
+// Contract: a missing user_claimant row collapses to `false` (treated as
+// "not yours"). Callers MUST NOT use this function as a not-found signal
+// for the user_claimant — load the parent entity first (which has an FK
+// to user_claimants) and rely on its existence. All current callers do
+// exactly that: they fetch a labour_entry / expense first, then pass its
+// user_claimant_id here, so the row is guaranteed to exist by FK.
 export function isOwnerOrAdmin(user, userClaimantId) {
   if (user.role === 'admin') return true;
   const uc = db.prepare(`SELECT user_id FROM user_claimants WHERE id = ?`).get(userClaimantId);
@@ -74,5 +85,8 @@ export function assertEditable(entry) {
     throw badRequest('entry is approved and locked; reject it first');
   }
   const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(entry.fiscal_period_id);
-  if (period?.status === 'closed') throw badRequest('fiscal period is closed');
+  // FK protects us in practice, but an orphan period shouldn't fall
+  // through silently as "editable" — surface it as notFound.
+  if (!period) throw notFound('fiscal period not found');
+  if (period.status === 'closed') throw badRequest('fiscal period is closed');
 }

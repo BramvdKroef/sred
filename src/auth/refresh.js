@@ -5,6 +5,12 @@ import { unauthorized } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 
 export function mintRefreshToken(userId) {
+  // Opportunistically prune this user's expired rows before minting a new
+  // one. Negligible cost (indexed on user_id) and bounds long-term growth
+  // for a user who rotates daily for years.
+  db.prepare(
+    `DELETE FROM refresh_tokens WHERE user_id = ? AND expires_at < datetime('now')`
+  ).run(userId);
   const raw = randomToken(32);
   const tokenHash = sha256(raw);
   const expiresAt = new Date(Date.now() + config.refreshTtlDays * 86_400_000).toISOString();
@@ -50,11 +56,15 @@ export function consumeRefreshToken(rawToken) {
     handleReplay();
     throw unauthorized('refresh token already used');
   }
-  if (new Date(row.expires_at).getTime() < Date.now()) throw unauthorized('refresh token expired');
-  if (row.status !== 'active') throw unauthorized('user not active');
+  // Expired tokens and deactivated users both surface as the same
+  // 'invalid refresh token' message so an attacker who has a stolen token
+  // can't tell whether the account exists / is active by error message
+  // (or by timing — both paths short-circuit before the UPDATE below).
+  if (new Date(row.expires_at).getTime() < Date.now()) throw unauthorized('invalid refresh token');
+  if (row.status !== 'active') throw unauthorized('invalid refresh token');
 
   db.prepare(
-    `UPDATE refresh_tokens SET revoked_at = datetime('now'), last_used_at = datetime('now') WHERE id = ?`
+    `UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ?`
   ).run(row.id);
 
   return { id: row.user_id, email: row.email, name: row.name, role: row.role, status: row.status };

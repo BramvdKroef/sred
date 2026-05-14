@@ -11,9 +11,8 @@
 // and consumeEmailToken (marks the row, takes a row id — NOT a raw token).
 // These tests exercise the raw-token round-trip via that pair.
 //
-// consumeEmailToken is currently a blind UPDATE: it silently succeeds for
-// non-existent or already-consumed ids. That's tracked separately in TODO.md
-// and is NOT exercised here.
+// consumeEmailToken returns rows-affected (info.changes). Callers must
+// treat 0 as "no row was consumed" and refuse the gated action.
 
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -82,6 +81,50 @@ test('a token cannot be validated again after it has been consumed', () => {
     err => {
       assert.equal(err.status, 401);
       assert.match(err.message, /already used/);
+      return true;
+    }
+  );
+});
+
+// --- consumeEmailToken rows-affected -----------------------------------------
+
+test('consumeEmailToken returns 1 for a fresh token, 0 for the same id on replay', () => {
+  const userId = insertUser(ctx.db);
+  const { raw } = mintEmailToken(userId, 'invite');
+  const row = findValidEmailToken(raw, 'invite');
+
+  // First consume hits a fresh row.
+  assert.equal(consumeEmailToken(row.id), 1);
+  // Replay against the same id — already consumed, no row to update.
+  assert.equal(consumeEmailToken(row.id), 0);
+});
+
+test('consumeEmailToken returns 0 for a non-existent id', () => {
+  assert.equal(consumeEmailToken(999_999), 0);
+});
+
+test('register/finish-style flow refuses (unauthorized) when consume returns 0', async () => {
+  // Mirrors what src/routes/auth.js does on /webauthn/register/finish:
+  // it calls consumeEmailToken(tokenRow.id) and treats 0 as a failed
+  // single-use guard (concurrent finish, replay, tampered id, etc.).
+  const { unauthorized } = await import('../../src/lib/errors.js');
+  const userId = insertUser(ctx.db);
+  const { raw } = mintEmailToken(userId, 'invite');
+  const tokenRow = findValidEmailToken(raw, 'invite');
+
+  // Simulate a concurrent finish: someone else consumed the row first.
+  ctx.db.prepare(
+    `UPDATE email_tokens SET consumed_at = datetime('now') WHERE id = ?`
+  ).run(tokenRow.id);
+
+  // The route's check: `if (consumeEmailToken(tokenRow.id) === 0) throw ...`
+  assert.throws(
+    () => {
+      if (consumeEmailToken(tokenRow.id) === 0) throw unauthorized('invalid token');
+    },
+    err => {
+      assert.equal(err.status, 401);
+      assert.match(err.message, /invalid token/);
       return true;
     }
   );

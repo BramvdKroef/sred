@@ -231,6 +231,35 @@ test('resolveUserClaimant: admin happy path returns the uc', () => {
   assert.equal(uc.status, 'active');
 });
 
+test('resolveUserClaimant: admin accepts a stringified int for requestedUcId', () => {
+  // JSON callers / route params sometimes hand us "5" instead of 5.
+  // Number.isInteger("5") is false, so this used to throw badRequest.
+  const s = ucScenario();
+  const admin = { id: insertUser(ctx.db, { role: 'admin' }), role: 'admin' };
+  const uc = resolveUserClaimant({
+    user: admin,
+    project: s.project,
+    requestedUcId: String(s.ucId),
+  });
+  assert.equal(uc.id, s.ucId);
+});
+
+test('resolveUserClaimant: admin rejects non-integer strings and negatives', () => {
+  const s = ucScenario();
+  const admin = { id: insertUser(ctx.db, { role: 'admin' }), role: 'admin' };
+  for (const bad of ['abc', '1.5', '-1', '0', '']) {
+    assert.throws(
+      () => resolveUserClaimant({ user: admin, project: s.project, requestedUcId: bad }),
+      err => {
+        assert.equal(err.status, 400);
+        assert.match(err.message, /admin must specify user_claimant_id/);
+        return true;
+      },
+      `expected badRequest for requestedUcId=${JSON.stringify(bad)}`,
+    );
+  }
+});
+
 test('resolveUserClaimant: employee ignores requestedUcId; looks up own attachment', () => {
   const s = ucScenario();
   const employee = { id: s.userId, role: 'employee' };
@@ -350,6 +379,27 @@ test('assertEditable: throws badRequest when the entry fiscal period is closed',
       assert.equal(err.status, 400);
       assert.equal(err.code, 'bad_request');
       assert.match(err.message, /closed/);
+      return true;
+    }
+  );
+});
+
+test('assertEditable: throws notFound when the entry\'s fiscal period row is missing', () => {
+  // FK normally prevents this, but the helper used to no-op when the period
+  // lookup returned undefined — which would let an orphan entry edit through.
+  // Build a real entry, then drop the period row out from under it (with FK
+  // off) so we can exercise the post-FK-violation branch.
+  const entry = entryWithStatuses({ entryStatus: 'pending', periodStatus: 'open' });
+  ctx.db.pragma('foreign_keys = OFF');
+  ctx.db.prepare(`DELETE FROM fiscal_periods WHERE id = ?`).run(entry.fiscal_period_id);
+  ctx.db.pragma('foreign_keys = ON');
+
+  assert.throws(
+    () => assertEditable(entry),
+    err => {
+      assert.equal(err.status, 404);
+      assert.equal(err.code, 'not_found');
+      assert.match(err.message, /fiscal period not found/);
       return true;
     }
   );
