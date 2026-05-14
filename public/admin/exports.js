@@ -2,10 +2,10 @@ import { api, esc, bindForm, wireJwtDownloads } from '../api.js';
 
 export async function render(main, ctx) {
   const { state } = ctx;
-  if (!state.claimantId) { main.innerHTML = '<p class="empty">Select a claimant first.</p>'; return; }
+  if (!state.activeClaimantId) { main.innerHTML = '<p class="empty">Pick a claimant from the header first.</p>'; return; }
   const periodOpts = state.periods
     .map(p => `<option value="${p.id}">${esc(p.start_date)} → ${esc(p.end_date)} (${p.status})</option>`).join('');
-  const exports = (await api('GET', `/api/exports?claimant_id=${state.claimantId}`)).items;
+  const exports = (await api('GET', `/api/exports?claimant_id=${state.activeClaimantId}`)).items;
 
   main.innerHTML = `
     <div class="card">
@@ -47,7 +47,7 @@ export async function render(main, ctx) {
 
   bindForm('#export-form', async fd => {
     await api('POST', '/api/exports/t661', {
-      claimant_id: state.claimantId,
+      claimant_id: state.activeClaimantId,
       fiscal_period_id: Number(fd.get('fiscal_period_id')),
       draft: fd.get('draft') === 'on',
     });
