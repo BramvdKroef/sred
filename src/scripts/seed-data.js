@@ -35,14 +35,10 @@ if (!ALL_PROJECTS.every(Boolean)) {
   process.exit(1);
 }
 
-const PERIOD_ID = 1;
+const CLAIMANT_ID = 1;
 
-// user_claimants (as wired by seed:etc + earlier test runs)
-const UC = { ALICE: 1, CHARLIE: 2, BRAM: 3, DANA: 4 };
-// active users who can plausibly upload evidence (admin + active employees)
-const UPLOADERS = { ALICE: 2, BRAM_E: 4 };
-const ADMIN_USER_ID = 1;
-
+// Idempotency: bail out before doing any further lookups if labour already
+// exists on the ETC projects.
 const existing = db.prepare(
   `SELECT COUNT(*) AS n FROM labour_entries WHERE project_id IN (?, ?, ?, ?)`
 ).get(...ALL_PROJECTS).n;
@@ -50,6 +46,64 @@ if (existing > 0) {
   console.log(`Already seeded (${existing} labour entries on ETC projects). Skipping.`);
   process.exit(0);
 }
+
+// --- Fiscal period ----------------------------------------------------------
+// Pick the earliest fiscal period for the ETC claimant. seed:etc creates one.
+const periodRow = db.prepare(
+  `SELECT id FROM fiscal_periods WHERE claimant_id = ? ORDER BY start_date LIMIT 1`
+).get(CLAIMANT_ID);
+if (!periodRow) {
+  console.error('No fiscal period found for claimant #1. Run "npm run seed:etc" first.');
+  process.exit(1);
+}
+const PERIOD_ID = periodRow.id;
+
+// --- Admin user -------------------------------------------------------------
+// Don't assume id=1; look up the earliest active admin instead.
+const adminRow = db.prepare(
+  `SELECT id FROM users WHERE role = 'admin' AND status = 'active' ORDER BY id LIMIT 1`
+).get();
+if (!adminRow) {
+  console.error('No active admin user found. Run "npm run seed:admin" first.');
+  process.exit(1);
+}
+const ADMIN_USER_ID = adminRow.id;
+
+// --- Employee user_claimants (looked up by email) ---------------------------
+// These emails must match what seed:etc inserts. If any are missing (e.g. a
+// user was deleted through the UI), exit with a useful error rather than a
+// cryptic FK violation later.
+const EMPLOYEE_EMAILS = {
+  ALICE:   'alice@etcweb.com',
+  CHARLIE: 'charlie@etcweb.com',
+  BRAM:    'bram@etcweb.com',
+  DANA:    'dana@etcweb.com',
+};
+
+const userByEmail = db.prepare(`SELECT id FROM users WHERE email = ?`);
+const ucByUser = db.prepare(
+  `SELECT id FROM user_claimants WHERE user_id = ? AND claimant_id = ?`
+);
+
+const UC = {};
+const USER_IDS = {};
+const missing = [];
+for (const [key, email] of Object.entries(EMPLOYEE_EMAILS)) {
+  const u = userByEmail.get(email);
+  if (!u) { missing.push(`${key} (${email}) — no user row`); continue; }
+  const uc = ucByUser.get(u.id, CLAIMANT_ID);
+  if (!uc) { missing.push(`${key} (${email}) — user exists but no user_claimants row for claimant ${CLAIMANT_ID}`); continue; }
+  UC[key] = uc.id;
+  USER_IDS[key] = u.id;
+}
+if (missing.length) {
+  console.error('Required employee(s) missing — run "npm run seed:etc" or recreate via the UI:');
+  for (const m of missing) console.error(`  - ${m}`);
+  process.exit(1);
+}
+
+// active users who can plausibly upload evidence (active employees)
+const UPLOADERS = { ALICE: USER_IDS.ALICE, BRAM_E: USER_IDS.BRAM };
 
 // --- Project assignments ----------------------------------------------------
 
