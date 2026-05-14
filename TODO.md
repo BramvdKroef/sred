@@ -25,11 +25,11 @@ From [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md) and [RENDER_REVIEW.md](R
 - [x] ~~**`:focus` styles.**~~ Unified `:focus-visible` outline (brand-blue on light backgrounds, white on the header gradient) for buttons, tabs, `.summary-link`, `<summary>`, `.card a`.
 - [x] ~~**`.pill.kind-sred` contrast.**~~ Foreground now `--brand-dark` (~5.4:1).
 - [x] ~~**Mobile tables overflow.**~~ Selector broadened from `.card > table` to `.card table` so the `#all-users-table` wrapper div doesn't escape the rule.
-- [ ] [P2] **Two `<h1>`s per page.** The brand strip "Precision SR&ED" is an `<h1>`, plus each page emits its own. Demote one.
-- [ ] [P2] **No `<main>` wrapper** on overview + login.
+- [x] ~~**Two `<h1>`s per page.**~~ Brand strip demoted to `<div class="brand">` (CSS duplicated to keep the visual). A single visually-hidden `<h1 id="page-heading" class="sr-only">` is populated from a `TAB_TITLES` map per render.
+- [x] ~~**No `<main>` wrapper.**~~ Admin/employee shells already had `<main id="main">`. Login + enroll in `public/app.js` now wrap their `.card` in `<main>`.
 - [x] ~~**`.loading` and `.error-banner` contrast.**~~ `.loading` uses `--text-muted` now; `.error-banner` text bumped to `#8a2521` (~7:1).
 - [x] ~~**CSP fonts**.~~ `connect-src` now allows `fonts.googleapis.com` + `fonts.gstatic.com`.
-- [ ] [P3] **Employee Overview speculatively hits `/api/claimants` (admin-only)** → 403 + console error on every page load.
+- [x] ~~**Employee Overview speculative `/api/claimants`.**~~ N/A on current master — verified by the a11y agent. The TODO entry was stale from a prior cleanup.
 
 ## Correctness / bugs
 
@@ -109,8 +109,8 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 From [RELIABILITY_REVIEW.md](RELIABILITY_REVIEW.md).
 
 - [x] ~~**Concurrent narrative PATCH silently overwrites.**~~ Fixed: strict `__updated_at` precondition (missing = 400, mismatch = 409). Server uses millisecond-precision `strftime('%Y-%m-%d %H:%M:%f', 'now')` to handle same-second PATCHes. Client snapshots `updated_at` at form-bind and shows a "reload-and-retry" banner on 409. Other PATCH routes audited — only `projects` has the narrative co-edit risk; others target narrow scalars where loss is small/visible.
-- [ ] [P2] **SMTP invite returns lying `delivered:true`.** `src/routes/users.js:292` fires `sendMagicLink(...).catch(...)` unawaited; response goes before the send completes; nodemailer has no timeout. On 5xx/timeout the link only appears on stderr. Either await with a timeout, or return `delivery_status: 'queued'`.
-- [ ] [P2] **`isOwnerOrAdmin` doesn't check `user_claimants.status`.** Deactivated employees can still PATCH/DELETE their own rows for the JWT TTL. Add the status check.
+- [x] ~~**SMTP invite returns lying `delivered:true`.**~~ Now awaits with 8s timeout race + nodemailer connection/greeting/socket timeouts (5s each). Response: `{ ..., delivered: true }` on success; `{ ..., delivered: false, error, reason }` on failure; `delivered: false` (no error field) when SMTP intentionally disabled. Audit row written before the send so failed deliveries still have a trail.
+- [x] ~~**`isOwnerOrAdmin` doesn't check `user_claimants.status`.**~~ Now requires `uc.status='active'`. Audit found two more places (`labour.js` + `expenses.js` GET list filters) where the user-claimant-status check was missing — both fixed alongside.
 - [ ] [P3] **SQLITE_BUSY** under concurrent writers — no retry; user gets a 500. Wrap mutations with a small retry-on-busy.
 - [ ] [P3] **Disk-full mid-write** on uploads / bundles leaves partial files. Wrap in transactions with cleanup.
 
@@ -118,11 +118,7 @@ From [RELIABILITY_REVIEW.md](RELIABILITY_REVIEW.md).
 
 From [DATABASE_REVIEW.md](DATABASE_REVIEW.md). The DB has 12 existing indexes plus PKs/UNIQUEs; these are the gaps.
 
-- [ ] [P2] **`CREATE INDEX idx_comp_uc ON compensation_rows(user_claimant_id)`.** Biggest perf win — `findEffectiveComp` runs once per labour entry, so T661 export is O(N·M) without it.
-- [ ] [P2] **`CREATE INDEX idx_expense_project ON expenses(project_id)`** and **`idx_expense_uc ON expenses(user_claimant_id)`** — review queue + T661 both filter by these.
-- [ ] [P3] **Audit-log indexes** on `audit_log(actor_user_id)` and `audit_log(created_at DESC)` to support the admin date-range filter UI.
-- [ ] [P3] **Evidence_items indexes** on the 3 join columns flagged in the report.
-- [ ] [P3] **CHECK constraints**: `amount_cents > 0` on `expenses` + `compensation_rows`; `hours > 0` on `labour_entries`; `expense_date` + `evidence_date` GLOB pattern (match the `work_date` treatment from migration 007).
+- [x] ~~**Performance indexes + CHECK constraints.**~~ Migration 013 adds 8 indexes (`idx_comp_uc`, `idx_expense_project`, `idx_expense_uc`, `idx_evidence_period`, `idx_evidence_labour`, `idx_evidence_expense`, `idx_audit_actor`, `idx_audit_created`) and 5 CHECK constraints (`amount_cents > 0` on expenses + comp rows; `expense_date`/`evidence_date` GLOB; positive `fx_rate`). audit_log CHECKs skipped (would conflict with the append-only triggers).
 
 ## SR&ED domain accuracy
 
@@ -144,7 +140,7 @@ From [SRED_DOMAIN_REVIEW.md](SRED_DOMAIN_REVIEW.md). **The agent did this withou
 - [x] ~~`lib/wage-caps.js`~~ (6 tests)
 - [x] ~~**Route-level integration tests.**~~ 18 new tests across three files: `close-period.test.js` (10), `t661-export-roundtrip.test.js` (7), `audit-log-writes.test.js` (1 parameterised covering 11 endpoints). Caught: admin-logged labour auto-approves into `status='approved'` which immediately locks it from PATCH via `assertEditable` — admin can't fix a typo on their own on-behalf entry without reject-then-edit-then-re-approve. Flagged for follow-up.
 - [x] ~~**`src/auth/middleware.js` is untested.**~~ 19 new negative-path tests added. `requireAuth` does validate user status (`!== 'active'` → 401). Worth flagging: every JWT-library error surfaces as generic `"unauthorized"` but the deactivated path leaks `"user not active"` — a 401 with that exact message confirms the token was crypto-valid + the user exists (minor enumeration vector).
-- [ ] [P2] **Cross-tenant isolation tests.** Seed 2 claimants + walk every endpoint as a wrong-claimant employee to prove `isOwnerOrAdmin`/`assertAttached` are wired everywhere.
+- [x] ~~**Cross-tenant isolation tests.**~~ 27 new tests covering every endpoint as a wrong-claimant employee. **Zero leaks found.** Clarified actual behaviour: `GET /api/projects` is admin-only, foreign-claimant filters yield empty list (not 403), single-row GETs on others' rows return 403 (not 404).
 - [ ] [P2] **`src/auth/webauthn.js` is untested** — counter regression, expired/replayed challenges, unknown credential.
 - [ ] [P3] **`src/lib/email.js` is untested** — silent invite regressions would slip through.
 
@@ -174,7 +170,7 @@ From [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). Largest files: `admin/pro
 
 From [DEPENDENCY_REVIEW.md](DEPENDENCY_REVIEW.md). License posture clean (292 packages, all permissive); `npm audit` reports 0 vulnerabilities.
 
-- [ ] [P2] **Upgrade `multer` 1.4.5-lts → 2.x.** Author deprecated 1.x citing unpatched vulnerabilities. Only one call site (`src/routes/evidence.js`).
+- [x] ~~**Upgrade `multer` 1.4.5-lts → 2.x.**~~ Now on `^2.1.1`. `npm audit --omit=dev` still clean. Existing evidence-upload tests pass unchanged.
 - [ ] [P2] **Upgrade `@simplewebauthn/server` 11 → 13.** Two majors stale; v13 also drops the deprecated `@simplewebauthn/types@11` transitive.
 - [ ] [P3] **Resolve `file-type@22` engine mismatch** — declares `engines.node >=22`; project says `>=20`. Either bump `engines.node` or downgrade to `^21`.
 - [ ] [P3] **`express` 4.x is in maintenance.** 5.x migration when convenient.
@@ -200,11 +196,11 @@ Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 c
 
 Drift from [DOCS_ACCURACY_REVIEW.md](DOCS_ACCURACY_REVIEW.md). Per-doc severity: api **largest**, data-model **large**, use-cases medium, auth medium, README small.
 
-- [ ] [P2] **`docs/api.md`** — many wrong paths (`/api/auth/me` → actual `/api/me`); phantom `/api/me/summary`; missing entire endpoint families (refresh, lifecycle, comparative export, `DELETE /api/expenses/:id`, `PATCH /api/evidence/:id`).
-- [ ] [P2] **`docs/data-model.md`** — missing `refresh_tokens` (mig 005), `webauthn_challenges` (mig 001), ~6 columns from migrations 003-012. Still references the dropped `planned|active|completed` enum. **Remove the false "6-year retention enforced in delete paths" claim** — code only blocks deletes in closed periods, no 6-year clock anywhere.
-- [ ] [P2] **`docs/auth.md`** — predates the refresh-token system entirely (no rotation, no V-03 family revocation, no rate limiting, no multi-origin, no JWT_SECRET strength check, no append-only triggers). JWT payload claim wrong (`{userId, role}` → actual `{uid, role}`).
-- [ ] [P3] **`docs/use-cases.md`** — medium drift; some new entities and actors not reflected.
-- [ ] [P3] **README** — small drift; `src/lib/csp.js` and `src/lib/rate-limit.js` missing from layout.
+- [x] ~~**`docs/api.md`**~~ rewritten — wrong path prefixes fixed, ~14 missing endpoints added, phantom `/me/summary` dropped, comparative-export endpoints documented, optimistic-concurrency 409 on project PATCH documented, retention claim corrected.
+- [x] ~~**`docs/data-model.md`**~~ — `refresh_tokens` + `webauthn_challenges` added; six new columns added; status enum renamed; **false 6-year retention claim removed** + replaced with the actual closed-period rule; audit_log triggers documented.
+- [x] ~~**`docs/auth.md`**~~ rewritten — refresh-token rotation + V-03 replay handling; rate-limiting section; multi-origin support; JWT_SECRET strength check; JWT payload claim fixed to `uid`/`role`; magic-link purpose enforcement.
+- [x] ~~**`docs/use-cases.md`**~~ — `manager` actor added; SR&ED Project entity expanded; UC-A4 status enum fixed; retention claim replaced; audit_log triggers noted.
+- [x] ~~**README**~~ — `csp.js`/`rate-limit.js`/`random.js`/`route-helpers.js` added to layout; `tools/` + `tests/` sub-trees added; `npm test`/`backup`/`cleanup:bundles` rows added; Notable-patterns updated.
 
 ### UC drafts
 
