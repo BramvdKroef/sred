@@ -22,6 +22,13 @@ let sha256;
 
 before(async () => {
   ctx = await setupTempDb();
+  // Migration 008 adds BEFORE-DELETE/UPDATE triggers on audit_log to enforce
+  // append-only at the DB layer. Tests need to wipe the table between cases,
+  // so drop the triggers in this test-only DB. The triggers are tested
+  // separately in tests/db/audit-log-append-only.test.js, which uses its own
+  // temp DB.
+  ctx.db.exec(`DROP TRIGGER IF EXISTS audit_log_no_update`);
+  ctx.db.exec(`DROP TRIGGER IF EXISTS audit_log_no_delete`);
   ({ mintRefreshToken, consumeRefreshToken, revokeRefreshToken } =
     await import('../../src/auth/refresh.js'));
   ({ sha256 } = await import('../../src/lib/random.js'));
