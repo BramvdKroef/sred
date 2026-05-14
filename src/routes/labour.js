@@ -15,12 +15,16 @@ router.use(requireAuth);
 
 router.get('/', (req, res, next) => {
   try {
-    const { project_id, period_id, user_claimant_id, status, from, to } = req.query;
+    const { project_id, period_id, user_claimant_id, claimant_id, status, from, to } = req.query;
     const where = [];
     const params = [];
     if (project_id)       { where.push('le.project_id = ?');        params.push(Number(project_id)); }
     if (period_id)        { where.push('le.fiscal_period_id = ?');  params.push(Number(period_id)); }
     if (user_claimant_id) { where.push('le.user_claimant_id = ?');  params.push(Number(user_claimant_id)); }
+    // `claimant_id` scopes via the user_claimants join (the review queue's
+    // active-claimant filter). The join is already present below for the
+    // user_name columns, so this is just an extra WHERE term.
+    if (claimant_id)      { where.push('uc.claimant_id = ?');       params.push(Number(claimant_id)); }
     if (status)           { where.push('le.status = ?');            params.push(status); }
     if (from)             { where.push('le.work_date >= ?');        params.push(from); }
     if (to)               { where.push('le.work_date <= ?');        params.push(to); }

@@ -2,11 +2,20 @@ import { api, esc, cents, onSubmit } from '../api.js';
 
 export async function render(main, ctx) {
   main.innerHTML = '<p class="empty">Loading review queue…</p>';
+  // Scope to the active claimant when one is selected; otherwise show the
+  // global queue. The header selector re-runs render() on change, so this
+  // refetches whenever the scope changes.
+  const claimantId = ctx.state.activeClaimantId;
+  const scope = claimantId ? `&claimant_id=${claimantId}` : '';
   const [labour, expenses] = await Promise.all([
-    api('GET', '/api/labour?status=pending'),
-    api('GET', '/api/expenses?status=pending'),
+    api('GET', `/api/labour?status=pending${scope}`),
+    api('GET', `/api/expenses?status=pending${scope}`),
   ]);
+  const scopeHint = claimantId
+    ? ''
+    : `<p class="empty" style="margin:0 0 0.6rem">Showing pending items across all claimants — pick a claimant from the header to narrow.</p>`;
   main.innerHTML = `
+    ${scopeHint}
     <div class="card">
       <h2>Pending labour (${labour.items.length})</h2>
       ${labour.items.length === 0 ? '<p class="empty">Nothing pending.</p>' : `

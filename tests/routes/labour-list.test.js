@@ -129,3 +129,31 @@ test('GET /api/evidence returns claimant_name per row', async () => {
   assert.equal(byCaption['note for A'], 'Acme Alpha Ltd');
   assert.equal(byCaption['note for B'], 'Beta Boundless Inc');
 });
+
+// --- ?claimant_id=N scoping (UC-R1 sub-task / hoist step 3) ----------------
+// The review queue passes the active claimant id; only rows attached to a
+// user_claimants row under that claimant should come back.
+
+test('GET /api/labour?claimant_id=N returns only rows for that claimant', async () => {
+  const itemsA = await getList(`/api/labour?claimant_id=${claimantAId}`);
+  assert.equal(itemsA.length, 1);
+  assert.equal(itemsA[0].description, 'work on A');
+  assert.equal(itemsA[0].claimant_name, 'Acme Alpha Ltd');
+
+  const itemsB = await getList(`/api/labour?claimant_id=${claimantBId}`);
+  assert.equal(itemsB.length, 1);
+  assert.equal(itemsB[0].description, 'work on B');
+  assert.equal(itemsB[0].claimant_name, 'Beta Boundless Inc');
+});
+
+test('GET /api/expenses?claimant_id=N returns only rows for that claimant', async () => {
+  const itemsA = await getList(`/api/expenses?claimant_id=${claimantAId}`);
+  assert.equal(itemsA.length, 1);
+  assert.equal(itemsA[0].description, 'expense for A');
+  assert.equal(itemsA[0].claimant_name, 'Acme Alpha Ltd');
+
+  const itemsB = await getList(`/api/expenses?claimant_id=${claimantBId}`);
+  assert.equal(itemsB.length, 1);
+  assert.equal(itemsB[0].description, 'expense for B');
+  assert.equal(itemsB[0].claimant_name, 'Beta Boundless Inc');
+});
