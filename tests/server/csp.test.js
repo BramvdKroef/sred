@@ -53,6 +53,12 @@ test('CSP policy contains the directives the SPA depends on', async () => {
   assert.match(header, /font-src [^;]*https:\/\/fonts\.gstatic\.com/);
   assert.match(header, /img-src [^;]*data:/);
 
+  // The <link rel=stylesheet> fetch for the Google Fonts CSS shim goes
+  // through connect-src in some browsers — allow both font hosts there
+  // so the console doesn't spew CSP refusals on every page load.
+  assert.match(header, /connect-src [^;]*https:\/\/fonts\.googleapis\.com/);
+  assert.match(header, /connect-src [^;]*https:\/\/fonts\.gstatic\.com/);
+
   // No inline scripts allowed (defence vs. V-01).
   assert.doesNotMatch(header, /script-src[^;]*'unsafe-inline'/);
 });

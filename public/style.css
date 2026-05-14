@@ -8,7 +8,7 @@
   --gold:        #f2b134;
   --green:       #2d9d6b;
   --text:        #1c2530;
-  --text-muted:  #6b7480;
+  --text-muted:  #5a6470;
   --bg:          #eef2f7;
   --surface:     #ffffff;
   --border:      #e3e6ea;
@@ -173,7 +173,7 @@ nav.tabs button:hover:not(.active) {
   top: 50%;
   width: 14px; height: 14px;
   transform: translateY(-50%);
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b7480' stroke-width='2'><circle cx='7' cy='7' r='4.5'/><path d='M10.5 10.5 L14 14' stroke-linecap='round'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235a6470' stroke-width='2'><circle cx='7' cy='7' r='4.5'/><path d='M10.5 10.5 L14 14' stroke-linecap='round'/></svg>");
   background-repeat: no-repeat;
   background-size: contain;
   pointer-events: none;
@@ -342,6 +342,28 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(0, 120, 181, 0.15);
 }
 input[type=file] { padding: 0.25rem; }
+
+/* Keyboard focus rings. Every focusable non-input control needs a visible
+   ring — the browser default is often invisible against our coloured
+   backgrounds. :focus-visible (rather than :focus) keeps the ring off
+   mouse clicks where it adds visual noise. */
+button:focus-visible,
+nav.tabs button:focus-visible,
+.summary-link:focus-visible,
+summary:focus-visible,
+.card a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* The page header is a brand-gradient bar, so a brand-blue ring blends in.
+   Use a translucent white ring instead so focus stays visible there. */
+header button:focus-visible,
+header a:focus-visible,
+.header-claimant-select:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
 label { display: block; margin: 0.5rem 0 0.25rem; font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 
 form .grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
@@ -361,8 +383,10 @@ table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
    wrapping. Caveat: `display: block` collapses table cells to content-width,
    so we keep the `width: 100%` rule above to make the table still fill the
    card on wide screens. Below ~720px the cells start to overflow horizontally
-   and the user can swipe to see them; a faint shadow gradient hints at it. */
-.card > table,
+   and the user can swipe to see them; a faint shadow gradient hints at it.
+   Uses a descendant (not child) selector so tables wrapped in an
+   intermediate <div> (e.g. employees.js #all-users-table) still scroll. */
+.card table,
 .card .table-scroll {
   display: block;
   overflow-x: auto;
@@ -417,7 +441,7 @@ td.actions { white-space: nowrap; }
 .pill.type-expense  { background: #fff0ee;           color: #a72f2c;          border: 1px solid #f3c8c5; }
 .pill.type-evidence { background: #fdf3d3;           color: #846200;          border: 1px solid #f3e1a0; }
 
-.pill.kind-sred        { background: var(--brand-light); color: var(--brand); border: 1px solid #c5dfee; }
+.pill.kind-sred        { background: var(--brand-light); color: var(--brand-dark); border: 1px solid #c5dfee; }
 .pill.kind-internal    { background: #f0f1f3;           color: #495057;       border: 1px solid #d8dadc; }
 .pill.status-concept    { background: #fff4d6;           color: #846200;       border: 1px solid #f5e0a0; }
 .pill.status-development{ background: #d9e8ff;           color: #1a3a8a;       border: 1px solid #b6cdef; }
@@ -461,7 +485,7 @@ td.actions { white-space: nowrap; }
    it overrides the yellow-notice tone with the error palette. */
 .error-banner {
   background: #fce0e0;
-  color: #a72f2c;
+  color: #8a2521;
   border: 1px solid #f3bcbb;
   border-radius: 4px;
   padding: 0.5rem 0.75rem;
@@ -544,7 +568,7 @@ table.activity td:last-child { font-size: 0.92rem; }
    without watching the network tab. Lighter colour + a gentle pulse so it
    reads as "in flight" rather than "static". */
 .loading {
-  color: #9aa3ad;
+  color: var(--text-muted);
   font-style: italic;
   padding: 0.5rem 0;
   font-size: 0.95rem;

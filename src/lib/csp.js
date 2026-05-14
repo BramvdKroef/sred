@@ -11,6 +11,11 @@
 //                            on dynamically-built elements (see admin/projects.js)
 //   - font-src   fonts.gstatic.com → Montserrat woff2
 //   - img-src    data:    → small inline images / placeholders
+//   - connect-src fonts.googleapis.com + fonts.gstatic.com
+//                          → the <link rel=stylesheet> fetch for the
+//                            Google Fonts CSS shim goes through connect-src
+//                            in some browsers; without these the console
+//                            spews CSP refusals on every page load.
 //
 // frame-ancestors / base-uri / form-action / object-src are tightened as
 // far as the SPA tolerates.
@@ -21,7 +26,7 @@ const POLICY = [
   "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
