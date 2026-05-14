@@ -11,7 +11,7 @@ router.use(requireAuth, requireAdmin);
 router.patch('/:id', (req, res, next) => {
   try {
     const before = getUserClaimant(req.params.id);
-    const { title, is_specified_employee, status } = req.body ?? {};
+    const { title, is_specified_employee, status, employment_start_date } = req.body ?? {};
 
     const updates = {};
     if (title !== undefined) updates.title = title;
@@ -24,6 +24,11 @@ router.patch('/:id', (req, res, next) => {
       if (!['active', 'inactive'].includes(status))
         throw badRequest('status must be active|inactive');
       updates.status = status;
+    }
+    if (employment_start_date !== undefined) {
+      if (employment_start_date !== null && typeof employment_start_date !== 'string')
+        throw badRequest('employment_start_date must be a string (YYYY-MM-DD) or null');
+      updates.employment_start_date = employment_start_date;
     }
 
     const keys = Object.keys(updates);
