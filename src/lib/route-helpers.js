@@ -64,18 +64,27 @@ export function resolveUserClaimant({ user, project, requestedUcId }) {
 }
 
 // Admins see everything; employees only their own rows (joined through
-// user_claimants.user_id). Used by labour/expense view/edit/delete.
+// user_claimants.user_id), and only while that attachment is active. Used
+// by labour/expense view/edit/delete.
 //
-// Contract: a missing user_claimant row collapses to `false` (treated as
-// "not yours"). Callers MUST NOT use this function as a not-found signal
-// for the user_claimant — load the parent entity first (which has an FK
-// to user_claimants) and rely on its existence. All current callers do
-// exactly that: they fetch a labour_entry / expense first, then pass its
-// user_claimant_id here, so the row is guaranteed to exist by FK.
+// The attachment-status check is what closes the S-3 "deactivated employee
+// can still PATCH their old rows" gap: requireAuth blocks the user-level
+// `disabled` status, but the per-attachment `user_claimants.status` had no
+// enforcement on the mutation path until this helper started checking it.
+//
+// Contract: a missing OR inactive user_claimant row collapses to `false`
+// (treated as "not yours"). Callers MUST NOT use this function as a
+// not-found signal for the user_claimant — load the parent entity first
+// (which has an FK to user_claimants) and rely on its existence. All
+// current callers do exactly that: they fetch a labour_entry / expense
+// first, then pass its user_claimant_id here, so the row is guaranteed to
+// exist by FK.
 export function isOwnerOrAdmin(user, userClaimantId) {
   if (user.role === 'admin') return true;
-  const uc = db.prepare(`SELECT user_id FROM user_claimants WHERE id = ?`).get(userClaimantId);
-  return !!uc && uc.user_id === user.id;
+  const uc = db.prepare(
+    `SELECT user_id, status FROM user_claimants WHERE id = ?`
+  ).get(userClaimantId);
+  return !!uc && uc.user_id === user.id && uc.status === 'active';
 }
 
 // Labour & expense rows are immutable once approved, and locked while the

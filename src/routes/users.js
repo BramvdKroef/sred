@@ -265,7 +265,7 @@ router.post('/:id/reactivate', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/:id/invite', inviteLimiter, (req, res, next) => {
+router.post('/:id/invite', inviteLimiter, async (req, res, next) => {
   try {
     const userId = Number(req.params.id);
     // An admin can't mint an enrollment / add-device link for themselves —
@@ -283,30 +283,46 @@ router.post('/:id/invite', inviteLimiter, (req, res, next) => {
     const { raw, expiresAt } = mintEmailToken(user.id, purpose);
     const magicLink = buildMagicLink(raw);
 
-    // SMTP-disabled paths still need to surface the link somewhere so an
-    // operator running locally can complete enrollment, but NOT in the
-    // response body — that would let any admin silently mint a sign-in link
-    // for any other admin (and step through it themselves) without leaving
-    // a trail beyond the audit row. sendMagicLink already logs to stderr
-    // when SMTP is disabled, so we just relay its `delivered` flag.
-    sendMagicLink({ to: user.email, name: user.name, purpose, link: magicLink })
-      .catch(err => console.warn('[invite] email send error:', err));
-
     // Capture target identity in the audit row so the log shows who was
     // invited rather than just the user id (the id alone is useless if the
-    // user row is later renamed or its email changes).
+    // user row is later renamed or its email changes). Written before the
+    // SMTP attempt so a transient send failure still leaves a trail.
     audit(req.user.id, purpose, 'user', user.id, undefined, {
       email: user.email, role: user.role,
     });
-    // Response body deliberately omits the raw magic link. The `delivered`
-    // flag reflects SMTP configuration at request time; when false, the
-    // link has been logged to stderr (see src/lib/email.js).
-    res.json({
+
+    // Honest delivery reporting:
+    //  - SMTP disabled (host empty): treat as expected dev mode. The link is
+    //    logged to stderr by sendMagicLink; return delivered:false without
+    //    awaiting (no remote call to wait on).
+    //  - SMTP configured: await the send, bounded by SEND_TIMEOUT_MS so a
+    //    black-holed mail host can't stall the request. Report the resolved
+    //    delivered flag and a short `error` description on failure. The
+    //    raw magic link is NEVER echoed back (V-06 still applies); on
+    //    failure the admin sees the error and can retry.
+    const response = {
       user_id: user.id,
       purpose,
       expires_at: expiresAt,
-      delivered: Boolean(config.smtp.host),
-    });
+      delivered: false,
+    };
+
+    if (!config.smtp.host) {
+      sendMagicLink({ to: user.email, name: user.name, purpose, link: magicLink })
+        .catch(err => console.warn('[invite] email send error:', err));
+    } else {
+      const result = await sendMagicLink({
+        to: user.email, name: user.name, purpose, link: magicLink,
+      });
+      response.delivered = result.delivered === true;
+      if (!response.delivered) {
+        // `reason` is one of: smtp_disabled | timeout | send_failed.
+        // `error` carries the underlying message for the admin UI.
+        response.error = result.error || result.reason || 'send_failed';
+      }
+    }
+
+    res.json(response);
   } catch (e) { next(e); }
 });
 
