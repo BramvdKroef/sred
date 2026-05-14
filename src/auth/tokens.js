@@ -43,8 +43,17 @@ export function findValidEmailToken(rawToken, expectedPurpose) {
   return row;
 }
 
+// Marks the row consumed_at and returns the number of rows affected. A
+// caller MUST check the return value: a zero means the id was unknown or
+// the row was already consumed (a race or a tampered request), and the
+// caller should refuse to proceed with whatever action the consume was
+// meant to gate (typically by throwing unauthorized('invalid token')).
 export function consumeEmailToken(tokenId) {
-  db.prepare(`UPDATE email_tokens SET consumed_at = datetime('now') WHERE id = ?`).run(tokenId);
+  const info = db.prepare(
+    `UPDATE email_tokens SET consumed_at = datetime('now')
+       WHERE id = ? AND consumed_at IS NULL`
+  ).run(tokenId);
+  return info.changes;
 }
 
 export function buildMagicLink(rawToken) {

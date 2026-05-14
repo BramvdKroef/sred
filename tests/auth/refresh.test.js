@@ -40,9 +40,21 @@ const DATA_TABLES = [
 
 beforeEach(() => {
   ctx.db.pragma('foreign_keys = OFF');
+  // migration 008 installs an append-only DELETE trigger on audit_log.
+  // The test cleanup legitimately needs to wipe it between tests, so we
+  // drop the trigger, delete, then reinstall it. (Production code path
+  // is unaffected — this is test-only state hygiene.)
+  ctx.db.exec(`DROP TRIGGER IF EXISTS audit_log_no_delete`);
   for (const table of DATA_TABLES) {
     ctx.db.exec(`DELETE FROM ${table}`);
   }
+  ctx.db.exec(`
+    CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+    BEFORE DELETE ON audit_log
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_log is append-only');
+    END;
+  `);
   ctx.db.pragma('foreign_keys = ON');
 });
 
@@ -206,7 +218,9 @@ test('replaying an expired (but never-consumed) token throws unauthorized', () =
     () => consumeRefreshToken(raw),
     err => {
       assert.equal(err.status, 401);
-      assert.match(err.message, /expired/);
+      // Unified error wording: expired and deactivated must surface the
+      // same message so an attacker can't enumerate user state.
+      assert.match(err.message, /invalid refresh token/);
       return true;
     },
   );
@@ -214,6 +228,69 @@ test('replaying an expired (but never-consumed) token throws unauthorized', () =
   // Expired-but-not-revoked is not theft; the token row should remain
   // unrevoked (the caller didn't actually consume it).
   assert.equal(getTokenByHash(raw).revoked_at, null);
+});
+
+test('expired token and deactivated user surface the same unauthorized message', () => {
+  // Path A: expired token, active user.
+  const a = makeUserWithToken({ email: 'a@example.com' });
+  ctx.db.prepare(
+    `UPDATE refresh_tokens SET expires_at = '2000-01-01T00:00:00.000Z' WHERE user_id = ?`
+  ).run(a.userId);
+
+  let errExpired;
+  try { consumeRefreshToken(a.raw); } catch (e) { errExpired = e; }
+  assert.ok(errExpired, 'expired token should throw');
+
+  // Path B: not-yet-expired token, deactivated user (status 'disabled').
+  const b = makeUserWithToken({ email: 'b@example.com', status: 'disabled' });
+
+  let errDeactivated;
+  try { consumeRefreshToken(b.raw); } catch (e) { errDeactivated = e; }
+  assert.ok(errDeactivated, 'deactivated user should throw');
+
+  // Same status code, same code field, and — critically — identical message.
+  assert.equal(errExpired.status, errDeactivated.status);
+  assert.equal(errExpired.code, errDeactivated.code);
+  assert.equal(errExpired.message, errDeactivated.message);
+  assert.match(errExpired.message, /invalid refresh token/);
+});
+
+test('mintRefreshToken prunes this user\'s expired rows on each call', () => {
+  const userId = insertUser(ctx.db);
+  // Mint, then backdate to the past so the row is "expired".
+  const stale = mintRefreshToken(userId).raw;
+  ctx.db.prepare(
+    `UPDATE refresh_tokens SET expires_at = '2000-01-01T00:00:00.000Z' WHERE token_hash = ?`
+  ).run(sha256(stale));
+
+  // Sanity: row exists before the next mint.
+  assert.equal(
+    ctx.db.prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?`).get(userId).n,
+    1,
+  );
+
+  // Next mint should prune the expired row and insert exactly the new one.
+  mintRefreshToken(userId);
+  assert.equal(
+    ctx.db.prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?`).get(userId).n,
+    1,
+    'expired row pruned, new row inserted',
+  );
+  // The pruning is user-scoped: another user's expired rows are NOT pruned
+  // by a different user's mint. (Test in isolation just to be explicit.)
+  const otherId = insertUser(ctx.db, { email: 'other@example.com' });
+  const otherStale = mintRefreshToken(otherId).raw;
+  ctx.db.prepare(
+    `UPDATE refresh_tokens SET expires_at = '2000-01-01T00:00:00.000Z' WHERE token_hash = ?`
+  ).run(sha256(otherStale));
+
+  // Mint AGAIN for the first user — other user's stale row must survive.
+  mintRefreshToken(userId);
+  assert.equal(
+    ctx.db.prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?`).get(otherId).n,
+    1,
+    'other user\'s rows untouched by this user\'s mint',
+  );
 });
 
 // --- revokeRefreshToken smoke ------------------------------------------------

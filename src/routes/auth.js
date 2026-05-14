@@ -61,7 +61,10 @@ router.post('/webauthn/register/finish', webauthnLimiter, async (req, res, next)
     }
     await finishRegistration({ user, response: attestation, label });
     if (consumeToken) {
-      consumeEmailToken(tokenRow.id);
+      // consumeEmailToken returns 0 if the row was already consumed or
+      // is gone (e.g. concurrent finish, replay). Refuse rather than
+      // silently activating the user.
+      if (consumeEmailToken(tokenRow.id) === 0) throw unauthorized('invalid token');
       db.prepare(`UPDATE users SET status = 'active' WHERE id = ? AND status = 'pending'`).run(user.id);
     }
     const fresh = db.prepare(`SELECT id, email, name, role, status FROM users WHERE id = ?`).get(user.id);
