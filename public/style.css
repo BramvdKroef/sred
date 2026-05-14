@@ -163,9 +163,24 @@ nav.tabs button:hover:not(.active) {
   position: relative;
   margin-left: auto;
 }
+/* Magnifying-glass prefix icon. Inline SVG (data URI) matches the header's
+   bar-chart-mark approach (header h1::before) so we keep the same idiom for
+   small affordance icons. */
+.project-search-wrap::before {
+  content: '';
+  position: absolute;
+  left: 0.55rem;
+  top: 50%;
+  width: 14px; height: 14px;
+  transform: translateY(-50%);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b7480' stroke-width='2'><circle cx='7' cy='7' r='4.5'/><path d='M10.5 10.5 L14 14' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-size: contain;
+  pointer-events: none;
+}
 .project-search-wrap input[type="search"] {
   width: 18rem;
-  padding: 0.45rem 0.7rem;
+  padding: 0.45rem 0.7rem 0.45rem 2rem;
   border-radius: 5px;
   font-size: 0.9rem;
 }
@@ -210,6 +225,18 @@ nav.tabs button:hover:not(.active) {
   background: #f0f2f4;
   font-weight: 700;
   border-bottom: 1px solid var(--border);
+}
+/* Per-section "See all N matches" overflow footer. Visually distinct from
+   regular result items so the user reads it as an action, not another match. */
+.search-results .item.search-more {
+  color: var(--brand);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: center;
+  background: #f8fafc;
+}
+.search-results .item.search-more:hover {
+  background: var(--brand-light);
 }
 
 /* --- Cards -------------------------------------------------------------- */
@@ -512,6 +539,21 @@ table.activity td:last-child { font-size: 0.92rem; }
 
 .error { color: var(--accent-dark); font-weight: 500; }
 .empty { color: var(--text-muted); font-style: italic; padding: 0.5rem 0; }
+/* Loading placeholder. Visually distinct from `.empty` (which means "no data
+   exists") so the user can tell a fetch-in-flight from a known-empty result
+   without watching the network tab. Lighter colour + a gentle pulse so it
+   reads as "in flight" rather than "static". */
+.loading {
+  color: #9aa3ad;
+  font-style: italic;
+  padding: 0.5rem 0;
+  font-size: 0.95rem;
+  animation: loadingPulse 1.4s ease-in-out infinite;
+}
+@keyframes loadingPulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
 .row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .row > * { margin: 0; }
 pre.json { background: #f6f8fa; padding: 0.75rem; overflow: auto; border-radius: 4px; font-size: 0.85rem; }

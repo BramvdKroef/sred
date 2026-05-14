@@ -188,7 +188,7 @@ function renderEditClaimantForm(c) {
           <div><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked)</label><input value="${esc(c.sred_method)}" disabled title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set."></div>
         </div>
         <div class="actions row" style="gap:0.4rem">
-          <button class="small">Save</button>
+          <button class="small">Save claimant</button>
           <button type="button" class="small secondary" id="cancel-edit-claimant">Cancel</button>
         </div>
       </form>
@@ -227,7 +227,7 @@ function bindList(ctx) {
   // Row-click → drilldown (drive hash; hashchange triggers render)
   document.querySelectorAll('[data-open-project]').forEach(tr => {
     tr.addEventListener('click', () => {
-      location.hash = `claimants/${tr.dataset.openProject}`;
+      location.hash = `projects/${tr.dataset.openProject}`;
     });
   });
 
@@ -333,7 +333,7 @@ function bindList(ctx) {
 
 async function renderProjectDetail(main, ctx) {
   const { state } = ctx;
-  main.innerHTML = '<p class="empty">Loading project…</p>';
+  main.innerHTML = '<p class="loading">Loading project…</p>';
   const projectId = state.viewingProjectId;
   const [project, activity, revisions] = await Promise.all([
     api('GET', `/api/projects/${projectId}`),
@@ -411,7 +411,7 @@ async function renderProjectDetail(main, ctx) {
   wireRevisionsCard(main);
   document.getElementById('back-to-projects').addEventListener('click', e => {
     e.preventDefault();
-    location.hash = 'claimants';
+    location.hash = 'projects';
   });
   bindEditProjectForm(project, ctx);
   bindLogOnBehalfForms(project, ctx);
@@ -470,7 +470,7 @@ function renderEditProjectForm(project, managers) {
           </div>
         </div>
         <div class="actions row" style="gap:0.5rem">
-          <button>Save changes</button>
+          <button>Save project</button>
           <button type="button" class="secondary" id="cancel-edit-project">Cancel</button>
           <span class="muted">Narrative edits create a new revision snapshot.</span>
         </div>
@@ -623,7 +623,7 @@ function renderLogOnBehalfCards(project, claimant) {
               </div>
             </details>
             <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
-            <div class="actions" style="margin-top:0.3rem"><button class="small">Save labour</button></div>
+            <div class="actions" style="margin-top:0.3rem"><button class="small">Add labour entry</button></div>
           </form>
         </div>
       </div>
@@ -660,7 +660,7 @@ function renderLogOnBehalfCards(project, claimant) {
               </div>
             </details>
             <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
-            <div class="actions" style="margin-top:0.3rem"><button class="small">Save expense</button></div>
+            <div class="actions" style="margin-top:0.3rem"><button class="small">Add expense</button></div>
           </form>
         </div>
       </div>
@@ -732,7 +732,7 @@ function renderAssignForm(project, users) {
             `<option value="${u.user_claimant_id}">${esc(u.name)} (${esc(u.role)})</option>`).join('')}
         </select>
       </div>
-      <div><button class="small">Assign</button></div>
+      <div><button class="small">Add assignment</button></div>
     </form>
   </div>`;
 }

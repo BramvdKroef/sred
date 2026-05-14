@@ -19,7 +19,7 @@ export function buildListUrl(base, params) {
 }
 
 export async function render(main, ctx) {
-  main.innerHTML = '<p class="empty">Loading review queue…</p>';
+  main.innerHTML = '<p class="loading">Loading review queue…</p>';
   // Scope to the active claimant when one is selected; otherwise show the
   // global queue. The header selector re-runs render() on change, so this
   // refetches whenever the scope changes.
