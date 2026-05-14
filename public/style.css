@@ -365,9 +365,9 @@ td.actions { white-space: nowrap; }
 
 .pill.kind-sred        { background: var(--brand-light); color: var(--brand); border: 1px solid #c5dfee; }
 .pill.kind-internal    { background: #f0f1f3;           color: #495057;       border: 1px solid #d8dadc; }
-.pill.phase-concept    { background: #fff4d6;           color: #846200;       border: 1px solid #f5e0a0; }
-.pill.phase-development{ background: #d9e8ff;           color: #1a3a8a;       border: 1px solid #b6cdef; }
-.pill.phase-complete   { background: #d9efe1;           color: #1c6a3e;       border: 1px solid #b6dec5; }
+.pill.status-concept    { background: #fff4d6;           color: #846200;       border: 1px solid #f5e0a0; }
+.pill.status-development{ background: #d9e8ff;           color: #1a3a8a;       border: 1px solid #b6cdef; }
+.pill.status-complete   { background: #d9efe1;           color: #1c6a3e;       border: 1px solid #b6dec5; }
 
 .pill.overtime { background: #ffe4cc; color: #8a4400; border: 1px solid #f5c79b; }
 
@@ -385,7 +385,7 @@ td.actions { white-space: nowrap; }
   font-weight: 600;
 }
 
-/* The "claimant · type · phase · field · dates · manager" strip used on
+/* The "claimant · type · status · field · dates · manager" strip used on
    detail headers. Sits inside a .card; pairs with .row. */
 .meta-strip {
   gap: 1rem;

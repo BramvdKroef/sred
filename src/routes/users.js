@@ -62,7 +62,7 @@ function loadUserBundle(userId) {
   }
   const projects = db.prepare(`
     SELECT DISTINCT p.id, p.title, p.claimant_id, c.legal_name AS claimant_name,
-           p.type, p.phase, p.status
+           p.type, p.status
       FROM projects p
       JOIN project_assignments pa ON pa.project_id = p.id AND pa.status = 'active'
       JOIN user_claimants uc      ON uc.id = pa.user_claimant_id AND uc.status = 'active'

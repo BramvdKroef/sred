@@ -1,5 +1,5 @@
 import { api, esc, cents, bindForm, onSubmit, activityHtml,
-         wireActivityDetails, TYPE_LABEL, PHASE_LABEL } from '../api.js';
+         wireActivityDetails, TYPE_LABEL, STATUS_LABEL } from '../api.js';
 
 let allUsers = [];
 
@@ -459,14 +459,13 @@ async function renderUserDetail(main, ctx) {
       ${bundle.projects.length === 0
         ? '<p class="empty">Not assigned to any active projects.</p>'
         : `<table class="rows-clickable">
-            <thead><tr><th>Project</th><th>Claimant</th><th>Type</th><th>Phase</th><th>Status</th></tr></thead>
+            <thead><tr><th>Project</th><th>Claimant</th><th>Type</th><th>Status</th></tr></thead>
             <tbody>${bundle.projects.map(p => `
               <tr data-open-project="${p.id}" data-cid="${p.claimant_id}">
                 <td><strong>${esc(p.title)}</strong></td>
                 <td>${esc(p.claimant_name)}</td>
                 <td><span class="pill kind-${esc(p.type)}">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></td>
-                <td><span class="pill phase-${esc(p.phase)}">${esc(PHASE_LABEL[p.phase] ?? p.phase)}</span></td>
-                <td><span class="pill">${esc(p.status)}</span></td>
+                <td><span class="pill status-${esc(p.status)}">${esc(STATUS_LABEL[p.status] ?? p.status)}</span></td>
               </tr>`).join('')}</tbody>
           </table>`}
     </div>

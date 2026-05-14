@@ -474,14 +474,14 @@ test('snapshotProjectRevisions: returns the latest revision per project', () => 
   ctx.db.prepare(`
     INSERT INTO project_revisions
       (project_id, title, field_of_science, advancement_sought, uncertainties,
-       work_performed, revised_by_user_id, type, phase, revised_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'sred', 'development', ?)
+       work_performed, revised_by_user_id, type, revised_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'sred', ?)
   `).run(s.projectId, 'v1', 'cs', 'a1', 'u1', 'w1', s.userId, '2025-01-01');
   ctx.db.prepare(`
     INSERT INTO project_revisions
       (project_id, title, field_of_science, advancement_sought, uncertainties,
-       work_performed, revised_by_user_id, type, phase, revised_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'sred', 'development', ?)
+       work_performed, revised_by_user_id, type, revised_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'sred', ?)
   `).run(s.projectId, 'v2', 'cs', 'a2', 'u2', 'w2', s.userId, '2025-02-01');
 
   const snap = snapshotProjectRevisions(s.claimantId);

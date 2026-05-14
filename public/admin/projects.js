@@ -1,6 +1,6 @@
 import { api, esc, bindForm, onSubmit, activityHtml,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
-         wireActivityDetails, TYPE_LABEL, PHASE_LABEL } from '../api.js';
+         wireActivityDetails, TYPE_LABEL, STATUS_LABEL } from '../api.js';
 
 export async function render(main, ctx) {
   if (ctx.state.viewingProjectId) return renderProjectDetail(main, ctx);
@@ -91,13 +91,6 @@ function renderProjectsAndUsers(state) {
                 <option value="internal">Internal</option>
               </select>
             </div>
-            <div><label>Phase</label>
-              <select name="phase">
-                <option value="concept" selected>Concept</option>
-                <option value="development">Development</option>
-                <option value="complete">Complete</option>
-              </select>
-            </div>
             <div><label>Manager</label>
               <select name="manager_user_id">
                 <option value="">— none —</option>
@@ -107,7 +100,11 @@ function renderProjectsAndUsers(state) {
             <div><label>Field of science</label><input name="field_of_science" placeholder="e.g. Computer science"></div>
             <div><label>Start date</label><input type="date" name="start_date" required></div>
             <div><label>Status</label>
-              <select name="status"><option>planned</option><option selected>active</option><option>completed</option></select>
+              <select name="status">
+                <option value="concept">Concept</option>
+                <option value="development" selected>Development</option>
+                <option value="complete">Complete</option>
+              </select>
             </div>
             <div class="full"><label>Advancement sought</label>
               <textarea name="advancement_sought" rows="3" placeholder="What technological advancement is this project trying to achieve?"></textarea>
@@ -151,15 +148,14 @@ function renderPeriodsTable(periods) {
 function renderProjectsTable(projects) {
   if (!projects.length) return '<p class="empty">No projects yet.</p>';
   return `<table class="rows-clickable">
-    <thead><tr><th>Title</th><th>Type</th><th>Phase</th><th>Field</th><th>Start</th><th>Status</th></tr></thead>
+    <thead><tr><th>Title</th><th>Type</th><th>Field</th><th>Start</th><th>Status</th></tr></thead>
     <tbody>${projects.map(p => `
       <tr data-open-project="${p.id}">
         <td><strong>${esc(p.title)}</strong></td>
         <td><span class="pill kind-${esc(p.type)}">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></td>
-        <td><span class="pill phase-${esc(p.phase)}">${esc(PHASE_LABEL[p.phase] ?? p.phase)}</span></td>
         <td>${esc(p.field_of_science ?? '—')}</td>
         <td>${esc(p.start_date)}</td>
-        <td><span class="pill">${esc(p.status)}</span></td>
+        <td><span class="pill status-${esc(p.status)}">${esc(STATUS_LABEL[p.status] ?? p.status)}</span></td>
       </tr>`).join('')}
     </tbody></table>`;
 }
@@ -324,7 +320,6 @@ function bindList(ctx) {
       start_date: fd.get('start_date'),
       status: fd.get('status'),
       type: fd.get('type'),
-      phase: fd.get('phase'),
       manager_user_id: managerRaw ? Number(managerRaw) : null,
       advancement_sought: fd.get('advancement_sought') || null,
       uncertainties: fd.get('uncertainties') || null,
@@ -360,7 +355,7 @@ async function renderProjectDetail(main, ctx) {
       <div class="row meta-strip">
         <span><strong>${esc(claimant?.legal_name ?? '')}</strong></span>
         <span class="pill kind-${esc(project.type)}">${esc(TYPE_LABEL[project.type] ?? project.type)}</span>
-        <span class="pill phase-${esc(project.phase)}">${esc(PHASE_LABEL[project.phase] ?? project.phase)}</span>
+        <span class="pill status-${esc(project.status)}">${esc(STATUS_LABEL[project.status] ?? project.status)}</span>
         <span>${esc(project.field_of_science ?? '—')}</span>
         <span>Started ${esc(project.start_date)}${project.end_date ? ` → ${esc(project.end_date)}` : ''}</span>
         <span>Manager: <strong>${project.manager ? esc(project.manager.name) : '—'}</strong></span>
@@ -438,13 +433,6 @@ function renderEditProjectForm(project, managers) {
               <option value="internal" ${selected(project.type,'internal')}>Internal</option>
             </select>
           </div>
-          <div><label>Phase</label>
-            <select name="phase">
-              <option value="concept" ${selected(project.phase,'concept')}>Concept</option>
-              <option value="development" ${selected(project.phase,'development')}>Development</option>
-              <option value="complete" ${selected(project.phase,'complete')}>Complete</option>
-            </select>
-          </div>
           <div><label>Manager</label>
             <select name="manager_user_id">
               <option value="" ${!project.manager_user_id ? 'selected' : ''}>— none —</option>
@@ -462,9 +450,9 @@ function renderEditProjectForm(project, managers) {
           </div>
           <div><label>Status</label>
             <select name="status">
-              <option ${selected(project.status,'planned')}>planned</option>
-              <option ${selected(project.status,'active')}>active</option>
-              <option ${selected(project.status,'completed')}>completed</option>
+              <option value="concept" ${selected(project.status,'concept')}>Concept</option>
+              <option value="development" ${selected(project.status,'development')}>Development</option>
+              <option value="complete" ${selected(project.status,'complete')}>Complete</option>
             </select>
           </div>
           <div class="full"><label>Advancement sought</label>
@@ -510,7 +498,6 @@ function bindEditProjectForm(project, ctx) {
       end_date: endDate || null,
       status: fd.get('status'),
       type: fd.get('type'),
-      phase: fd.get('phase'),
       manager_user_id: managerRaw ? Number(managerRaw) : null,
       advancement_sought: fd.get('advancement_sought') || null,
       uncertainties: fd.get('uncertainties') || null,

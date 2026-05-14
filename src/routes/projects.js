@@ -8,10 +8,10 @@ import { getProject } from '../lib/route-helpers.js';
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-const SNAPSHOT_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed', 'type', 'phase', 'manager_user_id'];
+const SNAPSHOT_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed', 'type', 'manager_user_id'];
 const EDITABLE_FIELDS = [...SNAPSHOT_FIELDS, 'start_date', 'end_date', 'status'];
-const VALID_TYPES  = ['sred', 'internal'];
-const VALID_PHASES = ['concept', 'development', 'complete'];
+const VALID_TYPES    = ['sred', 'internal'];
+const VALID_STATUSES = ['concept', 'development', 'complete'];
 
 function validateManagerUserId(id) {
   if (id === null) return;
@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
     params.push(`%${q}%`, `%${q}%`);
   }
   const sql = `
-    SELECT p.id, p.title, p.status, p.type, p.phase, p.claimant_id,
+    SELECT p.id, p.title, p.status, p.type, p.claimant_id,
            c.legal_name AS claimant_name
       FROM projects p JOIN claimants c ON c.id = p.claimant_id
      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
@@ -71,14 +71,11 @@ router.patch('/:id', (req, res, next) => {
       if (req.body && k in req.body) updates[k] = req.body[k];
     }
 
-    if (updates.status !== undefined && !['planned', 'active', 'completed'].includes(updates.status)) {
-      throw badRequest('status must be planned|active|completed');
+    if (updates.status !== undefined && !VALID_STATUSES.includes(updates.status)) {
+      throw badRequest(`status must be ${VALID_STATUSES.join('|')}`);
     }
     if (updates.type !== undefined && !VALID_TYPES.includes(updates.type)) {
       throw badRequest(`type must be ${VALID_TYPES.join('|')}`);
-    }
-    if (updates.phase !== undefined && !VALID_PHASES.includes(updates.phase)) {
-      throw badRequest(`phase must be ${VALID_PHASES.join('|')}`);
     }
     if ('manager_user_id' in updates) {
       validateManagerUserId(updates.manager_user_id);
@@ -102,8 +99,8 @@ router.patch('/:id', (req, res, next) => {
         db.prepare(`
           INSERT INTO project_revisions
             (project_id, title, field_of_science, advancement_sought, uncertainties,
-             work_performed, type, phase, manager_user_id, revised_by_user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             work_performed, type, manager_user_id, revised_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           before.id,
           merged.title,
@@ -112,7 +109,6 @@ router.patch('/:id', (req, res, next) => {
           merged.uncertainties,
           merged.work_performed,
           merged.type,
-          merged.phase,
           merged.manager_user_id ?? null,
           req.user.id,
         );

@@ -159,9 +159,9 @@ for (const p of PROJECTS) {
     'SELECT id FROM projects WHERE claimant_id = ? AND title = ?'
   ).get(CLAIMANT_ID, p.title);
   if (existing) {
-    // Make sure existing fixture projects have realistic type/phase too.
+    // Make sure existing fixture projects have the expected type and status.
     db.prepare(
-      "UPDATE projects SET type = 'sred', phase = 'development' WHERE id = ?"
+      "UPDATE projects SET type = 'sred', status = 'development' WHERE id = ?"
     ).run(existing.id);
     console.log(`  skip (exists): ${p.title}`);
     skipped++;
@@ -170,14 +170,14 @@ for (const p of PROJECTS) {
   const tx = db.transaction(() => {
     const info = db.prepare(`
       INSERT INTO projects
-        (claimant_id, title, field_of_science, start_date, status, type, phase,
+        (claimant_id, title, field_of_science, start_date, status, type,
          advancement_sought, uncertainties, work_performed)
-      VALUES (?, ?, ?, '2026-01-01', 'active', 'sred', 'development', ?, ?, ?)
+      VALUES (?, ?, ?, '2026-01-01', 'development', 'sred', ?, ?, ?)
     `).run(CLAIMANT_ID, p.title, p.field_of_science, p.advancement_sought, p.uncertainties, p.work_performed);
     db.prepare(`
       INSERT INTO project_revisions
-        (project_id, title, field_of_science, advancement_sought, uncertainties, work_performed, type, phase, revised_by_user_id)
-      VALUES (?, ?, ?, ?, ?, ?, 'sred', 'development', 1)
+        (project_id, title, field_of_science, advancement_sought, uncertainties, work_performed, type, revised_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'sred', 1)
     `).run(info.lastInsertRowid, p.title, p.field_of_science, p.advancement_sought, p.uncertainties, p.work_performed);
   });
   tx();

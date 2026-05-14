@@ -136,23 +136,22 @@ export function insertProject(db, claimantId, overrides = {}) {
     field_of_science: 'computer_science',
     start_date: '2025-01-01',
     end_date: null,
-    status: 'active',
+    status: 'development',
     advancement_sought: 'TBD',
     uncertainties: 'TBD',
     work_performed: 'TBD',
     type: 'sred',
-    phase: 'development',
     ...overrides,
   };
   const info = db.prepare(`
     INSERT INTO projects
       (claimant_id, title, field_of_science, start_date, end_date, status,
-       advancement_sought, uncertainties, work_performed, type, phase)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       advancement_sought, uncertainties, work_performed, type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     claimantId, row.title, row.field_of_science, row.start_date, row.end_date,
     row.status, row.advancement_sought, row.uncertainties, row.work_performed,
-    row.type, row.phase
+    row.type
   );
   return info.lastInsertRowid;
 }

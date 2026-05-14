@@ -1,6 +1,6 @@
 // Project enum display labels. Stored values are lowercase; UI shows these.
-export const TYPE_LABEL  = { sred: 'SR&ED', internal: 'Internal' };
-export const PHASE_LABEL = { concept: 'Concept', development: 'Development', complete: 'Complete' };
+export const TYPE_LABEL   = { sred: 'SR&ED', internal: 'Internal' };
+export const STATUS_LABEL = { concept: 'Concept', development: 'Development', complete: 'Complete' };
 
 const JWT_KEY     = 'sred-jwt';
 const REFRESH_KEY = 'sred-refresh';

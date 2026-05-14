@@ -131,7 +131,7 @@ The UI use-case audit found 8 features in the SPA without a corresponding entry 
 Drafted IDs: UC-A6 (deactivate/reactivate), UC-A7 (project type+phase), UC-A8 (project manager), UC-A9 (audit-log tab), UC-E5 (overview dashboards), UC-E6 (overtime flag), UC-E7 (log-on-behalf), UC-R4 (global search).
 
 Notable corrections caught by the draft agent:
-- **Project `type` is load-bearing** (gates T661 inclusion in `lib/t661.js`); `phase` is decorative. The audit treated them as equivalent.
+- ~~**Project `type` is load-bearing**~~ (still true). ~~`phase` is decorative.~~ Resolved: `phase` column dropped (migration 011); `status` values renamed to `concept`/`development`/`complete` (the old `phase` wording). The UC-A7 draft about type+phase should be re-read as type-only.
 - **`reactivate` is incomplete** — flips `users.status` only, not the `user_claimants` rows that `deactivate` bulk-flipped.
 - **Overtime flag is a marker only** — `is_overtime` is not consulted by the labour-cost calc.
 
