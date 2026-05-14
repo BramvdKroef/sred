@@ -36,9 +36,9 @@ function renderClaimantsTab(ctx) {
               <div><label>Legal name</label><input name="legal_name" required></div>
               <div><label>Business number</label><input name="business_number"></div>
               <div><label>Fiscal year end (MM-DD)</label><input name="fye" placeholder="12-31" required></div>
-              <div><label>Reporting currency</label><input name="reporting_currency" value="CAD"></div>
-              <div class="full"><label>SR&amp;ED method (locked once set)</label>
-                <select name="sred_method"><option>proxy</option><option>traditional</option></select>
+              <div><label title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate.">Reporting currency</label><input name="reporting_currency" value="CAD" title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate."></div>
+              <div class="full"><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked once set)</label>
+                <select name="sred_method" title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set."><option>proxy</option><option>traditional</option></select>
               </div>
             </div>
             <div class="actions"><button class="small">Create claimant</button></div>
@@ -184,8 +184,8 @@ function renderEditClaimantForm(c) {
           <div class="full"><label>Legal name</label><input name="legal_name" required value="${esc(c.legal_name)}"></div>
           <div><label>Business number</label><input name="business_number" value="${esc(c.business_number ?? '')}"></div>
           <div><label>Fiscal year end (MM-DD)</label><input name="fye" required value="${esc(fye)}" pattern="\\d{2}-\\d{2}"></div>
-          <div><label>Reporting currency</label><input name="reporting_currency" required value="${esc(c.reporting_currency)}"></div>
-          <div><label>SR&amp;ED method (locked)</label><input value="${esc(c.sred_method)}" disabled></div>
+          <div><label title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate.">Reporting currency</label><input name="reporting_currency" required value="${esc(c.reporting_currency)}" title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate."></div>
+          <div><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked)</label><input value="${esc(c.sred_method)}" disabled title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set."></div>
         </div>
         <div class="actions row" style="gap:0.4rem">
           <button class="small">Save</button>
