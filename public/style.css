@@ -110,6 +110,27 @@ header .user button.secondary {
 header .user button.secondary:hover {
   background: rgba(255,255,255,0.25);
 }
+/* Active-claimant selector in the page header. Sits next to the user
+   block. Matches the translucent-white treatment used by the sign-out
+   button (header .user button.secondary) so it blends with the dark
+   gradient bar. */
+.header-claimant-select {
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  padding: 0.3rem 0.55rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  max-width: 14rem;
+  cursor: pointer;
+}
+.header-claimant-select:hover { background: rgba(255,255,255,0.25); }
+.header-claimant-select:focus { outline: 2px solid rgba(255,255,255,0.55); outline-offset: 1px; }
+/* <option> elements pop in the OS-native colour scheme; force readable
+   text on the white-ish dropdown most browsers render. */
+.header-claimant-select option { color: var(--text); background: var(--surface); }
 
 /* --- Tabs --------------------------------------------------------------- */
 

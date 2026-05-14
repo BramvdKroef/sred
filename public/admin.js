@@ -15,7 +15,11 @@ const state = {
   signOut: null,
   tab: 'overview',
   claimants: [],
-  claimantId: null,
+  // Active claimant scope. `null` means "All claimants" (the sentinel).
+  // Source of truth for every tab; persisted to localStorage.
+  // Today only Projects + Exports actually consult it — Review / Audit /
+  // Overview will start honoring it in steps 3-4.
+  activeClaimantId: null,
   periods: [],
   projects: [],
   users: [],
@@ -28,6 +32,36 @@ const state = {
 };
 
 export const ALLOWED_TABS = ['overview', 'claimants', 'users', 'review', 'exports', 'audit', 'preferences'];
+
+// --- Active-claimant persistence (pure helpers, unit-tested) ---------------
+
+const ACTIVE_CLAIMANT_KEY = 'sred-active-claimant';
+
+// Read the persisted active-claimant id and validate it against the current
+// claimants list. Returns the id (number) or `null` for "all claimants".
+// Anything unparseable, missing, or referring to a claimant no longer in the
+// list falls back to `null` — never throws.
+export function readActiveClaimantId(claimantList, storage = globalThis.localStorage) {
+  if (!storage) return null;
+  let raw;
+  try { raw = storage.getItem(ACTIVE_CLAIMANT_KEY); }
+  catch { return null; }
+  if (raw === null || raw === '' || raw === 'null') return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n)) return null;
+  if (!Array.isArray(claimantList) || !claimantList.some(c => c.id === n)) return null;
+  return n;
+}
+
+// Persist the active-claimant id. `null` (the "All claimants" sentinel) is
+// written as the literal string "null" so reads round-trip predictably.
+export function writeActiveClaimantId(id, storage = globalThis.localStorage) {
+  if (!storage) return;
+  try {
+    if (id === null || id === undefined) storage.setItem(ACTIVE_CLAIMANT_KEY, 'null');
+    else storage.setItem(ACTIVE_CLAIMANT_KEY, String(id));
+  } catch { /* localStorage may be disabled (private mode, quota, ...) */ }
+}
 
 // Pure parser for the URL hash. Returns { tab, projectId, userId, valid }.
 // Exported so tests can verify hash handling without a DOM.
@@ -86,6 +120,7 @@ function shell() {
     <header>
       <h1>Precision <strong>SR&amp;ED</strong></h1>
       <div class="user">
+        <select id="header-claimant-select" class="header-claimant-select" aria-label="Active claimant"></select>
         <strong><a href="#preferences" class="header-link">${esc(state.me.user.name)}</a></strong>
         <span class="role">admin</span>
         <button class="secondary small" id="signout">Sign out</button>
@@ -106,6 +141,7 @@ function shell() {
     <main id="main"></main>
   `;
   $('#signout').addEventListener('click', state.signOut);
+  bindHeaderClaimantSelect();
   document.querySelectorAll('nav.tabs button').forEach(b => {
     b.addEventListener('click', () => { location.hash = b.dataset.tab; });
   });
@@ -118,16 +154,52 @@ const tabBtn = (key, label) =>
 
 async function reloadAll() {
   state.claimants = (await api('GET', '/api/claimants')).items;
-  if (!state.claimantId && state.claimants[0]) state.claimantId = state.claimants[0].id;
+  // Rehydrate active claimant from localStorage on first load (when nothing
+  // is set yet). After that, just validate the current selection still
+  // exists — a deleted claimant falls back to "All claimants" (null).
+  if (state.activeClaimantId === null) {
+    state.activeClaimantId = readActiveClaimantId(state.claimants);
+  } else if (!state.claimants.some(c => c.id === state.activeClaimantId)) {
+    state.activeClaimantId = null;
+    writeActiveClaimantId(null);
+  }
   state.managers = (await api('GET', '/api/users?role=manager,admin&status=active')).items;
-  if (state.claimantId) {
-    state.periods  = (await api('GET', `/api/claimants/${state.claimantId}/periods`)).items;
-    state.projects = (await api('GET', `/api/claimants/${state.claimantId}/projects`)).items;
-    state.users    = (await api('GET', `/api/users?claimant_id=${state.claimantId}`)).items;
+  if (state.activeClaimantId) {
+    state.periods  = (await api('GET', `/api/claimants/${state.activeClaimantId}/periods`)).items;
+    state.projects = (await api('GET', `/api/claimants/${state.activeClaimantId}/projects`)).items;
+    state.users    = (await api('GET', `/api/users?claimant_id=${state.activeClaimantId}`)).items;
   } else {
     state.periods = state.projects = state.users = [];
   }
+  populateHeaderClaimantSelect();
   render();
+}
+
+// Render the header's <option> list from the current state.claimants and
+// reflect the active selection. Called whenever the claimants list might
+// have changed (typically after reloadAll) so a newly-created claimant
+// appears immediately.
+function populateHeaderClaimantSelect() {
+  const sel = document.getElementById('header-claimant-select');
+  if (!sel) return;
+  const opts = ['<option value="">All claimants</option>']
+    .concat(state.claimants.map(c => `<option value="${c.id}">${esc(c.legal_name)}</option>`));
+  sel.innerHTML = opts.join('');
+  sel.value = state.activeClaimantId == null ? '' : String(state.activeClaimantId);
+}
+
+function bindHeaderClaimantSelect() {
+  const sel = document.getElementById('header-claimant-select');
+  if (!sel) return;
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    state.activeClaimantId = v === '' ? null : Number(v);
+    writeActiveClaimantId(state.activeClaimantId);
+    // Re-fetch claimant-scoped data and re-render the active tab. This is
+    // the SPA's existing pattern (matches the old per-tab selector in
+    // projects.js, which also called reloadAll on change).
+    reloadAll();
+  });
 }
 
 function render() {
@@ -151,7 +223,12 @@ function render() {
 
 async function selectProject({ id, claimant_id }) {
   state.tab = 'claimants';
-  state.claimantId = claimant_id;
+  // Jumping to a project from search/anywhere also pins the active claimant
+  // to that project's claimant so the header stays consistent.
+  if (state.activeClaimantId !== claimant_id) {
+    state.activeClaimantId = claimant_id;
+    writeActiveClaimantId(claimant_id);
+  }
   state.viewingProjectId = id;
   state.viewingUserId = null;
   history.replaceState(null, '', `#claimants/${id}`);

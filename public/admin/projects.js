@@ -12,21 +12,24 @@ export async function render(main, ctx) {
 
 function renderClaimantsTab(ctx) {
   const { state } = ctx;
+  // The active claimant now comes from the header selector
+  // (state.activeClaimantId). When "All claimants" is selected this tab
+  // prompts the user to narrow scope, since most actions here are
+  // claimant-scoped (create period, create project, edit claimant).
+  const activeId = state.activeClaimantId;
   return `
     <div class="two-up">
       <div class="card compact">
         <div class="card-head">
           <h2>Claimant</h2>
           <div class="row" style="gap:0.3rem">
-            ${state.claimantId ? '<button id="edit-claimant-toggle" class="secondary small">✎ Edit</button>' : ''}
+            ${activeId ? '<button id="edit-claimant-toggle" class="secondary small">✎ Edit</button>' : ''}
             <button id="new-claimant-toggle" class="secondary small">＋ New</button>
           </div>
         </div>
-        <select id="claimant-pick" style="width: 100%">
-          <option value="">— select —</option>
-          ${state.claimants.map(c =>
-            `<option value="${c.id}" ${c.id === state.claimantId ? 'selected' : ''}>${esc(c.legal_name)}</option>`).join('')}
-        </select>
+        ${activeId
+          ? `<p class="muted" style="margin:0">${esc(state.claimants.find(c => c.id === activeId)?.legal_name ?? '')}</p>`
+          : '<p class="empty" style="margin:0">Pick a claimant from the header to manage it.</p>'}
         <div id="new-claimant-form" hidden style="margin-top: 0.75rem">
           <form id="claimant-form">
             <div class="grid">
@@ -41,16 +44,16 @@ function renderClaimantsTab(ctx) {
             <div class="actions"><button class="small">Create claimant</button></div>
           </form>
         </div>
-        ${state.claimantId ? renderEditClaimantForm(state.claimants.find(c => c.id === state.claimantId)) : ''}
+        ${activeId ? renderEditClaimantForm(state.claimants.find(c => c.id === activeId)) : ''}
       </div>
       <div class="card compact">
         <div class="card-head">
           <h2>Fiscal periods</h2>
-          ${state.claimantId ? '<button id="new-period-toggle" class="secondary small">＋ Add</button>' : ''}
+          ${activeId ? '<button id="new-period-toggle" class="secondary small">＋ Add</button>' : ''}
         </div>
-        ${state.claimantId
+        ${activeId
           ? renderPeriodsTable(state.periods) + (() => {
-              const c = state.claimants.find(c => c.id === state.claimantId);
+              const c = state.claimants.find(c => c.id === activeId);
               const { start, end } = suggestPeriodDates(c, state.periods);
               return `
               <div id="new-period-form" hidden style="margin-top: 0.6rem">
@@ -61,10 +64,10 @@ function renderClaimantsTab(ctx) {
                 </form>
               </div>`;
             })()
-          : '<p class="empty">Pick a claimant.</p>'}
+          : '<p class="empty">Pick a claimant from the header.</p>'}
       </div>
     </div>
-    ${state.claimantId ? renderProjectsAndUsers(state) : '<p class="empty">Pick or create a claimant to continue.</p>'}
+    ${activeId ? renderProjectsAndUsers(state) : '<p class="empty">Pick a claimant from the header (or create one) to see its projects.</p>'}
   `;
 }
 
@@ -222,12 +225,8 @@ function suggestPeriodDates(claimant, periods) {
 function bindList(ctx) {
   const { state, reloadAll } = ctx;
 
-  // Claimant selector
-  const cp = document.getElementById('claimant-pick');
-  if (cp) cp.addEventListener('change', e => {
-    state.claimantId = Number(e.target.value) || null;
-    reloadAll();
-  });
+  // The claimant selector now lives in the page header (public/admin.js).
+  // We just read state.activeClaimantId here.
 
   // Row-click → drilldown (drive hash; hashchange triggers render)
   document.querySelectorAll('[data-open-project]').forEach(tr => {
@@ -285,7 +284,7 @@ function bindList(ctx) {
   bindForm('#form-edit-claimant', async fd => {
     const fye = (fd.get('fye') || '').split('-').map(Number);
     if (fye.length !== 2 || !fye[0] || !fye[1]) throw new Error('Fiscal year end must be MM-DD');
-    await api('PATCH', `/api/claimants/${state.claimantId}`, {
+    await api('PATCH', `/api/claimants/${state.activeClaimantId}`, {
       legal_name: fd.get('legal_name'),
       business_number: fd.get('business_number') || null,
       fiscal_year_end_month: fye[0],
@@ -310,7 +309,7 @@ function bindList(ctx) {
   });
 
   bindForm('#period-form', async fd => {
-    await api('POST', `/api/claimants/${state.claimantId}/periods`, {
+    await api('POST', `/api/claimants/${state.activeClaimantId}/periods`, {
       start_date: fd.get('start_date'),
       end_date: fd.get('end_date'),
     });
@@ -319,7 +318,7 @@ function bindList(ctx) {
 
   bindForm('#project-form', async fd => {
     const managerRaw = fd.get('manager_user_id');
-    await api('POST', `/api/claimants/${state.claimantId}/projects`, {
+    await api('POST', `/api/claimants/${state.activeClaimantId}/projects`, {
       title: fd.get('title'),
       field_of_science: fd.get('field_of_science') || null,
       start_date: fd.get('start_date'),

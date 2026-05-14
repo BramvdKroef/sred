@@ -13,7 +13,7 @@ export async function render(main, ctx) {
 
 function renderUsersTab(ctx) {
   const claimantOpts = ctx.state.claimants
-    .map(c => `<option value="${c.id}" ${c.id === ctx.state.claimantId ? 'selected' : ''}>${esc(c.legal_name)}</option>`)
+    .map(c => `<option value="${c.id}" ${c.id === ctx.state.activeClaimantId ? 'selected' : ''}>${esc(c.legal_name)}</option>`)
     .join('');
   // The form has two modes:
   //   - 'create' (default): collect name+role and POST /api/users (which also
