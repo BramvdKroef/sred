@@ -15,20 +15,37 @@ export async function render(main, ctx) {
 
 // --- List view (Add employee + All employees) ------------------------------
 
+// SR&ED-specific terminology that admins repeatedly bump into; hover help
+// keeps the labels short while still defining the term where it's used. Plain
+// `title=` attribute — good enough for desktop, accessible to screen readers,
+// and zero CSS/JS cost.
+const TIP_SPECIFIED = 'Hourly rate is capped at the per-year specified-employee cap on T661 line 307. Flag for owners, partners, and people earning above the cap.';
+const TIP_COMP_TYPE = 'Salary = annual; hourly = per-hour. The amount input flips to match.';
+
 function renderUsersTab(ctx, users) {
   const claimantOpts = ctx.state.claimants
     .map(c => `<option value="${c.id}" ${c.id === ctx.state.activeClaimantId ? 'selected' : ''}>${esc(c.legal_name)}</option>`)
     .join('');
-  // The form has two modes:
+  // The Add-employee form has two modes:
   //   - 'create' (default): collect name+role and POST /api/users (which also
   //     inserts the first attachment via the `attachments` array).
   //   - 'attach': collected when the typed email matches an existing user.
   //     name/role are hidden; submit POSTs to /api/users/:id/attachments.
   // UC-A3 step 1 spec: "name, email, employment start date" — both Title (UC
   // step 2) and Employment start date are now first-class fields on this form.
+  //
+  // UC-A3 step 3 / alt flow A3.a: a separate explicit entry point for
+  // cross-claimant attachment (without having to discover the blur-trigger
+  // email lookup, or drill into edit-user). The markup duplicates the
+  // per-claimant fields rather than extracting a helper — the two forms have
+  // diverged enough (no name/role on attach; no mode toggle either) that a
+  // shared helper would cost more than the duplication.
   return `
     <div class="card">
-      <h2>Add employee</h2>
+      <div class="card-head">
+        <h2>Add employee</h2>
+        <button type="button" id="attach-existing-toggle" class="secondary small">＋ Attach existing employee to claimant</button>
+      </div>
       <form id="add-employee-form" data-mode="create">
         <div class="grid">
           <div><label>Email</label><input name="email" type="email" required
@@ -45,17 +62,38 @@ function renderUsersTab(ctx, users) {
           <div><label>Title</label><input name="title"
             autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
           <div><label>Employment start date</label><input name="employment_start_date" type="date"></div>
-          <div><label>Comp type</label>
-            <select name="comp_type" data-comp-type-for="add-employee"><option>salary</option><option>hourly</option></select>
+          <div><label title="${esc(TIP_COMP_TYPE)}">Comp type</label>
+            <select name="comp_type" data-comp-type-for="add-employee" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select>
           </div>
           <div><label>Amount <span class="muted" data-comp-unit-for="add-employee">($/yr)</span></label><input name="amount" type="number" step="0.01" min="0" placeholder="e.g. 95000.00" required></div>
           <div><label>Effective from</label><input name="effective_from" type="date"></div>
-          <div><label><input name="is_specified_employee" type="checkbox"> Specified employee</label></div>
+          <div><label title="${esc(TIP_SPECIFIED)}"><input name="is_specified_employee" type="checkbox" title="${esc(TIP_SPECIFIED)}"> Specified employee</label></div>
         </div>
         <div id="add-employee-existing" class="muted" hidden style="margin:0.4rem 0; padding:0.5rem; border:1px solid var(--accent, #bbb); border-radius:4px"></div>
         <div class="actions"><button data-submit-label>Add</button></div>
         <p class="muted">Creates the employee record only. Click <strong>Send invite</strong> in the table below to email them a passkey enrollment link when ready. If <em>Effective from</em> is left blank we default it from <em>Employment start date</em>.</p>
       </form>
+      <div id="attach-existing-form-wrap" hidden style="margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid rgba(0,0,0,0.08)">
+        <h3 style="margin-top:0">Attach existing employee to claimant</h3>
+        <p class="muted" style="margin-top:0">Use this when the person already exists under another claimant. Enter their email, fill in the per-claimant details, and submit.</p>
+        <form id="attach-existing-form">
+          <div class="grid">
+            <div><label>Email</label><input name="email" type="email" required
+              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
+            <div><label>Claimant</label><select name="claimant_id">${claimantOpts}</select></div>
+            <div><label>Title</label><input name="title"
+              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
+            <div><label>Employment start date</label><input name="employment_start_date" type="date"></div>
+            <div><label title="${esc(TIP_COMP_TYPE)}">Comp type</label>
+              <select name="comp_type" data-comp-type-for="attach-existing" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select>
+            </div>
+            <div><label>Amount <span class="muted" data-comp-unit-for="attach-existing">($/yr)</span></label><input name="amount" type="number" step="0.01" min="0" placeholder="e.g. 95000.00" required></div>
+            <div><label>Effective from</label><input name="effective_from" type="date"></div>
+            <div><label title="${esc(TIP_SPECIFIED)}"><input name="is_specified_employee" type="checkbox" title="${esc(TIP_SPECIFIED)}"> Specified employee</label></div>
+          </div>
+          <div class="actions"><button class="small">Attach</button></div>
+        </form>
+      </div>
     </div>
     <div class="card">
       <h2>All employees</h2>
@@ -93,7 +131,70 @@ function renderAllUsersTable(ctx, users) {
 
 function bindList(ctx, users) {
   bindAddEmployeeForm(ctx);
+  bindAttachExistingForm(ctx);
   bindUserRowActions(document.getElementById('all-users-table'), ctx, users);
+}
+
+// UC-A3 step 3 / alt flow A3.a — top-level entry point for attaching an
+// existing user (from another claimant) to the current one without going
+// through the Add-employee form's email-blur lookup or the edit-user
+// drill-in. Hidden by default behind a button next to "Add employee".
+function bindAttachExistingForm(ctx) {
+  const toggle = document.getElementById('attach-existing-toggle');
+  const wrap   = document.getElementById('attach-existing-form-wrap');
+  const form   = document.getElementById('attach-existing-form');
+  if (!toggle || !wrap || !form) return;
+
+  toggle.addEventListener('click', () => {
+    wrap.hidden = !wrap.hidden;
+    if (!wrap.hidden) form.querySelector('input[name="email"]').focus();
+  });
+
+  // Same $/yr ↔ $/hr suffix flip as the Add-employee form.
+  const compTypeSel = form.querySelector('[data-comp-type-for="attach-existing"]');
+  const compUnitEl  = form.querySelector('[data-comp-unit-for="attach-existing"]');
+  if (compTypeSel && compUnitEl) {
+    const sync = () => { compUnitEl.textContent = compTypeSel.value === 'hourly' ? '($/hr)' : '($/yr)'; };
+    compTypeSel.addEventListener('change', sync);
+    sync();
+  }
+
+  onSubmit(form, async (fd) => {
+    const email = (fd.get('email') || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) throw new Error('Enter a valid email.');
+
+    // Look up by email — same endpoint the blur-trigger uses. If no match,
+    // surface the inline error spec'd by UC-A3 alt flow.
+    const r = await api('GET', `/api/users?q=${encodeURIComponent(email)}`);
+    const match = (r.items || []).find(u => (u.email || '').toLowerCase() === email);
+    if (!match) {
+      throw new Error('No user with that email. Use the Add employee form to create them first.');
+    }
+
+    const employmentStart = fd.get('employment_start_date') || null;
+    const effectiveFrom = fd.get('effective_from') || employmentStart;
+    if (!effectiveFrom)
+      throw new Error('Provide an employment start date or an effective-from date for the first comp row.');
+
+    const amountCents = dollarsToCents(fd.get('amount'));
+    if (amountCents == null || Number.isNaN(amountCents))
+      throw new Error('Enter the amount in dollars (e.g. 95000 or 95000.00).');
+
+    await api('POST', `/api/users/${match.id}/attachments`, {
+      claimant_id: Number(fd.get('claimant_id')),
+      title: fd.get('title') || null,
+      is_specified_employee: fd.get('is_specified_employee') === 'on',
+      employment_start_date: employmentStart,
+      compensation: {
+        comp_type: fd.get('comp_type'),
+        amount_cents: amountCents,
+        effective_from: effectiveFrom,
+      },
+    });
+    form.reset();
+    wrap.hidden = true;
+    await ctx.reloadAll();
+  });
 }
 
 // UC-A3: when an admin types an email that already belongs to a user, surface
@@ -236,16 +337,8 @@ function bindUserRowActions(el, ctx, users) {
       btn.disabled = true;
       try {
         const r = await api('POST', `/api/users/${id}/invite`);
-        // The raw magic link is no longer returned by the API (it would let
-        // any admin silently mint a sign-in link for another admin). Surface
-        // delivery status instead. When SMTP is disabled the link is logged
-        // to the server console.
         const target = users.find(u => String(u.id) === String(id));
-        const email = target?.email || 'the user';
-        const where = r.delivered
-          ? `Sent to ${email}`
-          : 'Logged to server console (SMTP disabled)';
-        alert(`${where}\n\nPurpose: ${r.purpose}\nExpires: ${r.expires_at}`);
+        showInviteModal(r, target);
       } catch (e) {
         showTopBanner(e.message);
       } finally {
@@ -276,6 +369,66 @@ function bindUserRowActions(el, ctx, users) {
       }
     });
   });
+}
+
+// --- Invite-link modal ----------------------------------------------------
+
+// Renders a small <dialog> showing invite metadata (target user, purpose,
+// relative expiry, delivery status). The raw magic link is intentionally
+// NOT shown — V-06's fix removed it from the API response body so an admin
+// can't silently mint a sign-in link for another admin. When SMTP is
+// disabled the link is logged to stderr; when enabled it's emailed straight
+// to the target.
+//
+// <dialog> over a custom overlay because the SPA has zero existing modal
+// CSS, and <dialog> ships native ::backdrop, focus-trap, and Esc-to-close.
+// Browser support is fine for an admin-only tool (Chrome/Edge/Safari/Firefox
+// all ship `showModal()` since 2022); the fallback path (`.show()`) is
+// non-modal but still visible if `showModal` is somehow unavailable.
+function showInviteModal(response, target) {
+  // Reuse a single modal element across clicks so we don't pile them up.
+  let dlg = document.getElementById('invite-modal');
+  if (dlg) dlg.remove();
+
+  const email = target?.email || 'the user';
+  const name  = target?.name  || 'User';
+  const purposeLabel = response.purpose === 'invite' ? 'Invite (first passkey)' : 'Add device (additional passkey)';
+  const expiresRel   = relativeExpiry(response.expires_at);
+  const deliveryLine = response.delivered
+    ? `Sent to <strong>${esc(email)}</strong>`
+    : 'Email delivery is disabled. The magic link was logged to the server console — check stderr.';
+
+  dlg = document.createElement('dialog');
+  dlg.id = 'invite-modal';
+  dlg.style.cssText = 'border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 1.25rem 1.4rem; max-width: 28rem; box-shadow: 0 10px 30px rgba(0,0,0,0.15);';
+  dlg.innerHTML = `
+    <h3 style="margin:0 0 0.6rem">${esc(purposeLabel)}</h3>
+    <p style="margin:0.2rem 0"><strong>${esc(name)}</strong> &lt;${esc(email)}&gt;</p>
+    <p style="margin:0.2rem 0" class="muted">Expires in ${esc(expiresRel)}</p>
+    <p style="margin:0.6rem 0">${deliveryLine}</p>
+    <div class="actions" style="margin-top:0.8rem"><button type="button" class="small" data-close>Close</button></div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => dlg.remove());
+  if (typeof dlg.showModal === 'function') dlg.showModal();
+  else dlg.show?.();
+}
+
+// "expires in 24 hours" / "in 7 minutes" / "in the past" — coarse-grained
+// because the invite endpoint already names a fixed TTL and admins just
+// want a sanity check, not precision.
+function relativeExpiry(iso) {
+  if (!iso) return 'an unknown time';
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return 'an unknown time';
+  if (ms <= 0) return 'the past';
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'}`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
 }
 
 // --- Edit user (inline expansion under the All employees table) -----------
@@ -311,12 +464,12 @@ function renderUserEditForm(u, ctx) {
         <div class="grid">
           <div><label>Claimant</label><select name="claimant_id" required>${claimantOpts}</select></div>
           <div><label>Title</label><input name="title"></div>
-          <div><label>Comp type</label>
-            <select name="comp_type" data-comp-type-for="add-att-${u.id}"><option>salary</option><option>hourly</option></select>
+          <div><label title="${esc(TIP_COMP_TYPE)}">Comp type</label>
+            <select name="comp_type" data-comp-type-for="add-att-${u.id}" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select>
           </div>
           <div><label>Amount <span class="muted" data-comp-unit-for="add-att-${u.id}">($/yr)</span></label><input type="number" step="0.01" min="0" name="amount" placeholder="e.g. 95000.00" required></div>
           <div><label>Effective from</label><input type="date" name="effective_from" required></div>
-          <div><label><input type="checkbox" name="is_specified_employee"> Specified</label></div>
+          <div><label title="${esc(TIP_SPECIFIED)}"><input type="checkbox" name="is_specified_employee" title="${esc(TIP_SPECIFIED)}"> Specified</label></div>
         </div>
         <div class="actions"><button class="small">Add attachment</button></div>
       </form>
@@ -336,7 +489,7 @@ function renderAttachmentEditor(a) {
             <label>${esc(a.claimant_name)} · attachment ${a.id}</label>
             <input name="title" placeholder="Title" value="${esc(a.title ?? '')}">
           </div>
-          <div><label class="checkbox-label"><input type="checkbox" name="is_specified_employee" ${a.is_specified_employee ? 'checked' : ''}> Specified</label></div>
+          <div><label class="checkbox-label" title="${esc(TIP_SPECIFIED)}"><input type="checkbox" name="is_specified_employee" ${a.is_specified_employee ? 'checked' : ''} title="${esc(TIP_SPECIFIED)}"> Specified</label></div>
           <div><label>Status</label>
             <select name="status">
               <option ${a.status === 'active' ? 'selected' : ''}>active</option>
@@ -351,7 +504,7 @@ function renderAttachmentEditor(a) {
         <ul style="font-size:0.85rem; margin:0.4rem 0 0.6rem 1rem">${compHistory || '<li class="empty">none</li>'}</ul>
         <form data-form="add-comp" data-uc="${a.id}">
           <div class="row" style="gap:0.5rem; align-items:flex-end">
-            <div><label>Type</label><select name="comp_type" data-comp-type-for="add-comp-${a.id}"><option>salary</option><option>hourly</option></select></div>
+            <div><label title="${esc(TIP_COMP_TYPE)}">Type</label><select name="comp_type" data-comp-type-for="add-comp-${a.id}" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select></div>
             <div><label>Amount <span class="muted" data-comp-unit-for="add-comp-${a.id}">($/yr)</span></label><input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 95000.00" required style="width:9rem"></div>
             <div><label>Effective from</label><input type="date" name="effective_from" required></div>
             <div><button class="small secondary">＋ Add comp row</button></div>
