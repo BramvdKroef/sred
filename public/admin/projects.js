@@ -1,4 +1,4 @@
-import { api, esc, bindForm, onSubmit, activityHtml,
+import { api, esc, bindForm, onSubmit, activityHtml, dollarsToCents,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
          wireActivityDetails, TYPE_LABEL, STATUS_LABEL } from '../api.js';
 
@@ -647,7 +647,7 @@ function renderLogOnBehalfCards(project, claimant) {
                   <option value="overhead">overhead</option>
                 </select>
               </div>
-              <div><label>Amount (cents)</label><input type="number" name="amount_cents" min="1" required></div>
+              <div><label>Amount <span class="muted">(${esc(reportingCcy)})</span></label><input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></div>
               <div><label>Currency</label><input name="currency" value="${esc(reportingCcy)}" required></div>
               <div><label>FX rate (if not ${esc(reportingCcy)})</label><input type="number" step="0.0001" name="fx_rate"></div>
               <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
@@ -694,12 +694,15 @@ function bindLogOnBehalfForms(project, ctx) {
   }
 
   onSubmit(document.getElementById('form-behalf-expense'), async fd => {
+    const amountCents = dollarsToCents(fd.get('amount'));
+    if (amountCents == null || Number.isNaN(amountCents))
+      throw new Error('Enter the amount in dollars (e.g. 1234.56).');
     const body = {
       project_id: project.id,
       user_claimant_id: Number(fd.get('user_claimant_id')),
       expense_date: fd.get('expense_date'),
       category: fd.get('category'),
-      amount_cents: Number(fd.get('amount_cents')),
+      amount_cents: amountCents,
       currency: fd.get('currency') || 'CAD',
       description: fd.get('description'),
     };

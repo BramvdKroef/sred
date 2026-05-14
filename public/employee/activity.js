@@ -1,4 +1,4 @@
-import { api, esc, cents, onSubmit, wireJwtDownloads, safeHref, lockReason } from '../api.js';
+import { api, esc, cents, dollarsToCents, onSubmit, wireJwtDownloads, safeHref, lockReason } from '../api.js';
 
 export function render(main, ctx) {
   const { state } = ctx;
@@ -117,7 +117,7 @@ function expenseEditForm(e) {
     <div><label>Date</label><input type="date" name="expense_date" value="${esc(e.expense_date)}" required></div>
     <div><label>Category</label><select name="category">${cats.map(c =>
       `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-    <div><label>Amount (cents)</label><input type="number" name="amount_cents" min="1" value="${e.amount_cents}" required style="width:8rem"></div>
+    <div><label>Amount <span class="muted">(${esc(e.currency)})</span></label><input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required style="width:9rem"></div>
     <div><label>Currency</label><input name="currency" value="${esc(e.currency)}" required style="width:5rem"></div>
     <div><label>FX rate</label><input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" style="width:6rem"></div>
     <div class="input-grow"><label>Description</label><input name="description" value="${esc(e.description)}" required></div>
@@ -165,10 +165,13 @@ function bindActivity(main, ctx) {
   }));
 
   main.querySelectorAll('[data-form-edit-expense]').forEach(form => onSubmit(form, async fd => {
+    const amountCents = dollarsToCents(fd.get('amount'));
+    if (amountCents == null || Number.isNaN(amountCents))
+      throw new Error('Enter the amount in dollars (e.g. 1234.56).');
     const body = {
       expense_date: fd.get('expense_date'),
       category: fd.get('category'),
-      amount_cents: Number(fd.get('amount_cents')),
+      amount_cents: amountCents,
       currency: fd.get('currency') || 'CAD',
       description: fd.get('description'),
     };

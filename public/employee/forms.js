@@ -1,4 +1,4 @@
-import { api, apiUpload, esc, cents, bindForm, onSubmit,
+import { api, apiUpload, esc, cents, dollarsToCents, bindForm, onSubmit,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle } from '../api.js';
 
 // Render-one + bind-one wrappers. Each entry-form sets state.tab to
@@ -149,8 +149,8 @@ export function renderExpense(main, ctx) {
             <option value="overhead">overhead</option>
           </select>
         </div>
-        <div><label>Amount (cents)</label><input type="number" name="amount_cents" min="1" required></div>
-        <div><label>Currency</label><input name="currency" value="CAD"></div>
+        <div><label>Amount <span class="muted" data-amount-unit>(CAD)</span></label><input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></div>
+        <div><label>Currency</label><input name="currency" value="CAD" data-currency-input></div>
         <div><label>FX rate (if not reporting currency)</label><input type="number" step="0.0001" name="fx_rate"></div>
         <div class="full"><label>Description</label><textarea name="description" rows="2" required></textarea></div>
       </div>
@@ -165,12 +165,25 @@ export function renderExpense(main, ctx) {
     </form>
   </div>`;
 
+  // Reflect the currency input into the amount-unit suffix.
+  const expForm = document.getElementById('expense-form');
+  const ccyInput = expForm?.querySelector('[data-currency-input]');
+  const unitEl   = expForm?.querySelector('[data-amount-unit]');
+  if (ccyInput && unitEl) {
+    const sync = () => { unitEl.textContent = `(${(ccyInput.value || 'CAD').toUpperCase()})`; };
+    ccyInput.addEventListener('input', sync);
+    sync();
+  }
+
   bindForm('#expense-form', async fd => {
+    const amountCents = dollarsToCents(fd.get('amount'));
+    if (amountCents == null || Number.isNaN(amountCents))
+      throw new Error('Enter the amount in dollars (e.g. 1234.56).');
     const body = {
       project_id: Number(fd.get('project_id')),
       expense_date: fd.get('expense_date'),
       category: fd.get('category'),
-      amount_cents: Number(fd.get('amount_cents')),
+      amount_cents: amountCents,
       currency: fd.get('currency') || 'CAD',
       description: fd.get('description'),
     };

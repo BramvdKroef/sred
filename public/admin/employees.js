@@ -1,4 +1,4 @@
-import { api, esc, cents, bindForm, onSubmit, activityHtml,
+import { api, esc, cents, dollarsToCents, bindForm, onSubmit, activityHtml,
          wireActivityDetails, TYPE_LABEL, STATUS_LABEL } from '../api.js';
 
 let allUsers = [];
@@ -42,9 +42,9 @@ function renderUsersTab(ctx) {
             autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore></div>
           <div><label>Employment start date</label><input name="employment_start_date" type="date"></div>
           <div><label>Comp type</label>
-            <select name="comp_type"><option>salary</option><option>hourly</option></select>
+            <select name="comp_type" data-comp-type-for="add-employee"><option>salary</option><option>hourly</option></select>
           </div>
-          <div><label>Amount (¢/yr or ¢/hr)</label><input name="amount_cents" type="number" min="1" required></div>
+          <div><label>Amount <span class="muted" data-comp-unit-for="add-employee">($/yr)</span></label><input name="amount" type="number" step="0.01" min="0" placeholder="e.g. 95000.00" required></div>
           <div><label>Effective from</label><input name="effective_from" type="date"></div>
           <div><label><input name="is_specified_employee" type="checkbox"> Specified employee</label></div>
         </div>
@@ -169,6 +169,16 @@ function bindAddEmployeeForm(ctx) {
   // simpler model: admin types a complete email, tabs out, sees the prompt.
   emailInput.addEventListener('blur', lookupEmail);
 
+  // Comp-type dropdown flips the unit suffix on the dollar input ($/yr vs $/hr).
+  // The stored field still posts as amount_cents — only the label changes.
+  const compTypeSel = form.querySelector('[data-comp-type-for="add-employee"]');
+  const compUnitEl  = form.querySelector('[data-comp-unit-for="add-employee"]');
+  if (compTypeSel && compUnitEl) {
+    const sync = () => { compUnitEl.textContent = compTypeSel.value === 'hourly' ? '($/hr)' : '($/yr)'; };
+    compTypeSel.addEventListener('change', sync);
+    sync();
+  }
+
   onSubmit(form, async (fd) => {
     const employmentStart = fd.get('employment_start_date') || null;
     // Effective_from defaults to employment start date when blank (UC-A3
@@ -178,6 +188,10 @@ function bindAddEmployeeForm(ctx) {
     if (!effectiveFrom)
       throw new Error('Provide an employment start date or an effective-from date for the first comp row.');
 
+    const amountCents = dollarsToCents(fd.get('amount'));
+    if (amountCents == null || Number.isNaN(amountCents))
+      throw new Error('Enter the amount in dollars (e.g. 95000 or 95000.00).');
+
     const attachment = {
       claimant_id: Number(fd.get('claimant_id')),
       title: fd.get('title') || null,
@@ -185,7 +199,7 @@ function bindAddEmployeeForm(ctx) {
       employment_start_date: employmentStart,
       compensation: {
         comp_type: fd.get('comp_type'),
-        amount_cents: Number(fd.get('amount_cents')),
+        amount_cents: amountCents,
         effective_from: effectiveFrom,
       },
     };
@@ -303,9 +317,9 @@ function renderUserEditForm(u, ctx) {
           <div><label>Claimant</label><select name="claimant_id" required>${claimantOpts}</select></div>
           <div><label>Title</label><input name="title"></div>
           <div><label>Comp type</label>
-            <select name="comp_type"><option>salary</option><option>hourly</option></select>
+            <select name="comp_type" data-comp-type-for="add-att-${u.id}"><option>salary</option><option>hourly</option></select>
           </div>
-          <div><label>Amount (¢)</label><input type="number" name="amount_cents" min="1" required></div>
+          <div><label>Amount <span class="muted" data-comp-unit-for="add-att-${u.id}">($/yr)</span></label><input type="number" step="0.01" min="0" name="amount" placeholder="e.g. 95000.00" required></div>
           <div><label>Effective from</label><input type="date" name="effective_from" required></div>
           <div><label><input type="checkbox" name="is_specified_employee"> Specified</label></div>
         </div>
@@ -342,8 +356,8 @@ function renderAttachmentEditor(a) {
         <ul style="font-size:0.85rem; margin:0.4rem 0 0.6rem 1rem">${compHistory || '<li class="empty">none</li>'}</ul>
         <form data-form="add-comp" data-uc="${a.id}">
           <div class="row" style="gap:0.5rem; align-items:flex-end">
-            <div><label>Type</label><select name="comp_type"><option>salary</option><option>hourly</option></select></div>
-            <div><label>Amount (¢)</label><input type="number" name="amount_cents" min="1" required style="width:8rem"></div>
+            <div><label>Type</label><select name="comp_type" data-comp-type-for="add-comp-${a.id}"><option>salary</option><option>hourly</option></select></div>
+            <div><label>Amount <span class="muted" data-comp-unit-for="add-comp-${a.id}">($/yr)</span></label><input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 95000.00" required style="width:9rem"></div>
             <div><label>Effective from</label><input type="date" name="effective_from" required></div>
             <div><button class="small secondary">＋ Add comp row</button></div>
           </div>
@@ -379,26 +393,42 @@ function bindUserEditForm(bundle, row, ctx) {
   }));
 
   row.querySelectorAll('[data-form="add-comp"]').forEach(form => onSubmit(form, async fd => {
+    const amountCents = dollarsToCents(fd.get('amount'));
+    if (amountCents == null || Number.isNaN(amountCents))
+      throw new Error('Enter the amount in dollars (e.g. 95000 or 95000.00).');
     await api('POST', `/api/user-claimants/${form.dataset.uc}/compensation`, {
       comp_type: fd.get('comp_type'),
-      amount_cents: Number(fd.get('amount_cents')),
+      amount_cents: amountCents,
       effective_from: fd.get('effective_from'),
     });
     await reRender();
   }));
 
   onSubmit(row.querySelector('[data-form="add-attachment"]'), async fd => {
+    const amountCents = dollarsToCents(fd.get('amount'));
+    if (amountCents == null || Number.isNaN(amountCents))
+      throw new Error('Enter the amount in dollars (e.g. 95000 or 95000.00).');
     await api('POST', `/api/users/${bundle.id}/attachments`, {
       claimant_id: Number(fd.get('claimant_id')),
       title: fd.get('title') || null,
       is_specified_employee: fd.get('is_specified_employee') === 'on',
       compensation: {
         comp_type: fd.get('comp_type'),
-        amount_cents: Number(fd.get('amount_cents')),
+        amount_cents: amountCents,
         effective_from: fd.get('effective_from'),
       },
     });
     await reRender();
+  });
+
+  // Flip $/yr ↔ $/hr suffix to match each comp-type dropdown.
+  row.querySelectorAll('[data-comp-type-for]').forEach(sel => {
+    const key = sel.dataset.compTypeFor;
+    const unitEl = row.querySelector(`[data-comp-unit-for="${key}"]`);
+    if (!unitEl) return;
+    const sync = () => { unitEl.textContent = sel.value === 'hourly' ? '($/hr)' : '($/yr)'; };
+    sel.addEventListener('change', sync);
+    sync();
   });
 }
 
