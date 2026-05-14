@@ -34,5 +34,6 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 
 - [ ] [P1] **UI use-case audit.** Walk through `docs/use-cases.md` and flag every use case that isn't reachable from the current SPA (admin + employee shells). Produce a list of missing implementations and their entry points. This is partly a backlog-recovery exercise after the "wire the UI" task was done one-pass and may have skipped paths.
 - [ ] [P2] **UI usability review.** Imagine a brand-new admin opening the tool cold. Where does the flow confuse them? What is more than two clicks deep but should be one? What's not discoverable (e.g. that closing a period locks edits)? What labels are insider-jargon? Produce concrete suggestions, ranked.
+- [ ] [P1] **Vulnerability review.** Audit the codebase for security issues — OWASP top 10 surface (authn/authz gaps, SQL injection, XSS in the SPA renderers, path traversal in evidence downloads / bundle paths, IDOR on tenant-scoped resources, JWT/refresh handling, WebAuthn ceremony correctness, file-upload validation, rate limiting, secret handling, CORS, error-message leakage). Produce a ranked report with severity + concrete fix suggestion per finding.
 
 ## Done
