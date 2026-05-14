@@ -1,6 +1,10 @@
 import { api, esc, currentWeek, weekBars, chartHtml, activityHtml, wireActivityDetails } from '../api.js';
 
-export async function render(main) {
+export async function render(main, ctx) {
+  if (ctx && ctx.state && ctx.state.claimants.length === 0) {
+    renderFirstRunChecklist(main);
+    return;
+  }
   main.innerHTML = '<p class="empty">Loading overview…</p>';
   const week = currentWeek();
   const [weekLabour, pendingLab, pendingExp, activity] = await Promise.all([
@@ -31,4 +35,35 @@ export async function render(main) {
     </div>
   `;
   wireActivityDetails(main);
+}
+
+function renderFirstRunChecklist(main) {
+  main.innerHTML = `
+    <div class="card">
+      <h2>Welcome to Precision SR&amp;ED</h2>
+      <p class="muted">Get set up in five steps. Each step links to the relevant tab.</p>
+      <ol style="margin:0.6rem 0 0.2rem; padding-left:1.2rem; line-height:1.65">
+        <li>
+          <strong>Create your first claimant</strong> — your company or one you're filing for.
+          &nbsp;<a href="#claimants" class="summary-link">Add claimant</a>
+        </li>
+        <li>
+          <strong>Add a fiscal period</strong> — typically your fiscal year.
+          &nbsp;<a href="#claimants" class="summary-link">Add period</a>
+        </li>
+        <li>
+          <strong>Invite employees</strong> — they'll enrol via magic link.
+          &nbsp;<a href="#users" class="summary-link">Add employee</a>
+        </li>
+        <li>
+          <strong>Create projects</strong> — the SR&amp;ED work being claimed.
+          &nbsp;<a href="#claimants" class="summary-link">Add project</a>
+        </li>
+        <li>
+          <strong>Generate your T661</strong> — once labour, expenses, and evidence are logged.
+          &nbsp;<a href="#exports" class="summary-link">Generate</a>
+        </li>
+      </ol>
+    </div>
+  `;
 }

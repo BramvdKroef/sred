@@ -255,8 +255,27 @@ function bindList(ctx) {
   // Period close/reopen
   document.querySelectorAll('[data-act-period]').forEach(btn => {
     btn.addEventListener('click', async () => {
+      const action = btn.dataset.actPeriod;
+      const periodId = Number(btn.dataset.id);
       try {
-        await api('POST', `/api/periods/${btn.dataset.id}/${btn.dataset.actPeriod}`);
+        if (action === 'close') {
+          const period = state.periods.find(p => p.id === periodId);
+          if (!period) throw new Error('Period not found');
+          const [lab, exp, ev] = await Promise.all([
+            api('GET', `/api/labour?period_id=${periodId}`),
+            api('GET', `/api/expenses?period_id=${periodId}`),
+            api('GET', `/api/evidence?period_id=${periodId}`),
+          ]);
+          const msg =
+            `Close fiscal period ${period.start_date} – ${period.end_date}?\n\n` +
+            `This will lock all entries in this period from further edits or deletes:\n` +
+            `  • ${lab.items.length} labour entries\n` +
+            `  • ${exp.items.length} expenses\n` +
+            `  • ${ev.items.length} evidence items\n\n` +
+            `Reopen is an admin action and is logged.`;
+          if (!confirm(msg)) return;
+        }
+        await api('POST', `/api/periods/${periodId}/${action}`);
         ctx.render();
       } catch (e) { alert(e.message); }
     });
@@ -543,7 +562,8 @@ function renderLogOnBehalfCards(project, claimant) {
                 <div class="full ev-url"  hidden><label>URL</label><input type="url" name="ev_url" placeholder="https://…"></div>
               </div>
             </details>
-            <div class="actions" style="margin-top:0.6rem"><button class="small">Save labour</button></div>
+            <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
+            <div class="actions" style="margin-top:0.3rem"><button class="small">Save labour</button></div>
           </form>
         </div>
       </div>
@@ -579,7 +599,8 @@ function renderLogOnBehalfCards(project, claimant) {
                 <div class="full"><label>File</label><input type="file" name="receipt_file"></div>
               </div>
             </details>
-            <div class="actions" style="margin-top:0.6rem"><button class="small">Save expense</button></div>
+            <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
+            <div class="actions" style="margin-top:0.3rem"><button class="small">Save expense</button></div>
           </form>
         </div>
       </div>
