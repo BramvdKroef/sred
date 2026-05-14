@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileTypeFromFile } from 'file-type';
 import { db } from '../db/index.js';
 import { config } from '../config.js';
 import { requireAuth } from '../auth/middleware.js';
@@ -31,6 +32,16 @@ const ALLOWED_MIME = new Set([
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/zip',
+]);
+
+// MIME types that have no magic-byte signature, so content-sniffing via
+// `file-type` cannot identify them. When `fileTypeFromFile` returns nothing,
+// we only accept the supplied MIME if it's one of these — anything else
+// claiming "no magic header" is treated as a lie and rejected.
+const TEXT_FAMILY_MIME = new Set([
+  'text/plain',
+  'text/csv',
+  'text/markdown',
 ]);
 
 // Canonical extension per allowed MIME. The browser-supplied originalname
@@ -104,6 +115,38 @@ function validateLinkUrl(raw) {
   return parsed.href;
 }
 
+// Content-sniff the uploaded file against the multipart-supplied MIME.
+//
+// multer's fileFilter only sees the (attacker-controlled) Content-Type from
+// the multipart envelope. A `.html` file with `Content-Type: application/pdf`
+// passes the allowlist and lands on disk as `<random>.pdf` — an admin who
+// later double-clicks the bundle gets HTML execution. We close the gap by
+// reading the magic bytes after multer writes the file.
+//
+// Returns { mime, ext } — the effective MIME (used for the file_mime DB
+// column and any extension renaming) and the canonical extension. Throws
+// `badRequest` if the content doesn't agree with the allowlist.
+async function sniffUpload(file) {
+  const detected = await fileTypeFromFile(file.path);
+  if (!detected) {
+    // file-type has no magic-byte signature for plain text family. Trust the
+    // supplied MIME only if it's text-family; anything else (e.g. an .exe
+    // with a corrupt header that file-type can't parse) is rejected.
+    if (TEXT_FAMILY_MIME.has(file.mimetype)) {
+      return { mime: file.mimetype, ext: MIME_TO_EXT.get(file.mimetype) ?? '' };
+    }
+    throw badRequest(`file content does not match supplied type: ${file.mimetype}`);
+  }
+  if (!ALLOWED_MIME.has(detected.mime)) {
+    throw badRequest(`file type not allowed: ${detected.mime}`);
+  }
+  // Detected MIME wins over supplied MIME — that closes the "PDF supplied,
+  // HTML content" gap, and for the dual-allowlist case (e.g. supplied=zip,
+  // actual=pdf) it normalises the on-disk extension to what the bytes
+  // actually are.
+  return { mime: detected.mime, ext: MIME_TO_EXT.get(detected.mime) ?? '' };
+}
+
 function assertAttached(user, claimantId) {
   if (user.role === 'admin') return;
   const uc = db.prepare(
@@ -139,7 +182,7 @@ router.get('/', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/', upload.single('file'), (req, res, next) => {
+router.post('/', upload.single('file'), async (req, res, next) => {
   try {
     const body = req.body ?? {};
     const projectId      = Number(body.project_id);
@@ -180,9 +223,22 @@ router.post('/', upload.single('file'), (req, res, next) => {
     let filePath = null, fileSize = null, fileMime = null, urlVal = null, noteVal = null;
     if (kind === 'file') {
       if (!req.file) throw badRequest('multipart file upload required when kind=file');
-      filePath = req.file.filename;
+      // Magic-byte content sniff. If the detected MIME disagrees with the
+      // supplied one (e.g. supplied=zip, actual=pdf), the detected MIME wins
+      // and the on-disk extension is normalised to match.
+      const sniffed = await sniffUpload(req.file);
+      fileMime = sniffed.mime;
       fileSize = req.file.size;
-      fileMime = req.file.mimetype;
+      filePath = req.file.filename;
+      if (sniffed.mime !== req.file.mimetype) {
+        const oldPath = req.file.path;
+        const newName = `${path.basename(req.file.filename, path.extname(req.file.filename))}${sniffed.ext}`;
+        const newPath = path.join(path.dirname(oldPath), newName);
+        fs.renameSync(oldPath, newPath);
+        req.file.path = newPath;
+        req.file.filename = newName;
+        filePath = newName;
+      }
     } else if (kind === 'link') {
       if (!linkUrl) throw badRequest('url required when kind=link');
       urlVal = validateLinkUrl(linkUrl);
