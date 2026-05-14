@@ -1,6 +1,6 @@
 import { api, esc, bindForm, onSubmit, activityHtml, dollarsToCents,
          attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
-         wireActivityDetails, TYPE_LABEL, STATUS_LABEL } from '../api.js';
+         wireActivityDetails, showTopBanner, TYPE_LABEL, STATUS_LABEL } from '../api.js';
 
 export async function render(main, ctx) {
   if (ctx.state.viewingProjectId) return renderProjectDetail(main, ctx);
@@ -272,7 +272,7 @@ function bindList(ctx) {
         }
         await api('POST', `/api/periods/${periodId}/${action}`);
         ctx.render();
-      } catch (e) { alert(e.message); }
+      } catch (e) { showTopBanner(e.message); }
     });
   });
 
@@ -755,7 +755,7 @@ function bindAssignmentForm(project, ctx) {
       try {
         await api('DELETE', `/api/projects/${project.id}/assignments/${btn.dataset.unassign}`);
         ctx.render();
-      } catch (err) { alert(err.message); }
+      } catch (err) { showTopBanner(err.message); }
     });
   });
   document.querySelectorAll('[data-reassign]').forEach(btn => {
@@ -765,7 +765,7 @@ function bindAssignmentForm(project, ctx) {
           user_claimant_id: Number(btn.dataset.reassign),
         });
         ctx.render();
-      } catch (err) { alert(err.message); }
+      } catch (err) { showTopBanner(err.message); }
     });
   });
 }
