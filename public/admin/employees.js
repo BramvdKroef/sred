@@ -1,17 +1,21 @@
 import { api, esc, cents, dollarsToCents, bindForm, onSubmit, activityHtml,
          wireActivityDetails, TYPE_LABEL, STATUS_LABEL } from '../api.js';
 
-let allUsers = [];
-
 export async function render(main, ctx) {
   if (ctx.state.viewingUserId) return renderUserDetail(main, ctx);
-  main.innerHTML = renderUsersTab(ctx);
-  bindList(ctx);
+  main.innerHTML = '<p class="empty">Loading employees…</p>';
+  // Match the pattern used by review.js / overview.js: await the fetch inside
+  // render() and write the full HTML once. Previously this tab rendered a
+  // placeholder synchronously and resolved the user list via .then(), which
+  // raced with tab switches and a module-level `allUsers` cache.
+  const users = (await api('GET', '/api/users')).items;
+  main.innerHTML = renderUsersTab(ctx, users);
+  bindList(ctx, users);
 }
 
 // --- List view (Add employee + All employees) ------------------------------
 
-function renderUsersTab(ctx) {
+function renderUsersTab(ctx, users) {
   const claimantOpts = ctx.state.claimants
     .map(c => `<option value="${c.id}" ${c.id === ctx.state.activeClaimantId ? 'selected' : ''}>${esc(c.legal_name)}</option>`)
     .join('');
@@ -55,26 +59,17 @@ function renderUsersTab(ctx) {
     </div>
     <div class="card">
       <h2>All employees</h2>
-      ${renderAllUsersTable()}
+      <div id="all-users-table">${renderAllUsersTable(ctx, users)}</div>
     </div>
   `;
 }
 
-function renderAllUsersTable() {
-  api('GET', '/api/users').then(r => { allUsers = r.items; redrawAllUsers(); });
-  return '<div id="all-users-table"><p class="empty">Loading…</p></div>';
-}
-
-function redrawAllUsers(ctx) {
-  // ctx may be undefined when called from the fetch callback in renderAllUsersTable;
-  // we recover it via the currently-stashed value.
-  ctx = ctx || currentCtx;
-  const el = document.getElementById('all-users-table');
-  if (!el) return;
-  el.innerHTML = !allUsers.length ? '<p class="empty">No users yet.</p>' : `
+function renderAllUsersTable(ctx, users) {
+  if (!users.length) return '<p class="empty">No users yet.</p>';
+  return `
     <table>
       <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>${allUsers.map(u => `
+      <tbody>${users.map(u => `
         <tr>
           <td>${u.id}</td>
           <td>${esc(u.email)}</td>
@@ -94,14 +89,11 @@ function redrawAllUsers(ctx) {
         <tr id="user-edit-row-${u.id}" hidden><td colspan="6"></td></tr>`).join('')}
       </tbody>
     </table>`;
-  bindUserRowActions(el, ctx);
 }
 
-let currentCtx;   // captured each time the list renders so the fetch callback can use it
-
-function bindList(ctx) {
-  currentCtx = ctx;
+function bindList(ctx, users) {
   bindAddEmployeeForm(ctx);
+  bindUserRowActions(document.getElementById('all-users-table'), ctx, users);
 }
 
 // UC-A3: when an admin types an email that already belongs to a user, surface
@@ -221,7 +213,8 @@ function bindAddEmployeeForm(ctx) {
   });
 }
 
-function bindUserRowActions(el, ctx) {
+function bindUserRowActions(el, ctx, users) {
+  if (!el) return;
   el.querySelectorAll('[data-edit-user]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = Number(btn.dataset.editUser);
@@ -247,7 +240,7 @@ function bindUserRowActions(el, ctx) {
         // any admin silently mint a sign-in link for another admin). Surface
         // delivery status instead. When SMTP is disabled the link is logged
         // to the server console.
-        const target = allUsers.find(u => String(u.id) === String(id));
+        const target = users.find(u => String(u.id) === String(id));
         const email = target?.email || 'the user';
         const where = r.delivered
           ? `Sent to ${email}`
@@ -271,9 +264,11 @@ function bindUserRowActions(el, ctx) {
       btn.disabled = true;
       try {
         await api('POST', `/api/users/${id}/${act}`);
-        allUsers = (await api('GET', '/api/users')).items;
-        redrawAllUsers(ctx);
+        // Re-render the whole tab via the shell's render() (matches what
+        // other tab modules do after a mutation — see review.js's
+        // ctx.render() after approve/reject).
         if (ctx.state.tab === 'users') await ctx.reloadAll();
+        else ctx.render();
       } catch (e) {
         alert(e.message);
       } finally {
@@ -379,8 +374,9 @@ function bindUserEditForm(bundle, row, ctx) {
       name: fd.get('name'),
       role: fd.get('role') || undefined,
     });
-    allUsers = (await api('GET', '/api/users')).items;
-    redrawAllUsers(ctx);
+    // Re-render the whole tab so the list reflects the new name/role
+    // (the previous module-level cache + redraw is gone).
+    ctx.render();
   });
 
   row.querySelectorAll('[data-form="uc-fields"]').forEach(form => onSubmit(form, async fd => {

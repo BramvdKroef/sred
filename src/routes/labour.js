@@ -100,7 +100,7 @@ router.patch('/:id', (req, res, next) => {
   try {
     const before = getLabourEntry(req.params.id);
     if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
-    assertEditable(before);
+    assertEditable(before, { user: req.user });
 
     const { work_date, hours, description, is_overtime } = req.body ?? {};
     const updates = {};
@@ -129,8 +129,15 @@ router.patch('/:id', (req, res, next) => {
       newPeriodId = findOpenPeriod(project.claimant_id, updates.work_date).id;
     }
 
-    // Edits to a rejected entry move it back to pending and clear review fields.
-    const clearReview = before.status === 'rejected';
+    // Edits to a rejected entry move it back to pending and clear review
+    // fields. Admin edits to their own auto-approved entry follow the same
+    // pattern: revert to pending so the change has to be re-approved
+    // deliberately. (assertEditable already restricts who can reach this
+    // branch — only the approving admin themselves.)
+    const clearReview =
+      before.status === 'rejected' ||
+      (before.status === 'approved' && req.user.role === 'admin' &&
+       before.reviewed_by_user_id === req.user.id);
 
     const setParts = keys.map(k => `${k} = ?`);
     setParts.push(`fiscal_period_id = ?`);
@@ -152,7 +159,7 @@ router.delete('/:id', (req, res, next) => {
   try {
     const before = getLabourEntry(req.params.id);
     if (!isOwnerOrAdmin(req.user, before.user_claimant_id)) throw forbidden();
-    assertEditable(before);
+    assertEditable(before, { user: req.user });
     db.prepare(`DELETE FROM labour_entries WHERE id = ?`).run(before.id);
     audit(req.user.id, 'delete', 'labour_entry', before.id, before, undefined);
     res.status(204).end();
