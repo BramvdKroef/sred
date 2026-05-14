@@ -12,6 +12,11 @@ import { unauthorized, badRequest } from '../lib/errors.js';
 const CHALLENGE_TTL_MS = 5 * 60_000;
 
 function storeChallenge({ userId, challenge, kind, context }) {
+  // Opportunistic reaper: every insert clears any rows whose 5-minute TTL
+  // has already elapsed. Negligible cost (indexed scan over a tiny table
+  // bounded by the rate limiter) and eliminates the unbounded-growth class
+  // of DoS attack (V-09).
+  db.prepare(`DELETE FROM webauthn_challenges WHERE expires_at < datetime('now')`).run();
   const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS).toISOString();
   db.prepare(
     `INSERT INTO webauthn_challenges (user_id, challenge, kind, context, expires_at) VALUES (?, ?, ?, ?, ?)`

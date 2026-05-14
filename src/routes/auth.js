@@ -7,12 +7,18 @@ import { startRegistration, finishRegistration, startLogin, finishLogin } from '
 import { mintRefreshToken, consumeRefreshToken, revokeRefreshToken } from '../auth/refresh.js';
 import { sendMagicLink } from '../lib/email.js';
 import { badRequest, unauthorized, notFound } from '../lib/errors.js';
+import {
+  webauthnLimiter,
+  recoveryShortLimiter,
+  recoveryHourLimiter,
+  refreshLimiter,
+} from '../lib/rate-limit.js';
 
 const router = Router();
 
 // --- Registration -----------------------------------------------------------
 
-router.post('/webauthn/register/start', async (req, res, next) => {
+router.post('/webauthn/register/start', webauthnLimiter, async (req, res, next) => {
   try {
     const { token } = req.body ?? {};
     let user;
@@ -35,7 +41,7 @@ router.post('/webauthn/register/start', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/webauthn/register/finish', async (req, res, next) => {
+router.post('/webauthn/register/finish', webauthnLimiter, async (req, res, next) => {
   try {
     const { token, attestation, label } = req.body ?? {};
     if (!attestation) throw badRequest('attestation required');
@@ -67,7 +73,7 @@ router.post('/webauthn/register/finish', async (req, res, next) => {
 
 // --- Login ------------------------------------------------------------------
 
-router.post('/webauthn/login/start', async (req, res, next) => {
+router.post('/webauthn/login/start', webauthnLimiter, async (req, res, next) => {
   try {
     const { email } = req.body ?? {};
     const user = email
@@ -79,7 +85,7 @@ router.post('/webauthn/login/start', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/webauthn/login/finish', async (req, res, next) => {
+router.post('/webauthn/login/finish', webauthnLimiter, async (req, res, next) => {
   try {
     const { assertion } = req.body ?? {};
     if (!assertion) throw badRequest('assertion required');
@@ -92,7 +98,7 @@ router.post('/webauthn/login/finish', async (req, res, next) => {
 
 // --- Refresh ----------------------------------------------------------------
 
-router.post('/auth/refresh', (req, res, next) => {
+router.post('/auth/refresh', refreshLimiter, (req, res, next) => {
   try {
     const { refresh_token } = req.body ?? {};
     const user = consumeRefreshToken(refresh_token);  // also rotates (marks old revoked)
@@ -104,7 +110,7 @@ router.post('/auth/refresh', (req, res, next) => {
 
 // --- Recovery (magic link) --------------------------------------------------
 
-router.post('/recovery', (req, res, next) => {
+router.post('/recovery', recoveryShortLimiter, recoveryHourLimiter, (req, res, next) => {
   try {
     const { email } = req.body ?? {};
     if (!email) throw badRequest('email required');
