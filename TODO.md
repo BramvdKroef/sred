@@ -30,18 +30,18 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs reference `docs/use-cases.md`.
 
 - [ ] [P1] **UC-R1 — Review queue scoping + bulk approve.**
-  - [x] ~~Render employee name + project title in the queue.~~ List endpoints now join `users`/`projects`; review queue renders names.
-  - [x] ~~Replace `prompt()` for rejection reason with an inline textarea + Cancel/Submit.~~
+  - [x] ~~Render employee name + project title in the queue.~~
+  - [x] ~~Replace `prompt()` for rejection reason with an inline textarea.~~
+  - [x] ~~Add per-claimant scope.~~ Honors `state.activeClaimantId`.
   - [ ] Add row checkboxes + a "select all visible" header + an "Approve / Reject selected" action bar.
-  - [ ] Add per-claimant scope ← unblocked: hoist step 2 is done. Selector is in the header; tab needs to read `state.activeClaimantId`.
   - [ ] Add period / project / employee filters.
 - [ ] [P1] **UC-E4 — Employee dashboard period + claimant scope.**
   - [x] ~~Add a claimant column on labour / expense / evidence tables.~~
   - [ ] Add a period selector + per-period totals row on the activity tab.
 - [ ] [P2] **UC-A4 — Project narrative revision viewer.**
-  - [ ] List prior revisions on the project detail page (date, reviser, title at the time).
-  - [ ] Click-to-view a revision (read-only side panel or modal).
-  - [ ] *(optional)* Diff against current — only if list+view is shipped and proves valuable.
+  - [x] ~~List prior revisions on the project detail page.~~ New "Narrative revisions (N)" card; `/revisions` endpoint joins users for `revised_by_name` + `manager_name`.
+  - [x] ~~Click-to-view a revision (read-only inline expansion).~~
+  - [ ] *(optional)* Diff against current — only if list+view proves valuable.
 - [ ] [P2] **UC-A3 — Employee onboarding: look-up-by-email.**
   - [x] ~~Look up existing user by email on Add-employee submit; switch form to attach mode if found.~~ Blur-triggered; inline Yes/No.
   - [x] ~~Add title + employment start date fields.~~ Migration 009 adds `user_claimants.employment_start_date`.
@@ -52,16 +52,12 @@ Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs refere
 
 Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact items first.
 
-- [ ] [P1] **Hoist active-claimant selector into page header.**
-  - [x] ~~Step 1: move selector visually into the header.~~ Class `.header-claimant-select`. Found Exports + Employees were already claimant-scoped (audit was wrong on those).
-  - [x] ~~Step 2: persist selection + add "All claimants" sentinel.~~ `state.activeClaimantId` plumbed; localStorage key `sred-active-claimant`; deleted-claimant falls back to null.
-  - [ ] Step 3: scope the Review tab to the selection.
-  - [ ] Step 4: scope Audit and Overview tabs; handle deleted-claimant fallback. ← blocked by step 3.
-- [ ] [P1] **Dollar inputs, not cent inputs.** People are typing `9500000` for $95k salaries.
-  - [ ] Build a shared `<dollar-input>` helper (vanilla — a small wrapper around `<input type="number" step="0.01">`) that emits the cents value on form submit.
-  - [ ] Apply to admin Employees forms (Add employee, Add comp row, Edit comp).
-  - [ ] Apply to admin on-behalf expense form (`renderLogOnBehalfCards`).
-  - [ ] Apply to employee Submit-expense form and the inline activity edit-expense form.
+- [x] ~~**Hoist active-claimant selector into page header.**~~ All 4 steps done.
+  - [x] ~~Step 1: move selector visually into the header.~~
+  - [x] ~~Step 2: persist selection + add "All claimants" sentinel.~~
+  - [x] ~~Step 3: scope the Review tab to the selection.~~ `claimant_id` filter added to labour/expense list endpoints.
+  - [x] ~~Step 4: scope Audit and Overview tabs; handle deleted-claimant fallback.~~ Audit log endpoint accepts `claimant_id` with per-entity-type subqueries; Overview scoped via labour/expense/activity filters; deleted-claimant fallback shows an inline banner.
+- [x] ~~**Dollar inputs, not cent inputs.**~~ `dollarsToCents` helper in `public/api.js`; applied to Add-employee, Add-attachment, Add-comp-row, on-behalf expense, Submit-expense, and inline edit-expense forms. Unit-suffix flips `$/yr ↔ $/hr` with comp-type dropdown. API field `amount_cents` unchanged.
 - [x] ~~**Confirmation dialog before "Close period".**~~ Native `confirm()` with the date range, the three row counts (labour / expenses / evidence), and the consequence wording. Reopen stays unconfirmed.
 - [x] ~~**First-run empty state on Overview.**~~ When `state.claimants.length === 0` the body becomes a 5-step getting-started checklist with anchor links into the relevant tabs.
 - [ ] [P2] **Errors as inline banners, not `alert()`.**
@@ -89,10 +85,7 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 - [x] ~~`auth/refresh.js`~~ (9 tests, covering V-03 family-revoke behaviour)
 - [x] ~~`auth/jwt.js`~~ (7 tests)
 - [x] ~~`lib/wage-caps.js`~~ (6 tests)
-- [ ] [P3] **Route-level integration tests** for the high-value paths.
-  - [ ] Close-period blocks subsequent edits on labour/expense/evidence in that period.
-  - [ ] T661 export round-trip: seed → POST `/api/exports/t661` → GET `/api/exports/:id/download?format=...` for all four formats.
-  - [ ] Audit-log writes on every mutating endpoint (parameterized — table-driven test).
+- [x] ~~**Route-level integration tests.**~~ 18 new tests across three files: `close-period.test.js` (10), `t661-export-roundtrip.test.js` (7), `audit-log-writes.test.js` (1 parameterised covering 11 endpoints). Caught: admin-logged labour auto-approves into `status='approved'` which immediately locks it from PATCH via `assertEditable` — admin can't fix a typo on their own on-behalf entry without reject-then-edit-then-re-approve. Flagged for follow-up.
 
 ## Refactoring
 
@@ -118,7 +111,7 @@ Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 c
 - [x] ~~**V-04 Rate limiting.**~~ `express-rate-limit` on login/register/recovery/refresh/invite — see `src/lib/rate-limit.js`. 429s use the standard error shape.
 - [x] ~~**V-05 Evidence MIME allowlist.**~~ PDF / common images / text-family / Office docs / zip only. Stored extension normalised from MIME, never from `originalname`.
 - [x] ~~**V-06 Invite response no longer leaks magic-link.**~~ Body is `{ user_id, purpose, expires_at, delivered }`.
-- [ ] [P3] **V-07 (Low) Single-origin WebAuthn `expectedOrigin`** — hardening only; accept a frozen array if multi-tunnel deployment is anticipated.
+- [x] ~~**V-07 Multi-origin WebAuthn.**~~ `config.origin` → `origins` (frozen array, comma-split). Production https assertion. `buildMagicLink` uses `origins[0]`.
 - [x] ~~**V-08 `audit_log` append-only triggers.**~~ Migration 008.
 - [x] ~~**V-09 Stale WebAuthn challenges reaped.**~~ `storeChallenge` now deletes expired rows on each call.
 - [x] ~~**V-10 `nodemailer` bumped to ^8.0.7.**~~ `npm audit --omit=dev` clean.
