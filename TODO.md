@@ -29,10 +29,23 @@ Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = s
 
 Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs reference `docs/use-cases.md`.
 
-- [ ] [P1] **UC-R1 — Review queue scoping + bulk approve.** Add claimant / period / project / employee filters. Add row checkboxes + an "Approve / Reject selected" action bar. Replace `prompt()` for rejection reason with an inline input. Render employee name + project title instead of raw IDs.
-- [ ] [P1] **UC-E4 — Employee dashboard period + claimant scope.** My-activity needs a period selector with per-period totals. Labour / expense / evidence tables need a claimant column for multi-claimant employees.
-- [ ] [P2] **UC-A4 — Project narrative revision viewer.** Project detail should list prior revisions and let the admin view/diff them. The "Narrative edits create a new revision snapshot" hint currently raises a question the SPA doesn't answer.
-- [ ] [P2] **UC-A3 — Employee onboarding: look-up-by-email.** Detect existing user before creating a new one; surface the "attach to another claimant" path from the Add-employee form. Add title + employment start date to the initial form.
+- [ ] [P1] **UC-R1 — Review queue scoping + bulk approve.**
+  - [ ] Render employee name + project title in the queue (currently raw IDs). The labour/expense list endpoints already join through `user_claimants` for some routes — extend consistently.
+  - [ ] Replace `prompt()` for rejection reason with an inline textarea + Cancel/Submit.
+  - [ ] Add row checkboxes + a "select all visible" header + an "Approve / Reject selected" action bar.
+  - [ ] Add per-claimant scope ← blocked by hoist step 2 (selection plumbing).
+  - [ ] Add period / project / employee filters.
+- [ ] [P1] **UC-E4 — Employee dashboard period + claimant scope.**
+  - [ ] Add a claimant column on labour / expense / evidence tables (multi-claimant employees can't filter without it).
+  - [ ] Add a period selector + per-period totals row on the activity tab.
+- [ ] [P2] **UC-A4 — Project narrative revision viewer.**
+  - [ ] List prior revisions on the project detail page (date, reviser, title at the time).
+  - [ ] Click-to-view a revision (read-only side panel or modal).
+  - [ ] *(optional)* Diff against current — only if list+view is shipped and proves valuable.
+- [ ] [P2] **UC-A3 — Employee onboarding: look-up-by-email.**
+  - [ ] On Add-employee submit, look up existing user by email; if found, switch the form to "attach to claimant" mode (asks for the per-claimant fields only).
+  - [ ] Add title + employment start date fields to the initial form (currently only collected post-hoc).
+  - [ ] Surface the cross-claimant attachment path from a top-level button on the Employees tab, not just via the edit-user drill-in.
 - [ ] [P3] **UC-R2 — Comparative two-period export.** Side-by-side T661 export across two periods (alt flow R2.b).
 
 ## UI: usability
@@ -40,13 +53,27 @@ Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs refere
 Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact items first.
 
 - [ ] [P1] **Hoist active-claimant selector into page header.** Currently only on the Projects tab; Overview / Review / Audit silently aggregate across all claimants while other tabs are per-claimant scoped.
-- [ ] [P1] **Dollar inputs, not cent inputs.** Replace every `Amount (cents)` / `(¢/yr or ¢/hr)` input with a dollars input that multiplies by 100 on submit. People are typing `9500000` for $95k salaries.
+  - [ ] Step 1: move selector visually into the header. Behaviour identical — only the Projects tab consults it, like today. Shippable on its own.
+  - [ ] Step 2: persist selection (localStorage + a tiny `state.activeClaimantId` source of truth) and add an "All claimants" sentinel. ← blocked by step 1.
+  - [ ] Step 3: scope the Review tab to the selection (highest user-visible value). ← blocked by step 2.
+  - [ ] Step 4: scope Audit and Overview tabs; handle deleted-claimant fallback. ← blocked by step 3.
+- [ ] [P1] **Dollar inputs, not cent inputs.** People are typing `9500000` for $95k salaries.
+  - [ ] Build a shared `<dollar-input>` helper (vanilla — a small wrapper around `<input type="number" step="0.01">`) that emits the cents value on form submit.
+  - [ ] Apply to admin Employees forms (Add employee, Add comp row, Edit comp).
+  - [ ] Apply to admin on-behalf expense form (`renderLogOnBehalfCards`).
+  - [ ] Apply to employee Submit-expense form and the inline activity edit-expense form.
 - [x] ~~**Confirmation dialog before "Close period".**~~ Native `confirm()` with the date range, the three row counts (labour / expenses / evidence), and the consequence wording. Reopen stays unconfirmed.
 - [x] ~~**First-run empty state on Overview.**~~ When `state.claimants.length === 0` the body becomes a 5-step getting-started checklist with anchor links into the relevant tabs.
-- [ ] [P2] **Errors as inline banners, not `alert()`.** Replace every `alert(e.message)` with a per-card error banner.
+- [ ] [P2] **Errors as inline banners, not `alert()`.**
+  - [ ] Build a shared banner helper (one CSS class + a `showError(cardEl, message)` function in `public/api.js`).
+  - [ ] Replace `alert(e.message)` in `onSubmit` (the shared form helper) — fixes most sites at once.
+  - [ ] Replace the remaining ad-hoc `alert()` call sites (search for `alert(` across `public/`).
 - [ ] [P2] **Invite-link UX.** Replace `alert()` with a modal: copy-to-clipboard button, relative expiry, "Sent to <email>" indicator when SMTP is configured.
 - [ ] [P2] **Tooltips for jargon.** Hover help on "Specified employee", "SR&ED method" (proxy vs traditional), "Comp type", "Reporting currency".
-- [ ] [P2] **Mobile-friendly tables.** Wrap `<table>` in `overflow-x: auto`. Collapse non-essential columns under 600px. Especially: the employee tabs (Log labour, Submit expense, Add evidence) are the actual mobile-relevant flows — they should be the most polished.
+- [ ] [P2] **Mobile-friendly tables.**
+  - [ ] Wrap every `<table>` in `overflow-x: auto` (one CSS class applied via a small DOM pass or just in `style.css`).
+  - [ ] Add a `hide-on-narrow` class and apply it to non-essential columns; CSS hides them under 600px.
+  - [ ] Polish the employee tabs specifically (Log labour, Submit expense, Add evidence) — they're the actual phone-relevant flows.
 - [x] ~~**Auto-approve visual indicator.**~~ On-behalf labour and expense forms now show a `pill.approved` note: "As an admin, this entry will be saved as approved and skip the review queue."
 - [x] ~~**Distinguish "locked" reasons.**~~ Replaced by `lockReason(entry)` returning `'approved' | 'period closed' | null`; `lockPill()` in `public/employee/activity.js` renders distinct pills.
 - [ ] [P3] **Search-bar discoverability.** Rename placeholder to "Jump to project or employee…", add a "See all projects" overflow link.
@@ -62,13 +89,20 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 - [x] ~~`auth/refresh.js`~~ (9 tests, covering V-03 family-revoke behaviour)
 - [x] ~~`auth/jwt.js`~~ (7 tests)
 - [x] ~~`lib/wage-caps.js`~~ (6 tests)
-- [ ] [P3] Route-level integration tests for the high-value paths: close-period blocks edits, T661 export round-trip, audit-log writes on every mutating endpoint.
+- [ ] [P3] **Route-level integration tests** for the high-value paths.
+  - [ ] Close-period blocks subsequent edits on labour/expense/evidence in that period.
+  - [ ] T661 export round-trip: seed → POST `/api/exports/t661` → GET `/api/exports/:id/download?format=...` for all four formats.
+  - [ ] Audit-log writes on every mutating endpoint (parameterized — table-driven test).
 
 ## Refactoring
 
 - [x] ~~`scripts/seed-data.js` hardcoded IDs.~~ Replaced with email-keyed user/uc lookups and a derived admin/period lookup. Exits with a useful message if any prerequisite is missing.
 - [ ] [P3] Route handlers all follow the same "load before → mutate → load after → audit" shape. Once one more handler is added, factor into a helper (`auditUpdate(table, id, mutator)`).
-- [ ] [P3] `public/api.js` is ~526 lines mixing fetch, session, DOM helpers, form binding, and renderers. Split when it next needs an edit.
+- [ ] [P3] **Split `public/api.js`** (~526 lines mixing concerns). Do when it next needs a non-trivial edit; otherwise defer.
+  - [ ] Extract session storage + `setSession` / `clearSession` into `public/session.js`.
+  - [ ] Extract `api`, `apiUpload`, refresh-on-401 into `public/fetch.js`.
+  - [ ] Extract DOM helpers (`esc`, `cents`, `$`, `$$`, `safeHref`, `onSubmit`, `bindForm`) into `public/dom.js`.
+  - [ ] Extract the per-feature renderers (`activityHtml`, `wireActivityDetails`, `renderPreferencesPage`, etc.) into per-feature files.
 - [ ] [P3] CSS is inconsistent — some utility classes, some inline styles, some per-form one-offs. Pick a single approach for new code.
 - [ ] [P3] Inline SQL is fine at this scale, but if the schema keeps growing, a thin `repositories/` layer would make handlers more testable.
 - [ ] [P3] Three different "new X" form patterns coexist (toggle-card, inline-expansion, separate page). Pick one.
