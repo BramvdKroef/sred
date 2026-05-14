@@ -30,7 +30,12 @@ router.get('/', (req, res, next) => {
     if (to)               { where.push('le.work_date <= ?');        params.push(to); }
 
     if (req.user.role !== 'admin') {
+      // Scope to the caller's OWN entries, and only those reached through an
+      // ACTIVE attachment. If admin later flips uc.status to 'inactive', the
+      // employee loses both list visibility and mutation rights (the latter
+      // via isOwnerOrAdmin in route-helpers.js). Keeps GET/PATCH consistent.
       where.push('uc.user_id = ?');
+      where.push("uc.status = 'active'");
       params.push(req.user.id);
     }
 

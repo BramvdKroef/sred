@@ -47,7 +47,11 @@ router.get('/', (req, res, next) => {
     if (to)               { where.push('e.expense_date <= ?');    params.push(to); }
 
     if (req.user.role !== 'admin') {
+      // Scope to the caller's OWN expenses, and only those reached through an
+      // ACTIVE attachment. Mirrors the labour list filter and is consistent
+      // with the PATCH path's isOwnerOrAdmin gate (route-helpers.js).
       where.push('uc.user_id = ?');
+      where.push("uc.status = 'active'");
       params.push(req.user.id);
     }
 
