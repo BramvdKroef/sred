@@ -41,6 +41,7 @@ npm run seed:data         # ~150 labour entries, 12 expenses, 11 evidence items 
 | `npm run seed:data` | Idempotent demo data on top of `seed:etc`: project assignments, labour, expenses, evidence files. |
 | `npm run backup` | Online snapshot of `data/sred.db` (WAL-safe) plus a tarball of `uploads/` into `data/backups/<timestamp>.db`. Prunes snapshots older than `BACKUP_RETENTION_DAYS` (default 30). |
 | `npm run cleanup:bundles` | Delete `data/bundles/*.zip` older than `BUNDLE_RETENTION_DAYS` (default 90) and null the matching `t661_exports.bundle_path` so the API rebuilds on demand. |
+| `npm test` | `node --test 'tests/**/*.test.js'` — the Node-builtin test runner over the suite under `tests/`. |
 
 ## Environment
 
@@ -48,7 +49,7 @@ npm run seed:data         # ~150 labour entries, 12 expenses, 11 evidence items 
 
 - `JWT_SECRET`, `JWT_TTL_SECONDS` — access-token signing + lifetime (default 1h).
 - `REFRESH_TTL_DAYS` — refresh-token TTL (default 30).
-- `RP_ID`, `ORIGIN`, `RP_NAME` — WebAuthn RP. Pin one tunnel domain for the day — changing `RP_ID` invalidates already-registered passkeys.
+- `RP_ID`, `ORIGIN`, `RP_NAME` — WebAuthn RP. `RP_ID` is single and pinned — changing it invalidates already-registered passkeys. `ORIGIN` may be a comma-separated list (multi-tunnel previews); in `NODE_ENV=production` every entry must use `https://`, and the first entry is the canonical origin used for outbound magic links.
 - `INVITE_TTL_MINUTES` / `RECOVERY_TTL_MINUTES` / `ADD_DEVICE_TTL_MINUTES` — single-use email-token windows.
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` — empty `SMTP_HOST` disables sending (magic links still log to stdout).
 
@@ -70,33 +71,50 @@ src/
     middleware.js          requireAuth / requireRole / requireAdmin
   lib/
     audit.js               One-liner helper that writes audit_log rows
+    csp.js                 Content-Security-Policy middleware
     email.js               nodemailer transport + sendMagicLink
     errors.js              HttpError + JSON error middleware
-    t661.js                T661 calculation engine (labour cost w/ specified-emp cap, FX, overhead)
     format.js              JSON/CSV/Markdown/PDF renderers
+    random.js              randomToken / sha256 — shared by tokens + refresh + evidence filename
+    rate-limit.js          Per-route limiters (webauthn, recovery, refresh, invite)
+    route-helpers.js       Shared entity loaders + period inference + scope/edit gates
+    t661.js                T661 calculation engine (labour cost w/ specified-emp cap, FX, overhead)
     wage-caps.js           Hardcoded per-calendar-year specified-employee caps
   routes/
-    auth.js                webauthn/{register,login}/{start,finish}, refresh, recovery, /me, /me/projects, /activity
-    users.js               employee CRUD, invites, deactivate/reactivate
+    auth.js                webauthn/{register,login}/{start,finish}, /auth/refresh, /recovery, /logout, /me, /me/{credentials,projects,periods}, /activity
+    users.js               user CRUD, invites, deactivate/reactivate, attachments
     user-claimants.js      per-claimant attachments + compensation
     claimants.js           claimants + nested periods + nested projects (create)
-    projects.js            project CRUD, revisions, assignments
+    projects.js            project CRUD (with optimistic-concurrency on PATCH), revisions, assignments
     periods.js             close / reopen
     labour.js              CRUD + approve/reject/bulk-approve
     expenses.js            CRUD + approve/reject
-    evidence.js            CRUD (file/link/note), JWT-gated download
-    exports.js             POST T661, GET in 4 formats, build + stream evidence zip
+    evidence.js            CRUD (file/link/note), MIME-sniffed uploads, JWT-gated download
+    exports.js             POST T661, GET in 4 formats, comparative export, build + stream evidence zip
     audit-log.js           Admin-only filterable log view
+  scripts/
+    seed-admin.js          Create / re-invite the first admin
+    seed-etc.js            Bootstrap Extreme Technology Corp demo claimant + period + employees + projects
+    seed-data.js           Idempotent demo labour/expense/evidence on top of seed:etc
 public/
   index.html               Shell — one #app container, brand styles, Montserrat
   app.js                   Entry, login/enroll/recovery, role dispatch
-  admin.js                 Admin SPA (overview, projects, employees, review, exports, audit log)
-  employee.js              Employee SPA (overview, my activity, log labour, evidence, expense)
+  admin.js                 Admin SPA shell
+  admin/                   Admin SPA modules (overview, projects, employees, review, exports, audit)
+  employee.js              Employee SPA shell
+  employee/                Employee SPA modules (overview, activity, forms)
   api.js                   fetch wrapper with refresh-on-401, helpers (activity feed, chart, JWT downloads, inline-evidence attach, currentWeek)
   style.css                Brand palette, cards, tables, bar chart, pills
+tools/                     Operator / dev scripts that aren't part of the seed path
+  backup.js                Online DB snapshot + uploads tarball (used by `npm run backup`)
+  cleanup-bundles.js       Prune old evidence-bundle zips (used by `npm run cleanup:bundles`)
+  mint-dev-jwt.js          Mint a short-lived dev JWT for one-off API testing
+  visual-audit.mjs         Headless screenshot pass over the SPA for visual review
+  analyze-audit.mjs        Audit-log analysis CLI
 docs/                      Use cases, data model, API surface, auth flows
 data/                      SQLite DB + WAL + bundle zips (gitignored)
 uploads/                   Evidence files (gitignored)
+tests/                     Node-builtin `node --test` suite
 ```
 
 ## Notable patterns
@@ -105,7 +123,7 @@ uploads/                   Evidence files (gitignored)
 - **Hash routing.** `#overview`, `#claimants/3`, `#users/7`, etc. Refreshing the page lands you back where you were. The search bar and back-buttons go through the same hash mutations.
 - **Audit log everywhere.** Every create / update / approve / reject / period-close path writes a row to `audit_log` with `before_json` / `after_json` snapshots. The Audit log tab and per-row Open expansions surface this in the UI.
 - **Append-only for closed periods.** Closing a fiscal period blocks edits and deletes to all labour, expense, and evidence rows in that period — reopening is the only way back, and is itself logged.
-- **Revision-versioned narratives.** Editing a project's title / narrative / type / phase / manager appends a row to `project_revisions`, so a filed T661's `project_revisions_json` snapshot is bit-identical to what the tax preparer received.
+- **Revision-versioned narratives.** Editing a project's title, narrative fields (advancement, uncertainties, work performed), `field_of_science`, `type`, or `manager_user_id` appends a row to `project_revisions`, so a filed T661's `project_revisions_json` snapshot is bit-identical to what the tax preparer received. `PATCH /api/projects/:id` is guarded by an optimistic-concurrency precondition (`__updated_at`) so two admins editing the same project don't silently clobber each other.
 - **Admin self-actions auto-approve.** Labour and expenses an admin submits skip the review queue and land in `status='approved'`, with the admin recorded as the reviewer.
 - **One person → many claimants.** A single `users` row can attach to several claimants via `user_claimants`, each with its own compensation history and specified-employee flag.
 

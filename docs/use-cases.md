@@ -7,6 +7,7 @@ An in-house tool for capturing the data a Canadian SR&ED claim requires: eligibl
 ## 2. Actors
 
 - **Admin** — Operates the tool on behalf of the company. Configures claimants, projects, fiscal periods, and employee records. Reviews submitted data, runs the T661 export, and assembles the evidence package for CRA review.
+- **Manager** — A user role that exists as a target for project-level assignment (`projects.manager_user_id`). Does not currently grant additional privileges over the API beyond `employee`; the role records who is responsible for a project without expanding their permission scope.
 - **Employee** — A person whose work may qualify for SR&ED. Logs hours against projects, uploads contemporaneous evidence, and submits eligible expenses.
 
 A *Technical Reviewer / Project Lead* role (to attest that work is SR&ED-eligible) is out of scope for v1; the Admin performs review.
@@ -15,7 +16,7 @@ A *Technical Reviewer / Project Lead* role (to attest that work is SR&ED-eligibl
 
 - **Claimant** — A legal entity that files its own T661. Has a Business Number, fiscal year end, and its own pool of employees and projects. The tool supports multiple claimants concurrently.
 - **Fiscal Year / Claim Period** — A claim window for one claimant, bounded by the claimant's fiscal year. Determines which labour, evidence, and expense records roll up into a given T661.
-- **SR&ED Project** — A project belonging to one claimant. Carries the technical narrative required by T661 Part 2 (advancement sought, uncertainty, work performed) plus a start/end date and status.
+- **SR&ED Project** — A project belonging to one claimant. Carries the technical narrative required by T661 Part 2 (advancement sought, uncertainty, work performed), a start/end date, a lifecycle `status` (`concept | development | complete`), and a `type` (`sred | internal`). Only `sred` projects roll up into T661 exports; `internal` projects exist to record work that the admin tracks for context but does not file. An optional `manager_user_id` records the responsible admin/manager.
 - **Employee** — A person belonging to a claimant, with compensation data (annual salary or hourly rate, effective dated) and a *specified employee* flag (per ITA s.248(1) — affects the wage cap on Part 3 line 307).
 - **Labour Entry** — Hours worked by one employee on one project on one date, with a short description of the work done. The basis for the labour cost line of T661.
 - **Evidence** — A contemporaneous artifact attached to a project, labour entry, or expense. Types include uploaded files (design docs, test results, screenshots), external links (commits, tickets), and free-form notes.
@@ -77,7 +78,7 @@ A *Technical Reviewer / Project Lead* role (to attest that work is SR&ED-eligibl
 **Main flow:**
 1. Admin opens the claimant's project list and creates a project.
 2. Admin enters the T661 Part 2 narrative fields: title, field of science/technology, project start date, technological advancement sought, technological uncertainties addressed, work performed.
-3. Admin sets the project status (planned / active / completed) and the period(s) the project belongs to.
+3. Admin sets the project `status` (concept / development / complete), the `type` (sred / internal), and optionally a manager. Projects span all periods of their claimant — there is no per-period assignment.
 4. Admin saves; the project becomes available for labour, evidence, and expense entries.
 
 **Alt flows:**
@@ -220,12 +221,12 @@ A *Technical Reviewer / Project Lead* role (to attest that work is SR&ED-eligibl
 ## 5. Cross-Cutting Requirements
 
 - **Period immutability** — Once a period is closed and an export has been generated, the system preserves the as-exported snapshot even if records are subsequently edited.
-- **Audit log** — Every create / edit / approve / reject action is logged with user, timestamp, and before/after values. Critical for CRA defensibility.
+- **Audit log** — Every create / edit / approve / reject action is logged with user, timestamp, and before/after values. The table is append-only at the database level: BEFORE UPDATE and BEFORE DELETE triggers (migration 008) abort any non-INSERT against it, including direct SQLite access. Critical for CRA defensibility.
 - **Authorization scope** — Employees see only their own data and projects they're assigned to, across all claimants they're attached to (unified view). Admins see all data for the claimant(s) they administer.
 - **Contemporaneity** — Upload timestamps for evidence are recorded server-side and shown in the audit package, since CRA weighs contemporaneous documentation heavily.
 - **Currency** — Each claimant has a reporting currency; expenses entered in other currencies are converted at a documented rate on the expense date.
 - **Specified employee wage cap** — Hardcoded per calendar year in the codebase, indexed by the calendar year of the labour entry. New cap values are added by code change as CRA publishes them.
-- **Evidence retention** — All labour, evidence, and expense records (and their attached files) are retained for at least 6 years following the end of the fiscal year in which they were filed. Deletion before that horizon is blocked; after it, retention is governed by the audit log rather than user action.
+- **Evidence retention** — Labour, evidence, and expense rows are retained by closing the fiscal period that contains them: once `fiscal_periods.status='closed'`, the delete and edit paths for rows in that period are refused (open periods remain freely mutable). Reopening a period via `POST /api/periods/:id/reopen` is the only way to re-enable mutation, and is itself audited. There is no separate 6-year clock in code — retention rides on the admin's discipline about closing periods (combined with the requirement that an export be generated against a period before it is closed for filing) and on the append-only audit log.
 
 ## 6. Out of Scope (v1)
 
@@ -242,4 +243,4 @@ These were open during drafting; decisions captured here:
 - *Specified employee wage cap* — Hardcoded in the codebase, indexed by calendar year. Updates ship as code changes when CRA publishes new caps.
 - *Overhead method* — Locked at the claimant level when the claimant is created; not switchable afterwards.
 - *Multi-claimant employees* — One person identity, attached to each claimant separately, presented as a unified view to the employee.
-- *Evidence retention* — 6 years following the end of the fiscal year in which records were filed. Deletion is blocked within that window.
+- *Evidence retention* — Mutation is locked when the containing fiscal period is closed; reopening a period (which is audited) is the only way back. No separate calendar window is enforced in code; long-term retention rests on closing periods after exporting and on the append-only audit log.
