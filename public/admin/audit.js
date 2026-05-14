@@ -8,9 +8,14 @@ let universeFacets = null;
 export async function render(main, ctx) {
   main.innerHTML = '<p class="empty">Loading audit log…</p>';
   const f = ctx.state.auditFilter ?? {};
+  const activeClaimantId = ctx.state.activeClaimantId ?? null;
   const qs = new URLSearchParams();
   if (f.entity_type) qs.set('entity_type', f.entity_type);
   if (f.action)      qs.set('action', f.action);
+  // Claimant scope is owned by the page-header selector (step 4 of the
+  // hoist). When set, server filters to rows whose entity belongs to this
+  // claimant; null means "all claimants".
+  if (activeClaimantId !== null) qs.set('claimant_id', String(activeClaimantId));
   qs.set('limit', f.limit ?? '100');
   const data = await api('GET', '/api/audit-log?' + qs);
 
@@ -23,6 +28,13 @@ export async function render(main, ctx) {
     entity_types: mergeFacet(universeFacets.entity_types, f.entity_type),
     actions:      mergeFacet(universeFacets.actions,      f.action),
   };
+
+  const claimantName = activeClaimantId === null
+    ? 'All claimants'
+    : (ctx.state.claimants.find(c => c.id === activeClaimantId)?.legal_name ?? `#${activeClaimantId}`);
+  const scopeLabel = activeClaimantId === null
+    ? 'All claimants'
+    : `Filtered to ${claimantName}`;
 
   main.innerHTML = `
     <div class="card">
@@ -41,6 +53,7 @@ export async function render(main, ctx) {
           </select>
         </div>
       </div>
+      <p class="muted" style="margin:0 0 0.6rem; font-size:0.85rem">${esc(scopeLabel)}</p>
       ${data.items.length === 0 ? '<p class="empty">No events.</p>' : `
         <table>
           <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>Summary</th></tr></thead>

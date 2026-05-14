@@ -138,6 +138,7 @@ function shell() {
         <div id="project-search-results" class="search-results" hidden></div>
       </div>
     </nav>
+    <div id="app-banner-host"></div>
     <main id="main"></main>
   `;
   $('#signout').addEventListener('click', state.signOut);
@@ -156,12 +157,27 @@ async function reloadAll() {
   state.claimants = (await api('GET', '/api/claimants')).items;
   // Rehydrate active claimant from localStorage on first load (when nothing
   // is set yet). After that, just validate the current selection still
-  // exists — a deleted claimant falls back to "All claimants" (null).
+  // exists — a deleted claimant falls back to "All claimants" (null) and we
+  // surface a one-time banner so the user understands why their selection
+  // changed (deep-link from a stale bookmark or a runtime delete).
   if (state.activeClaimantId === null) {
+    // Distinguish "nothing stored" from "stored id no longer exists" by
+    // peeking at the raw storage value before readActiveClaimantId nulls it
+    // out. The helper hides that distinction by design.
+    let storedRaw = null;
+    try { storedRaw = globalThis.localStorage?.getItem(ACTIVE_CLAIMANT_KEY); }
+    catch { /* unavailable */ }
     state.activeClaimantId = readActiveClaimantId(state.claimants);
+    if (state.activeClaimantId === null && storedRaw && storedRaw !== 'null' && Number.isInteger(Number(storedRaw))) {
+      // Stored a real id, but the claimant is gone. Reset the persisted
+      // value so the banner fires once.
+      writeActiveClaimantId(null);
+      showAppBanner('Selected claimant no longer exists; defaulting to All.');
+    }
   } else if (!state.claimants.some(c => c.id === state.activeClaimantId)) {
     state.activeClaimantId = null;
     writeActiveClaimantId(null);
+    showAppBanner('Selected claimant no longer exists; defaulting to All.');
   }
   state.managers = (await api('GET', '/api/users?role=manager,admin&status=active')).items;
   if (state.activeClaimantId) {
@@ -173,6 +189,24 @@ async function reloadAll() {
   }
   populateHeaderClaimantSelect();
   render();
+}
+
+// Show a dismissable one-time inline notice between the nav and main. Used
+// for events the user didn't trigger but should know about (e.g. a stored
+// claimant id no longer exists). Replaces any prior banner — at most one is
+// shown at a time. No-op if the host element hasn't been rendered yet.
+function showAppBanner(message) {
+  const host = document.getElementById('app-banner-host');
+  if (!host) return;
+  host.innerHTML = `
+    <div class="app-banner" role="status">
+      <span>${esc(message)}</span>
+      <button type="button" aria-label="Dismiss" data-banner-dismiss>&times;</button>
+    </div>
+  `;
+  host.querySelector('[data-banner-dismiss]').addEventListener('click', () => {
+    host.innerHTML = '';
+  });
 }
 
 // Render the header's <option> list from the current state.claimants and
