@@ -2,14 +2,23 @@ import { db } from '../db/index.js';
 import { specifiedEmployeeCapCents } from './wage-caps.js';
 import { notFound, unprocessable } from './errors.js';
 
+// Proxy method: deemed overhead is 55% of eligible salary/wages for SR&ED work.
+// Source: CRA T4088 §2.6 / ITA s.37(1)(d). The rate is set by regulation —
+// historically adjustable; verify when filing across years.
+const PROXY_OVERHEAD_RATE = 0.55;
+
 // Find the compensation row in effect on `workDate` for a given user_claimant.
+// `effective_until` is an optional close-date; a NULL value means the row is
+// still open-ended (the most common case).
 function findEffectiveComp(userClaimantId, workDate) {
   return db.prepare(`
     SELECT * FROM compensation_rows
-     WHERE user_claimant_id = ? AND effective_from <= ?
+     WHERE user_claimant_id = ?
+       AND effective_from <= ?
+       AND (effective_until IS NULL OR effective_until >= ?)
      ORDER BY effective_from DESC, id DESC
      LIMIT 1
-  `).get(userClaimantId, workDate);
+  `).get(userClaimantId, workDate, workDate);
 }
 
 // Effective hourly rate (in cents) for a labour entry, with the specified-employee cap applied.
@@ -31,7 +40,10 @@ function effectiveHourly({ comp, isSpecified, workDate }) {
 }
 
 function reportingAmount(expense) {
-  // amount_cents is in `currency`; multiply by fx_rate to convert. Null fx_rate = 1:1.
+  // amount_cents is in `expense.currency`. fx_rate converts to the claimant's
+  // `reporting_currency` (almost always CAD in practice). Null fx_rate = 1:1,
+  // which is the right default when currency == reporting_currency (the
+  // expenses route refuses to persist a foreign-currency row without a rate).
   return Math.round(expense.amount_cents * (expense.fx_rate ?? 1));
 }
 
@@ -124,8 +136,16 @@ export function computeT661({ claimant, period }) {
     });
 
     const overhead = claimant.sred_method === 'proxy'
-      ? Math.round(0.55 * projectLabourCents)
+      ? Math.round(PROXY_OVERHEAD_RATE * projectLabourCents)
       : overheadExpenses;
+
+    // Under the proxy method, overhead-category expenses are replaced by the
+    // deemed 55% of labour and so don't contribute to totals. Filter them out
+    // of `expense_lines` too — otherwise a consumer diffing the lines against
+    // the totals sees a phantom delta.
+    const visibleExpenseLines = claimant.sred_method === 'proxy'
+      ? expenseLines.filter(line => line.category !== 'overhead')
+      : expenseLines;
 
     return {
       id: project.id,
@@ -148,7 +168,7 @@ export function computeT661({ claimant, period }) {
         total_cents: projectLabourCents + materials + contracts + thirdParty + overhead,
       },
       labour_worksheet: Array.from(perUc.values()),
-      expense_lines: expenseLines,
+      expense_lines: visibleExpenseLines,
     };
   });
 

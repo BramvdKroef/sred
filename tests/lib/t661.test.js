@@ -525,3 +525,156 @@ test('collectEvidenceManifest: returns evidence items scoped to the claimant + p
   assert.equal(items.length, 1);
   assert.equal(items[0].caption, 'a note');
 });
+
+// --- effective_until on compensation rows -----------------------------------
+
+test('findEffectiveComp rejects a work_date after the comp row was closed out', () => {
+  const s = scenario({ skipComp: true });
+  // Comp row valid only Jan–Mar 2025. A labour entry on Apr 1 must NOT match.
+  ctx.db.prepare(`
+    INSERT INTO compensation_rows
+      (user_claimant_id, comp_type, amount_cents, hours_per_year,
+       effective_from, effective_until)
+    VALUES (?, 'salary', 10_400_000, 2080, '2025-01-01', '2025-03-31')
+  `).run(s.ucId);
+
+  insertLabourEntry(ctx.db, s.projectId, s.ucId, s.periodId, {
+    work_date: '2025-04-01', hours: 8,
+  });
+
+  assert.throws(
+    () => computeT661({ claimant: s.claimant, period: s.period }),
+    err => {
+      assert.equal(err.status, 422);
+      assert.match(err.message, /no compensation row/);
+      return true;
+    }
+  );
+});
+
+test('findEffectiveComp matches a work_date on the effective_until boundary', () => {
+  const s = scenario({ skipComp: true });
+  ctx.db.prepare(`
+    INSERT INTO compensation_rows
+      (user_claimant_id, comp_type, amount_cents, hours_per_year,
+       effective_from, effective_until)
+    VALUES (?, 'salary', 10_400_000, 2080, '2025-01-01', '2025-03-31')
+  `).run(s.ucId);
+
+  // Entry on the close-out date itself should still match (until is inclusive).
+  insertLabourEntry(ctx.db, s.projectId, s.ucId, s.periodId, {
+    work_date: '2025-03-31', hours: 8,
+  });
+
+  const out = computeT661({ claimant: s.claimant, period: s.period });
+  assert.equal(out.projects[0].totals.labour_cost_cents, 40_000);
+});
+
+// --- proxy mode: expense_lines filtering ------------------------------------
+
+test('proxy mode: expense_lines excludes overhead-category rows', () => {
+  const s = scenario({
+    claimant: { sred_method: 'proxy' },
+    comp: { comp_type: 'salary', amount_cents: 10_400_000 },
+  });
+  insertLabourEntry(ctx.db, s.projectId, s.ucId, s.periodId, {
+    work_date: '2025-03-15', hours: 8,
+  });
+  insertExpense(ctx.db, s.projectId, s.ucId, s.periodId, {
+    category: 'material', amount_cents: 50_000,
+  });
+  insertExpense(ctx.db, s.projectId, s.ucId, s.periodId, {
+    category: 'overhead', amount_cents: 999_999,
+  });
+
+  const out = computeT661({ claimant: s.claimant, period: s.period });
+  const lines = out.projects[0].expense_lines;
+  // Only the material line — the overhead-category row is replaced by the
+  // deemed 55%, so showing it here would mislead anyone diffing lines vs totals.
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].category, 'material');
+  for (const line of lines) {
+    assert.notEqual(line.category, 'overhead');
+  }
+});
+
+test('traditional mode: expense_lines still includes overhead rows', () => {
+  // Mirror of the proxy test — under traditional, overhead-category rows
+  // contribute to totals and should remain visible in expense_lines.
+  const s = scenario({
+    claimant: { sred_method: 'traditional' },
+    comp: { comp_type: 'salary', amount_cents: 10_400_000 },
+  });
+  insertExpense(ctx.db, s.projectId, s.ucId, s.periodId, {
+    category: 'overhead', amount_cents: 12_345,
+  });
+
+  const out = computeT661({ claimant: s.claimant, period: s.period });
+  const lines = out.projects[0].expense_lines;
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].category, 'overhead');
+});
+
+// --- schema CHECKs ----------------------------------------------------------
+
+test('schema rejects compensation_rows.hours_per_year = 0', () => {
+  const s = scenario({ skipComp: true });
+  assert.throws(
+    () => ctx.db.prepare(`
+      INSERT INTO compensation_rows
+        (user_claimant_id, comp_type, amount_cents, hours_per_year, effective_from)
+      VALUES (?, 'salary', 10_400_000, 0, '2025-01-01')
+    `).run(s.ucId),
+    err => {
+      // better-sqlite3 surfaces CHECK failures as SqliteError with this code.
+      assert.equal(err.code, 'SQLITE_CONSTRAINT_CHECK');
+      return true;
+    }
+  );
+});
+
+test('schema rejects compensation_rows.hours_per_year < 0', () => {
+  const s = scenario({ skipComp: true });
+  assert.throws(
+    () => ctx.db.prepare(`
+      INSERT INTO compensation_rows
+        (user_claimant_id, comp_type, amount_cents, hours_per_year, effective_from)
+      VALUES (?, 'salary', 10_400_000, -1, '2025-01-01')
+    `).run(s.ucId),
+    err => {
+      assert.equal(err.code, 'SQLITE_CONSTRAINT_CHECK');
+      return true;
+    }
+  );
+});
+
+test('schema rejects labour_entries with malformed work_date', () => {
+  const s = scenario({ comp: { comp_type: 'salary', amount_cents: 10_400_000 } });
+  // GLOB '????-??-??' requires the YYYY-MM-DD shape; anything shorter,
+  // missing dashes, or with the wrong width is rejected.
+  for (const bad of ['2025-3-15', '15-03-2025', '2025/03/15', 'not-a-date', '']) {
+    assert.throws(
+      () => ctx.db.prepare(`
+        INSERT INTO labour_entries
+          (project_id, user_claimant_id, fiscal_period_id, work_date, hours, description, status)
+        VALUES (?, ?, ?, ?, 8, 'x', 'approved')
+      `).run(s.projectId, s.ucId, s.periodId, bad),
+      err => {
+        assert.equal(err.code, 'SQLITE_CONSTRAINT_CHECK');
+        return true;
+      },
+      `expected ${JSON.stringify(bad)} to be rejected`
+    );
+  }
+});
+
+test('schema accepts a well-formed labour_entries.work_date', () => {
+  const s = scenario({ comp: { comp_type: 'salary', amount_cents: 10_400_000 } });
+  // Sanity check: the GLOB check shouldn't block valid YYYY-MM-DD strings.
+  // (GLOB is shape-only; it doesn't validate month/day ranges.)
+  insertLabourEntry(ctx.db, s.projectId, s.ucId, s.periodId, {
+    work_date: '2025-03-15', hours: 8,
+  });
+  const out = computeT661({ claimant: s.claimant, period: s.period });
+  assert.equal(out.projects[0].totals.labour_cost_cents, 40_000);
+});
