@@ -31,12 +31,16 @@ function validateFxAgainstClaimant(currency, fx_rate, claimant) {
 
 router.get('/', (req, res, next) => {
   try {
-    const { project_id, period_id, user_claimant_id, status, category, from, to } = req.query;
+    const { project_id, period_id, user_claimant_id, claimant_id, status, category, from, to } = req.query;
     const where = [];
     const params = [];
     if (project_id)       { where.push('e.project_id = ?');       params.push(Number(project_id)); }
     if (period_id)        { where.push('e.fiscal_period_id = ?'); params.push(Number(period_id)); }
     if (user_claimant_id) { where.push('e.user_claimant_id = ?'); params.push(Number(user_claimant_id)); }
+    // `claimant_id` scopes via the user_claimants join (the review queue's
+    // active-claimant filter). The join is already present below for the
+    // user_name columns, so this is just an extra WHERE term.
+    if (claimant_id)      { where.push('uc.claimant_id = ?');     params.push(Number(claimant_id)); }
     if (status)           { where.push('e.status = ?');           params.push(status); }
     if (category)         { where.push('e.category = ?');         params.push(category); }
     if (from)             { where.push('e.expense_date >= ?');    params.push(from); }
