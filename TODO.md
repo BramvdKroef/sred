@@ -25,7 +25,8 @@ From [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md) and [RENDER_REVIEW.md](R
 - [x] ~~**`:focus` styles.**~~ Unified `:focus-visible` outline (brand-blue on light backgrounds, white on the header gradient) for buttons, tabs, `.summary-link`, `<summary>`, `.card a`.
 - [x] ~~**`.pill.kind-sred` contrast.**~~ Foreground now `--brand-dark` (~5.4:1).
 - [x] ~~**Mobile tables overflow.**~~ Selector broadened from `.card > table` to `.card table` so the `#all-users-table` wrapper div doesn't escape the rule.
-- [x] ~~**Tables no longer stretch to fill their container.**~~ Fixed: `width: 100%` on `.card table` + `.card .table-scroll`.
+- [x] ~~**Tables no longer stretch to fill their container.**~~ Fixed by removing the `display: block` rule the mobile-tables work added on `.card table`. The block layout broke `thead`/`tbody` stretching (table-row-groups inside a block context don't inherit the block's width).
+- [ ] [P2] **Restructure wide table rows on small screens.** Removing the `display: block` overflow-scroll fix means wide tables (audit log, employees list, review queue) overflow the card on narrow viewports. The proper fix is a per-table responsive design: either collapse rows to stacked cards under ~600px (each cell becomes a `label: value` line), or wrap the table in a dedicated `<div class="table-scroll">` at the render sites and accept the horizontal swipe. Pick a pattern and apply consistently.
 - [x] ~~**Two `<h1>`s per page.**~~ Brand strip demoted to `<div class="brand">` (CSS duplicated to keep the visual). A single visually-hidden `<h1 id="page-heading" class="sr-only">` is populated from a `TAB_TITLES` map per render.
 - [x] ~~**No `<main>` wrapper.**~~ Admin/employee shells already had `<main id="main">`. Login + enroll in `public/app.js` now wrap their `.card` in `<main>`.
 - [x] ~~**`.loading` and `.error-banner` contrast.**~~ `.loading` uses `--text-muted` now; `.error-banner` text bumped to `#8a2521` (~7:1).

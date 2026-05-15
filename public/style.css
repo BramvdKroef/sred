@@ -528,39 +528,13 @@ form textarea { resize: vertical; min-height: 4.5em; font-family: inherit; }
  * ========================================================================= */
 
 table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
-/* Horizontal-scroll wrapper for tables on narrow viewports. Applied via a
-   selector so every existing `<table>` rendered inside a `.card` (which is
-   every list-table in the SPA) becomes scrollable without per-render
-   wrapping. Caveat: `display: block` collapses table cells to content-width,
-   so we re-apply `width: 100%` below to make the table still fill the
-   card on wide screens. Below ~720px the cells start to overflow horizontally
-   and the user can swipe to see them; a faint shadow gradient hints at it.
-   Uses a descendant (not child) selector so tables wrapped in an
-   intermediate <div> (e.g. employees.js #all-users-table) still scroll. */
-.card table,
-.card .table-scroll {
-  display: block;
-  /* `display: block` enables overflow-x: auto, but the inner thead/tbody/tr
-     keep their table-row-group display, which means `width: 100%` doesn't
-     propagate from the block to the internal table layout. The fix is the
-     pair below: `width: max-content` lets the table grow to its full content
-     width (so columns don't collapse on narrow viewports → horizontal
-     scroll), and `min-width: 100%` forces it to at least fill the card
-     when content is narrower than the container. */
-  width: max-content;
-  min-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  max-width: 100%;
-  background:
-    linear-gradient(to right, var(--surface) 30%, rgba(255,255,255,0)),
-    linear-gradient(to right, rgba(255,255,255,0), var(--surface) 70%) 100% 0 / 50px 100% no-repeat,
-    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,0.10), rgba(0,0,0,0)),
-    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,0.10), rgba(0,0,0,0)) 100% 0 / 14px 100% no-repeat;
-  background-repeat: no-repeat;
-  background-color: var(--surface);
-  background-attachment: local, local, scroll, scroll;
-}
+/* NOTE: there was previously a `.card table { display: block; overflow-x: auto }`
+   rule here intended to make wide tables scroll horizontally on phones.
+   It broke wide-screen layout because `display: block` on a <table>
+   makes the inner thead/tbody render as table-row-groups inside a block
+   context — they don't stretch with the block's width. Removed.
+   Mobile-overflow handling is a separate concern; see TODO under "UI:
+   usability" → "Restructure wide table rows on small screens". */
 /* Hide a column (header + body cells, or any element flagged narrow-only)
    under 600px. Used to drop low-value columns on phones. */
 @media (max-width: 600px) {
