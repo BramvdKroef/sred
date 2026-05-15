@@ -19,8 +19,8 @@ export function renderUserEditForm(u, ctx) {
   const claimantOpts = ctx.state.claimants
     .map(c => `<option value="${c.id}">${esc(c.legal_name)}</option>`).join('');
   return `
-    <div class="card compact" style="margin: 0.5rem 0">
-      <h3 style="margin-top:0">Edit ${esc(u.name)}</h3>
+    <div class="card compact edit-user-card">
+      <h3 class="mt-0">Edit ${esc(u.name)}</h3>
 
       <form data-form="user-fields" data-user="${u.id}">
         <div class="grid">
@@ -64,7 +64,7 @@ function renderAttachmentEditor(a) {
   return `
     <div class="sub-card">
       <form data-form="uc-fields" data-uc="${a.id}">
-        <div class="row" style="gap:0.6rem; align-items:flex-end; flex-wrap:wrap">
+        <div class="row gap-lg align-end wrap">
           <div class="input-grow">
             <label>${esc(a.claimant_name)} · attachment ${a.id}
               <input name="title" placeholder="Title" value="${esc(a.title ?? '')}">
@@ -80,13 +80,13 @@ function renderAttachmentEditor(a) {
           <div><button class="small">Save</button></div>
         </div>
       </form>
-      <details style="margin-top:0.5rem">
-        <summary class="muted" style="cursor:pointer; font-size:0.85rem">Compensation history (${(a.compensation_history ?? []).length})</summary>
-        <ul style="font-size:0.85rem; margin:0.4rem 0 0.6rem 1rem">${compHistory || '<li class="empty">none</li>'}</ul>
+      <details class="mt-sm">
+        <summary class="muted summary-toggle caption-sm">Compensation history (${(a.compensation_history ?? []).length})</summary>
+        <ul class="comp-history-list">${compHistory || '<li class="empty">none</li>'}</ul>
         <form data-form="add-comp" data-uc="${a.id}">
-          <div class="row" style="gap:0.5rem; align-items:flex-end">
+          <div class="row gap-md align-end">
             <div><label title="${esc(TIP_COMP_TYPE)}">Type <select name="comp_type" data-comp-type-for="add-comp-${a.id}" title="${esc(TIP_COMP_TYPE)}"><option>salary</option><option>hourly</option></select></label></div>
-            <div><label>Amount <span class="muted" data-comp-unit-for="add-comp-${a.id}">($/yr)</span> <input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 95000.00" required style="width:9rem"></label></div>
+            <div><label>Amount <span class="muted" data-comp-unit-for="add-comp-${a.id}">($/yr)</span> <input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 95000.00" required class="w-amount"></label></div>
             <div><label>Effective from <input type="date" name="effective_from" required></label></div>
             <div><button class="small secondary">＋ Add comp row</button></div>
           </div>

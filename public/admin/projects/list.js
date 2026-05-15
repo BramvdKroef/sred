@@ -1,7 +1,7 @@
 // Projects tab — list view (claimants / periods / projects / attached users
 // cards) and the bindings for the list-side forms. Rendered when no project
 // is being drilled into.
-import { api, esc, bindForm, showTopBanner, TYPE_LABEL, STATUS_LABEL } from '../../api.js';
+import { api, esc, bindForm, showTopBanner, statusPill, TYPE_LABEL, STATUS_LABEL } from '../../api.js';
 
 export function renderClaimantsTab(ctx) {
   const { state } = ctx;
@@ -15,15 +15,15 @@ export function renderClaimantsTab(ctx) {
       <div class="card compact">
         <div class="card-head">
           <h2>Claimant</h2>
-          <div class="row" style="gap:0.3rem">
+          <div class="row gap-xs">
             ${activeId ? '<button id="edit-claimant-toggle" class="secondary small">✎ Edit</button>' : ''}
             <button id="new-claimant-toggle" class="secondary small">＋ New</button>
           </div>
         </div>
         ${activeId
-          ? `<p class="muted" style="margin:0">${esc(state.claimants.find(c => c.id === activeId)?.legal_name ?? '')}</p>`
-          : '<p class="empty" style="margin:0">Pick a claimant from the header to manage it.</p>'}
-        <div id="new-claimant-form" hidden style="margin-top: 0.75rem">
+          ? `<p class="muted m-0">${esc(state.claimants.find(c => c.id === activeId)?.legal_name ?? '')}</p>`
+          : '<p class="empty m-0">Pick a claimant from the header to manage it.</p>'}
+        <div id="new-claimant-form" class="mt-md" hidden>
           <form id="claimant-form">
             <div class="grid">
               <div><label>Legal name <input name="legal_name" required></label></div>
@@ -49,7 +49,7 @@ export function renderClaimantsTab(ctx) {
               const c = state.claimants.find(c => c.id === activeId);
               const { start, end } = suggestPeriodDates(c, state.periods);
               return `
-              <div id="new-period-form" hidden style="margin-top: 0.6rem">
+              <div id="new-period-form" class="mt-sm" hidden>
                 <form id="period-form" class="row">
                   <input type="date" name="start_date" required value="${start}" aria-label="Period start date">
                   <input type="date" name="end_date" required value="${end}" aria-label="Period end date">
@@ -74,7 +74,7 @@ function renderProjectsAndUsers(state) {
         <button id="new-project-toggle" class="secondary small">＋ New project</button>
       </div>
       ${renderProjectsTable(state.projects)}
-      <div id="new-project-form" hidden style="margin-top: 1rem">
+      <div id="new-project-form" class="mt-lg" hidden>
         <form id="project-form">
           <div class="grid">
             <div class="full"><label>Title <input name="title" required></label></div>
@@ -128,7 +128,7 @@ function renderPeriodsTable(periods) {
       <tr>
         <td>${esc(p.start_date)}</td>
         <td>${esc(p.end_date)}</td>
-        <td><span class="pill ${p.status}">${esc(p.status)}</span></td>
+        <td>${statusPill(p.status)}</td>
         <td class="actions">
           ${p.status === 'open'
             ? `<button class="secondary small" data-act-period="close" data-id="${p.id}">Close</button>`
@@ -162,7 +162,7 @@ function renderUsersUnderClaimantTable(users) {
         <td>${esc(u.name)}</td>
         <td>${esc(u.email)}</td>
         <td>${esc(u.role)}</td>
-        <td><span class="pill ${u.status === 'active' ? 'open' : 'pending'}">${esc(u.status)}</span></td>
+        <td>${statusPill(u.status)}</td>
       </tr>`).join('')}
     </tbody></table>`;
 }
@@ -171,7 +171,7 @@ function renderEditClaimantForm(c) {
   if (!c) return '';
   const fye = `${String(c.fiscal_year_end_month).padStart(2,'0')}-${String(c.fiscal_year_end_day).padStart(2,'0')}`;
   return `
-    <div id="edit-claimant-form" hidden style="margin-top: 0.75rem">
+    <div id="edit-claimant-form" class="mt-md" hidden>
       <form id="form-edit-claimant">
         <div class="grid">
           <div class="full"><label>Legal name <input name="legal_name" required value="${esc(c.legal_name)}"></label></div>
@@ -180,7 +180,7 @@ function renderEditClaimantForm(c) {
           <div><label title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate.">Reporting currency <input name="reporting_currency" required value="${esc(c.reporting_currency)}" title="All T661 figures are reported in this currency. Foreign-currency expenses convert at the entered FX rate."></label></div>
           <div><label title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set.">SR&amp;ED method (locked) <input value="${esc(c.sred_method)}" disabled title="Proxy = 55% of eligible labour is auto-claimed as overhead (no overhead expenses needed). Traditional = you itemise overhead expenses. Locked once set."></label></div>
         </div>
-        <div class="actions row" style="gap:0.4rem">
+        <div class="actions row gap-sm">
           <button class="small">Save claimant</button>
           <button type="button" class="small secondary" id="cancel-edit-claimant">Cancel</button>
         </div>

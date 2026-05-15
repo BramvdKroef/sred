@@ -30,9 +30,9 @@ export function renderLogOnBehalfCards(project, claimant) {
               <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime"> Overtime</label></div>
               <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
             </div>
-            <details style="margin-top:0.5rem">
+            <details class="mt-sm">
               <summary class="summary-link">＋ Attach evidence (optional)</summary>
-              <div class="grid" style="margin-top:0.5rem">
+              <div class="grid mt-sm">
                 <div><label>Kind
                   <select name="ev_kind" class="ev-kind">
                     <option value="">— none —</option>
@@ -40,13 +40,13 @@ export function renderLogOnBehalfCards(project, claimant) {
                     <option value="link">Link</option>
                   </select>
                 </label></div>
-                <div style="flex:1"><label>Caption <input name="ev_caption"></label></div>
+                <div class="flex-1"><label>Caption <input name="ev_caption"></label></div>
                 <div class="full ev-file" hidden><label>File <input type="file" name="ev_file"></label></div>
                 <div class="full ev-url"  hidden><label>URL <input type="url" name="ev_url" placeholder="https://…"></label></div>
               </div>
             </details>
-            <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
-            <div class="actions" style="margin-top:0.3rem"><button class="small">Add labour entry</button></div>
+            <p class="muted approval-note"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
+            <div class="actions mt-xs"><button class="small">Add labour entry</button></div>
           </form>
         </div>
       </div>
@@ -75,15 +75,15 @@ export function renderLogOnBehalfCards(project, claimant) {
               <div><label>FX rate (if not ${esc(reportingCcy)}) <input type="number" step="0.0001" name="fx_rate"></label></div>
               <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
             </div>
-            <details style="margin-top:0.5rem" open>
+            <details class="mt-sm" open>
               <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
-              <div class="grid" style="margin-top:0.5rem">
-                <div style="flex:1"><label>Caption <input name="receipt_caption" placeholder="e.g. Invoice #INV-..."></label></div>
+              <div class="grid mt-sm">
+                <div class="flex-1"><label>Caption <input name="receipt_caption" placeholder="e.g. Invoice #INV-..."></label></div>
                 <div class="full"><label>File <input type="file" name="receipt_file"></label></div>
               </div>
             </details>
-            <p class="muted" style="margin:0.7rem 0 0.3rem"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
-            <div class="actions" style="margin-top:0.3rem"><button class="small">Add expense</button></div>
+            <p class="muted approval-note"><span class="pill approved">As an admin, this entry will be saved as approved and skip the review queue.</span></p>
+            <div class="actions mt-xs"><button class="small">Add expense</button></div>
           </form>
         </div>
       </div>

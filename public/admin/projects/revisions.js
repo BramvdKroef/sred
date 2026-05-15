@@ -45,7 +45,7 @@ export function renderRevisionsCard(items) {
 function renderRevisionDetail(r) {
   const managerName = r.manager_name ?? (r.manager_user_id ? `user #${r.manager_user_id}` : '—');
   return `
-    <div class="grid" style="gap:0.4rem; font-size:0.92rem">
+    <div class="grid activity-detail-grid">
       <div><strong>Title:</strong> ${esc(r.title ?? '—')}</div>
       <div><strong>Type:</strong> <span class="pill kind-${esc(r.type ?? '')}">${esc(TYPE_LABEL[r.type] ?? r.type ?? '—')}</span></div>
       <div><strong>Field of science:</strong> ${esc(r.field_of_science ?? '—')}</div>

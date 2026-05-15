@@ -8,12 +8,12 @@ export function renderAssignForm(project, users) {
     u.user_claimant_id && !activeUcIds.has(u.user_claimant_id) && u.attachment_status === 'active'
   );
   if (candidates.length === 0) {
-    return `<div id="assign-form" hidden style="margin-bottom:0.6rem">
-      <p class="muted" style="font-size:0.88rem">Every active employee attached to this claimant is already assigned. Add an employee to the claimant from the Employees tab to widen the pool.</p>
+    return `<div id="assign-form" class="mb-md" hidden>
+      <p class="muted">Every active employee attached to this claimant is already assigned. Add an employee to the claimant from the Employees tab to widen the pool.</p>
     </div>`;
   }
-  return `<div id="assign-form" hidden style="margin-bottom:0.6rem">
-    <form id="form-assign" class="row" style="gap:0.5rem; align-items:flex-end">
+  return `<div id="assign-form" class="mb-md" hidden>
+    <form id="form-assign" class="row gap-md align-end">
       <div class="input-grow"><label>Employee
         <select name="user_claimant_id" required>
           ${candidates.map(u =>

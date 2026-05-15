@@ -27,7 +27,7 @@ export async function render(main, ctx) {
   main.innerHTML = `
     <div class="card">
       <h2>This week — ${esc(week.from)} → ${esc(week.to)}</h2>
-      <p class="muted" style="margin:-0.2rem 0 0.6rem; font-size:0.85rem">${esc(scopeName)}</p>
+      <p class="caption scope-label">${esc(scopeName)}</p>
       <div class="metrics">
         <div><div class="metric">${totalHours.toFixed(2)}</div><div class="muted">hours logged (all employees)</div></div>
         <div><div class="metric">${contributors}</div><div class="muted">contributor${contributors === 1 ? '' : 's'}</div></div>
@@ -35,7 +35,7 @@ export async function render(main, ctx) {
         <div><div class="metric">${pendingExp.items.length}</div><div class="muted">pending expenses</div></div>
       </div>
       ${chartHtml(bars)}
-      <p class="muted" style="margin-top:0.75rem">Hover a bar for the exact total. Rejected entries are excluded.</p>
+      <p class="muted mt-md">Hover a bar for the exact total. Rejected entries are excluded.</p>
     </div>
     <div class="card">
       <h2>Recent activity</h2>
@@ -50,7 +50,7 @@ function renderFirstRunChecklist(main) {
     <div class="card">
       <h2>Welcome to Precision SR&amp;ED</h2>
       <p class="muted">Get set up in five steps. Each step links to the relevant tab.</p>
-      <ol style="margin:0.6rem 0 0.2rem; padding-left:1.2rem; line-height:1.65">
+      <ol class="checklist-ol">
         <li>
           <strong>Create your first claimant</strong> — your company or one you're filing for.
           &nbsp;<a href="#projects" class="summary-link">Add claimant</a>

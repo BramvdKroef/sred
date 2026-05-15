@@ -54,7 +54,7 @@ export function renderEditProjectForm(project, managers) {
             <textarea name="work_performed" rows="4">${esc(project.work_performed ?? '')}</textarea>
           </label></div>
         </div>
-        <div class="actions row" style="gap:0.5rem">
+        <div class="actions row gap-md">
           <button>Save project</button>
           <button type="button" class="secondary" id="cancel-edit-project">Cancel</button>
           <span class="muted">Narrative edits create a new revision snapshot.</span>

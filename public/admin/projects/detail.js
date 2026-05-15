@@ -1,7 +1,7 @@
 // Project detail subview — header card + narrative + assignments table +
 // on-behalf forms + revisions card + recent activity. Composes the
 // per-section render/bind helpers from sibling modules.
-import { api, esc, activityHtml, wireActivityDetails,
+import { api, esc, activityHtml, wireActivityDetails, statusPill,
          TYPE_LABEL, STATUS_LABEL } from '../../api.js';
 import { renderEditProjectForm, bindEditProjectForm } from './edit.js';
 import { renderRevisionsCard, wireRevisionsCard } from './revisions.js';
@@ -22,12 +22,12 @@ export async function renderProjectDetail(main, ctx) {
     <div class="card">
       <div class="card-head">
         <h2>
-          <a href="#" id="back-to-projects" class="muted" style="text-decoration:none">← Projects</a>
+          <a href="#" id="back-to-projects" class="muted breadcrumb-link">← Projects</a>
           &nbsp;/&nbsp; ${esc(project.title)}
         </h2>
-        <div class="row" style="gap:0.4rem">
+        <div class="row gap-sm">
           <button id="edit-project-toggle" class="secondary small">✎ Edit</button>
-          <span class="pill">${esc(project.status)}</span>
+          ${statusPill(project.status)}
         </div>
       </div>
       <div class="row meta-strip">
@@ -66,7 +66,7 @@ export async function renderProjectDetail(main, ctx) {
               <tr>
                 <td>${esc(a.name)}</td>
                 <td>${esc(a.email)}</td>
-                <td><span class="pill ${a.status === 'active' ? 'open' : 'closed'}">${esc(a.status)}</span></td>
+                <td>${statusPill(a.status)}</td>
                 <td class="actions">${a.status === 'active'
                   ? `<button class="small danger" data-unassign="${a.user_claimant_id}" data-name="${esc(a.name)}">Remove</button>`
                   : `<button class="small secondary" data-reassign="${a.user_claimant_id}">Re-assign</button>`}</td>

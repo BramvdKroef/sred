@@ -35,7 +35,7 @@ function renderLogin() {
         <h1>Precision <strong>SR&amp;ED</strong></h1>
         <p class="muted">Sign in with your passkey.</p>
         <label for="email">Email</label>
-        <input id="email" type="email" autocomplete="username webauthn" style="width: 100%">
+        <input id="email" type="email" autocomplete="username webauthn" class="w-full">
         <p class="actions">
           <button id="login-btn">Sign in with passkey</button>
         </p>
@@ -73,7 +73,7 @@ async function requestRecovery() {
     await api('POST', '/api/recovery', { email });
     $('#login-error').textContent = '';
     $('#app').querySelector('.center').innerHTML +=
-      `<p class="muted" style="margin-top:1rem">If <strong>${esc(email)}</strong> is registered, a recovery link has been emailed.</p>`;
+      `<p class="muted mt-lg">If <strong>${esc(email)}</strong> is registered, a recovery link has been emailed.</p>`;
   } catch (e) {
     $('#login-error').textContent = e.message;
   }

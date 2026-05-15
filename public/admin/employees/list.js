@@ -3,7 +3,7 @@
 // with per-row actions (edit, send invite / add device, deactivate /
 // reactivate). The edit-row expansion is wired through ./attachment.js.
 
-import { api, esc, showTopBanner } from '../../api.js';
+import { api, esc, showTopBanner, statusPill } from '../../api.js';
 import { TIP_SPECIFIED, TIP_COMP_TYPE } from './tips.js';
 import { bindAddEmployeeForm } from './add.js';
 import { bindAttachExistingForm } from './attach.js';
@@ -68,13 +68,13 @@ function renderUsersTab(ctx, users) {
           <div><label>Effective from <input name="effective_from" type="date"></label></div>
           <div><label title="${esc(TIP_SPECIFIED)}"><input name="is_specified_employee" type="checkbox" title="${esc(TIP_SPECIFIED)}"> Specified employee</label></div>
         </div>
-        <div id="add-employee-existing" class="muted" hidden style="margin:0.4rem 0; padding:0.5rem; border:1px solid var(--accent, #bbb); border-radius:4px"></div>
+        <div id="add-employee-existing" class="muted add-employee-existing" hidden></div>
         <div class="actions"><button data-submit-label>Add</button></div>
         <p class="muted">Creates the employee record only. Click <strong>Send invite</strong> in the table below to email them a passkey enrollment link when ready. If <em>Effective from</em> is left blank we default it from <em>Employment start date</em>.</p>
       </form>
-      <div id="attach-existing-form-wrap" hidden style="margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid rgba(0,0,0,0.08)">
-        <h3 style="margin-top:0">Attach existing employee to claimant</h3>
-        <p class="muted" style="margin-top:0">Use this when the person already exists under another claimant. Enter their email, fill in the per-claimant details, and submit.</p>
+      <div id="attach-existing-form-wrap" class="attach-existing-wrap" hidden>
+        <h3 class="mt-0">Attach existing employee to claimant</h3>
+        <p class="muted mt-0">Use this when the person already exists under another claimant. Enter their email, fill in the per-claimant details, and submit.</p>
         <form id="attach-existing-form">
           <div class="grid">
             <div><label>Email <input name="email" type="email" required
@@ -112,7 +112,7 @@ function renderAllUsersTable(ctx, users) {
           <td>${esc(u.email)}</td>
           <td><a href="#users/${u.id}"><strong>${esc(u.name)}</strong></a></td>
           <td>${esc(u.role)}</td>
-          <td><span class="pill ${u.status === 'active' ? 'open' : (u.status === 'pending' ? 'pending' : 'closed')}">${esc(u.status)}</span></td>
+          <td>${statusPill(u.status)}</td>
           <td class="actions">
             <button class="small secondary" data-edit-user="${u.id}">Edit</button>
             ${u.status === 'disabled'
