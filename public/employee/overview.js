@@ -19,7 +19,7 @@ export function render(main, ctx) {
         <div><div class="metric">${state.projects.length}</div><div class="muted">assigned project${state.projects.length === 1 ? '' : 's'}</div></div>
       </div>
       ${chartHtml(bars)}
-      <p class="muted" style="margin-top:0.75rem">Use “Log labour” to add to today, or jump to “My activity” to review history.</p>
+      <p class="muted mt-md">Use “Log labour” to add to today, or jump to “My activity” to review history.</p>
     </div>
     <div class="card">
       <h2>Recent activity</h2>

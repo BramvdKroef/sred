@@ -1,4 +1,4 @@
-import { api, esc, cents, dollarsToCents, onSubmit, wireJwtDownloads, safeHref, lockReason } from '../api.js';
+import { api, esc, cents, dollarsToCents, onSubmit, wireJwtDownloads, safeHref, lockReason, statusPill } from '../api.js';
 
 // Pure reducer over the three lists currently in state. Sums approved-vs-
 // pending hours, expense amounts (in cents, grouped per-currency since FX
@@ -39,7 +39,7 @@ export function render(main, ctx) {
       <table>
         <thead><tr><th>Project</th><th>Claimant</th><th>Status</th></tr></thead>
         <tbody>${state.projects.map(p => `
-          <tr><td>${esc(p.title)}</td><td>${esc(p.claimant_name)}</td><td><span class="pill">${esc(p.status)}</span></td></tr>
+          <tr><td>${esc(p.title)}</td><td>${esc(p.claimant_name)}</td><td>${statusPill(p.status)}</td></tr>
         `).join('')}</tbody>
       </table>`}
     </div>
@@ -60,7 +60,7 @@ export function render(main, ctx) {
             <td>${esc(e.claimant_name ?? '')}</td>
             <td>${e.hours}${e.is_overtime ? ' <span class="pill overtime">OT</span>' : ''}</td>
             <td>${esc(e.description)}</td>
-            <td><span class="pill ${e.status}">${esc(e.status)}</span>${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
+            <td>${statusPill(e.status)}${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
             <td class="actions">${editable ? `<button class="small secondary" data-edit-labour="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
           ${editable ? `<tr id="row-edit-labour-${e.id}" hidden><td colspan="7">${labourEditForm(e)}</td></tr>` : ''}
@@ -85,7 +85,7 @@ export function render(main, ctx) {
             <td>${esc(e.category)}</td>
             <td>${cents(e.amount_cents)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</td>
             <td>${esc(e.description)}</td>
-            <td><span class="pill ${e.status}">${esc(e.status)}</span>${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
+            <td>${statusPill(e.status)}${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
             <td class="actions">${editable ? `<button class="small secondary" data-edit-expense="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
           ${editable ? `<tr id="row-edit-expense-${e.id}" hidden><td colspan="8">${expenseEditForm(e)}</td></tr>` : ''}
@@ -158,7 +158,7 @@ function periodSelectorCard(state) {
   `).join('');
   return `
     <div class="card">
-      <div class="row" style="gap:0.6rem; align-items:center; flex-wrap:wrap">
+      <div class="row gap-lg wrap">
         <label for="period-filter"><strong>Period</strong></label>
         <select id="period-filter">
           <option value="">All periods</option>
@@ -188,13 +188,13 @@ function totalsCard(state) {
     : currencies.map(cur => {
         const v = t.amountByCurrency[cur];
         return `<div>
-          <div class="metric">${(v.approved / 100).toFixed(2)} <span style="font-size:0.7em">${esc(cur)}</span></div>
+          <div class="metric">${(v.approved / 100).toFixed(2)} <span class="ccy-suffix">${esc(cur)}</span></div>
           <div class="muted">expenses approved${v.pending ? ` · ${(v.pending / 100).toFixed(2)} pending` : ''}</div>
         </div>`;
       }).join('');
   return `
     <div class="card">
-      <h2>Totals — <span class="muted" style="font-weight:normal">${esc(scopeLabel)}</span></h2>
+      <h2>Totals — <span class="muted totals-scope">${esc(scopeLabel)}</span></h2>
       <div class="metrics">
         <div>
           <div class="metric">${t.hours.approved.toFixed(2)}</div>
@@ -212,37 +212,37 @@ function totalsCard(state) {
 // --- Inline row-edit forms (one per type) ---------------------------------
 
 function labourEditForm(e) {
-  return `<form data-form-edit-labour="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0">
+  return `<form data-form-edit-labour="${e.id}" class="row gap-md inline-edit-row">
     <div><label>Date <input type="date" name="work_date" value="${esc(e.work_date)}" required></label></div>
-    <div><label>Hours <input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required style="width:6rem"></label></div>
+    <div><label>Hours <input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required class="w-hours"></label></div>
     <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime" ${e.is_overtime ? 'checked' : ''}> Overtime</label></div>
     <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
-    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save labour entry</button><button type="button" class="small secondary" data-cancel-labour="${e.id}">Cancel</button></div></div>
+    <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save labour entry</button><button type="button" class="small secondary" data-cancel-labour="${e.id}">Cancel</button></div></div>
   </form>`;
 }
 
 function expenseEditForm(e) {
   const cats = ['material','contract','third_party_payment','overhead'];
-  return `<form data-form-edit-expense="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0; flex-wrap:wrap">
+  return `<form data-form-edit-expense="${e.id}" class="row gap-md inline-edit-row wrap">
     <div><label>Date <input type="date" name="expense_date" value="${esc(e.expense_date)}" required></label></div>
     <div><label>Category <select name="category">${cats.map(c =>
       `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
-    <div><label>Amount <span class="muted">(${esc(e.currency)})</span> <input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required style="width:9rem"></label></div>
-    <div><label>Currency <input name="currency" value="${esc(e.currency)}" required style="width:5rem"></label></div>
-    <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" style="width:6rem"></label></div>
+    <div><label>Amount <span class="muted">(${esc(e.currency)})</span> <input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required class="w-amount"></label></div>
+    <div><label>Currency <input name="currency" value="${esc(e.currency)}" required class="w-ccy"></label></div>
+    <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" class="w-hours"></label></div>
     <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
-    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save expense</button><button type="button" class="small secondary" data-cancel-expense="${e.id}">Cancel</button></div></div>
+    <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save expense</button><button type="button" class="small secondary" data-cancel-expense="${e.id}">Cancel</button></div></div>
   </form>`;
 }
 
 function evidenceEditForm(e) {
-  return `<form data-form-edit-evidence="${e.id}" class="row" style="gap:0.5rem; align-items:flex-start; padding:0.5rem 0; flex-wrap:wrap">
+  return `<form data-form-edit-evidence="${e.id}" class="row gap-md inline-edit-row wrap">
     <div><label>Date <input type="date" name="evidence_date" value="${esc(e.evidence_date)}" required></label></div>
     <div class="input-grow"><label>Caption <input name="caption" value="${esc(e.caption)}" required></label></div>
     ${e.kind === 'link' ? `<div class="input-grow"><label>URL <input type="url" name="url" value="${esc(e.url ?? '')}" required></label></div>` : ''}
-    ${e.kind === 'note' ? `<div style="flex:1 1 100%"><label>Note <textarea name="note_text" rows="2" required>${esc(e.note_text ?? '')}</textarea></label></div>` : ''}
+    ${e.kind === 'note' ? `<div class="flex-full"><label>Note <textarea name="note_text" rows="2" required>${esc(e.note_text ?? '')}</textarea></label></div>` : ''}
     ${e.kind === 'file' ? `<div><label>&nbsp;</label><span class="muted">file content not editable</span></div>` : ''}
-    <div><label>&nbsp;</label><div class="row" style="gap:0.4rem"><button class="small">Save evidence</button><button type="button" class="small secondary" data-cancel-evidence="${e.id}">Cancel</button></div></div>
+    <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save evidence</button><button type="button" class="small secondary" data-cancel-evidence="${e.id}">Cancel</button></div></div>
   </form>`;
 }
 

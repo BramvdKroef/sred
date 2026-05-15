@@ -4,7 +4,7 @@
 // and a slice of recent activity. Click-through on a project row jumps to
 // #projects/<id> via ctx.selectProject.
 
-import { api, esc, cents, activityHtml, wireActivityDetails,
+import { api, esc, cents, activityHtml, wireActivityDetails, statusPill,
          TYPE_LABEL, STATUS_LABEL } from '../../api.js';
 
 export async function renderUserDetail(main, ctx) {
@@ -14,17 +14,16 @@ export async function renderUserDetail(main, ctx) {
     api('GET', `/api/users/${userId}`),
     api('GET', `/api/activity?user_id=${userId}&limit=25`),
   ]);
-  const statusPillClass = bundle.status === 'active' ? 'open' : bundle.status === 'pending' ? 'pending' : 'closed';
   main.innerHTML = `
     <div class="card">
       <div class="card-head">
         <h2>
-          <a href="#users" class="muted" style="text-decoration:none">← Employees</a>
+          <a href="#users" class="muted breadcrumb-link">← Employees</a>
           &nbsp;/&nbsp; ${esc(bundle.name)}
         </h2>
-        <div class="row" style="gap:0.4rem">
+        <div class="row gap-sm">
           <span class="role">${esc(bundle.role)}</span>
-          <span class="pill ${statusPillClass}">${esc(bundle.status)}</span>
+          ${statusPill(bundle.status)}
         </div>
       </div>
       <div class="row meta-strip">
@@ -50,7 +49,7 @@ export async function renderUserDetail(main, ctx) {
                 <td>${esc(a.claimant_name)}</td>
                 <td>${esc(a.title ?? '—')}</td>
                 <td>${a.is_specified_employee ? '✓' : ''}</td>
-                <td><span class="pill ${a.status === 'active' ? 'open' : 'closed'}">${esc(a.status)}</span></td>
+                <td>${statusPill(a.status)}</td>
                 <td>${compStr}</td>
               </tr>`;
             }).join('')}</tbody>

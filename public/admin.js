@@ -376,14 +376,14 @@ function bindProjectSearch() {
     if (projects.items.length) {
       sections.push(renderSection('project', 'Projects', projects.items, p => `
           <div class="item" data-kind="project" data-pid="${p.id}" data-cid="${p.claimant_id}">
-            <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)}" style="margin-left:0.3rem">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
+            <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)} ml-xs">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
             <div class="claimant">${esc(p.claimant_name)}</div>
           </div>`));
     }
     if (users.items.length) {
       sections.push(renderSection('user', 'Employees', users.items, u => `
           <div class="item" data-kind="user" data-uid="${u.id}">
-            <div><strong>${esc(u.name)}</strong> <span class="role" style="margin-left:0.3rem">${esc(u.role)}</span></div>
+            <div><strong>${esc(u.name)}</strong> <span class="role ml-xs">${esc(u.role)}</span></div>
             <div class="claimant">${esc(u.email)}</div>
           </div>`));
     }
@@ -405,12 +405,12 @@ function bindProjectSearch() {
         const sections2 = [];
         if (projects.items.length) sections2.push(renderSection('project', 'Projects', projects.items, p => `
           <div class="item" data-kind="project" data-pid="${p.id}" data-cid="${p.claimant_id}">
-            <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)}" style="margin-left:0.3rem">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
+            <div><strong>${esc(p.title)}</strong> <span class="pill kind-${esc(p.type)} ml-xs">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></div>
             <div class="claimant">${esc(p.claimant_name)}</div>
           </div>`));
         if (users.items.length) sections2.push(renderSection('user', 'Employees', users.items, u => `
           <div class="item" data-kind="user" data-uid="${u.id}">
-            <div><strong>${esc(u.name)}</strong> <span class="role" style="margin-left:0.3rem">${esc(u.role)}</span></div>
+            <div><strong>${esc(u.name)}</strong> <span class="role ml-xs">${esc(u.role)}</span></div>
             <div class="claimant">${esc(u.email)}</div>
           </div>`));
         list.innerHTML = sections2.join('');

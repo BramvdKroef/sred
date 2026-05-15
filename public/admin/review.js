@@ -50,7 +50,7 @@ export async function render(main, ctx) {
 
   const scopeHint = claimantId
     ? ''
-    : `<p class="empty" style="margin:0 0 0.6rem">Showing pending items across all claimants — pick a claimant from the header to narrow.</p>`;
+    : `<p class="empty scope-tag">Showing pending items across all claimants — pick a claimant from the header to narrow.</p>`;
 
   // Employee dropdown is derived from the *currently visible* rows (cheap).
   // Use the user_claimant_id as the value so we can filter precisely.
@@ -65,7 +65,7 @@ export async function render(main, ctx) {
       ${labour.items.length === 0 ? '<p class="empty">Nothing pending.</p>' : `
       <table>
         <thead><tr>
-          <th style="width:1.6rem"><input type="checkbox" data-select-all-kind="labour" aria-label="Select all visible labour rows"></th>
+          <th class="col-checkbox"><input type="checkbox" data-select-all-kind="labour" aria-label="Select all visible labour rows"></th>
           <th>Date</th><th>Project</th><th>Employee</th><th>Hours</th><th>Description</th><th>Actions</th>
         </tr></thead>
         <tbody>${labour.items.map(e => `
@@ -90,7 +90,7 @@ export async function render(main, ctx) {
       ${expenses.items.length === 0 ? '<p class="empty">Nothing pending.</p>' : `
       <table>
         <thead><tr>
-          <th style="width:1.6rem"><input type="checkbox" data-select-all-kind="expense" aria-label="Select all visible expense rows"></th>
+          <th class="col-checkbox"><input type="checkbox" data-select-all-kind="expense" aria-label="Select all visible expense rows"></th>
           <th>Date</th><th>Project</th><th>Employee</th><th>Category</th><th>Amount</th><th>Description</th><th>Actions</th>
         </tr></thead>
         <tbody>${expenses.items.map(e => `
@@ -141,10 +141,10 @@ function renderFilterBar(state, employees, current) {
     `<option value="${e.id}" ${String(current.employee_uc_id) === String(e.id) ? 'selected' : ''}>${esc(e.name)}</option>`;
 
   return `
-    <div class="card" style="padding:0.6rem 0.9rem; margin-bottom:0.6rem">
-      <form id="review-filters" class="row" style="gap:0.6rem; align-items:flex-end; flex-wrap:wrap; margin:0">
+    <div class="card filter-bar">
+      <form id="review-filters" class="row gap-lg align-end wrap m-0">
         <div>
-          <label style="display:block; font-size:0.85rem">Period
+          <label class="label-plain">Period
             <select name="period_id" aria-label="Filter by period">
               <option value="">Any period</option>
               ${state.periods.map(periodOpt).join('')}
@@ -152,7 +152,7 @@ function renderFilterBar(state, employees, current) {
           </label>
         </div>
         <div>
-          <label style="display:block; font-size:0.85rem">Project
+          <label class="label-plain">Project
             <select name="project_id" aria-label="Filter by project">
               <option value="">Any project</option>
               ${state.projects.map(projectOpt).join('')}
@@ -160,7 +160,7 @@ function renderFilterBar(state, employees, current) {
           </label>
         </div>
         <div>
-          <label style="display:block; font-size:0.85rem">Employee
+          <label class="label-plain">Employee
             <select name="employee_uc_id" aria-label="Filter by employee">
               <option value="">Any employee</option>
               ${employees.map(employeeOpt).join('')}
@@ -197,9 +197,7 @@ function bindFilterBar(main, ctx) {
 function renderActionBar(selectedCount) {
   const disabled = selectedCount === 0 ? 'disabled' : '';
   return `
-    <div class="card" id="bulk-action-bar"
-         style="position:sticky; top:0; z-index:5; padding:0.6rem 0.9rem; margin-bottom:0.6rem;
-                display:flex; gap:0.6rem; align-items:center">
+    <div class="card action-bar sticky" id="bulk-action-bar">
       <span><strong data-bulk-count>${selectedCount}</strong> selected</span>
       <button class="small" data-bulk-act="approve" ${disabled}>Approve selected</button>
       <button class="small danger" data-bulk-act="reject" ${disabled}>Reject selected</button>
@@ -276,9 +274,9 @@ function bulkReject(main, selected, ctx) {
   // prompt — the per-row rejection editor already does the same thing for
   // single rows.
   host.innerHTML = `
-    <div style="display:flex; flex-direction:column; gap:0.4rem; width:100%">
+    <div class="bulk-reject-editor">
       <div><strong>${selected.length}</strong> selected · enter a single rejection reason (applied to all)</div>
-      <textarea data-bulk-reason rows="2" style="width:100%; box-sizing:border-box"
+      <textarea data-bulk-reason rows="2"
                 aria-label="Rejection reason (applied to all selected entries)"
                 placeholder="Why these entries are being rejected (visible to the submitter)"></textarea>
       <div class="actions">
@@ -340,11 +338,11 @@ function openRejectEditor(main, kind, id, ctx) {
   if (!row.hidden) { row.hidden = true; cell.innerHTML = ''; return; }
 
   cell.innerHTML = `
-    <form data-reject-form="${kind}-${id}" class="reject-editor" style="padding:0.6rem 0.9rem; background:#fafbfc; border:1px solid var(--border); border-radius:4px">
-      <label style="display:block; font-size:0.88rem; margin-bottom:0.3rem">Rejection reason
-        <textarea name="reason" rows="2" required style="width:100%; box-sizing:border-box" placeholder="Why this entry is being rejected (visible to the submitter)"></textarea>
+    <form data-reject-form="${kind}-${id}" class="reject-editor card-inset">
+      <label class="label-plain reject-reason-label">Rejection reason
+        <textarea name="reason" rows="2" required placeholder="Why this entry is being rejected (visible to the submitter)"></textarea>
       </label>
-      <div class="actions" style="margin-top:0.4rem">
+      <div class="actions mt-sm">
         <button type="submit" class="small danger">Submit rejection</button>
         <button type="button" class="small secondary" data-reject-cancel>Cancel</button>
       </div>

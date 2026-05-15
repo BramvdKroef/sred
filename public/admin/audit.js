@@ -39,8 +39,8 @@ export async function render(main, ctx) {
   main.innerHTML = `
     <div class="card">
       <div class="card-head">
-        <h2>Audit log <span class="muted" style="font-size:0.85rem; font-weight:500">${data.items.length} most recent</span></h2>
-        <div class="row" style="gap:0.4rem">
+        <h2>Audit log <span class="caption section-count">${data.items.length} most recent</span></h2>
+        <div class="row gap-sm">
           <select id="audit-entity-filter" aria-label="Filter by entity type">
             <option value="">all entities</option>
             ${facets.entity_types.map(t =>
@@ -53,7 +53,7 @@ export async function render(main, ctx) {
           </select>
         </div>
       </div>
-      <p class="muted" style="margin:0 0 0.6rem; font-size:0.85rem">${esc(scopeLabel)}</p>
+      <p class="caption scope-tag">${esc(scopeLabel)}</p>
       ${data.items.length === 0 ? '<p class="empty">No events.</p>' : `
         <table>
           <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>Summary</th></tr></thead>
@@ -107,7 +107,7 @@ function renderAuditRow(it) {
       <td><span class="pill">${esc(it.action)}</span></td>
       <td>${esc(it.entity_type)}<span class="hide-on-narrow"> #${it.entity_id}</span></td>
       <td>${summary}
-        <button class="small secondary" data-toggle-audit="${it.id}" style="margin-left:0.4rem">details</button>
+        <button class="small secondary ml-sm" data-toggle-audit="${it.id}">details</button>
         <pre id="audit-details-${it.id}" class="json" hidden>${esc(JSON.stringify({ before, after }, null, 2))}</pre>
       </td>
     </tr>

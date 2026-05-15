@@ -23,9 +23,9 @@ export function renderLabour(main, ctx) {
         <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime"> Overtime</label></div>
         <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
       </div>
-      <details class="attach-block" style="margin-top:0.6rem">
+      <details class="attach-block mt-sm">
         <summary class="summary-link">＋ Attach evidence (optional)</summary>
-        <div class="grid" style="margin-top:0.6rem">
+        <div class="grid mt-sm">
           <div><label>Kind
             <select name="ev_kind" class="ev-kind">
               <option value="">— none —</option>
@@ -33,12 +33,12 @@ export function renderLabour(main, ctx) {
               <option value="link">Link</option>
             </select>
           </label></div>
-          <div style="flex:1"><label>Caption <input name="ev_caption" placeholder="What this evidence shows"></label></div>
+          <div class="flex-1"><label>Caption <input name="ev_caption" placeholder="What this evidence shows"></label></div>
           <div class="full ev-file" hidden><label>File <input type="file" name="ev_file"></label></div>
           <div class="full ev-url"  hidden><label>URL <input type="url" name="ev_url" placeholder="https://…"></label></div>
         </div>
       </details>
-      <div class="actions" style="margin-top:0.8rem"><button>Add labour entry</button></div>
+      <div class="actions mt-md"><button>Add labour entry</button></div>
     </form>
   </div>`;
 
@@ -155,14 +155,14 @@ export function renderExpense(main, ctx) {
         <div><label>FX rate (if not reporting currency) <input type="number" step="0.0001" name="fx_rate"></label></div>
         <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
       </div>
-      <details class="attach-block" style="margin-top:0.6rem" open>
+      <details class="attach-block mt-sm" open>
         <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
-        <div class="grid" style="margin-top:0.6rem">
-          <div style="flex:1"><label>Caption <input name="receipt_caption" placeholder="e.g. Invoice #INV-2026-0312"></label></div>
+        <div class="grid mt-sm">
+          <div class="flex-1"><label>Caption <input name="receipt_caption" placeholder="e.g. Invoice #INV-2026-0312"></label></div>
           <div class="full"><label>File <input type="file" name="receipt_file"></label></div>
         </div>
       </details>
-      <div class="actions" style="margin-top:0.8rem"><button>Add expense</button></div>
+      <div class="actions mt-md"><button>Add expense</button></div>
     </form>
   </div>`;
 

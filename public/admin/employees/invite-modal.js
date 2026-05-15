@@ -27,13 +27,13 @@ export function showInviteModal(response, target) {
 
   dlg = document.createElement('dialog');
   dlg.id = 'invite-modal';
-  dlg.style.cssText = 'border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 1.25rem 1.4rem; max-width: 28rem; box-shadow: 0 10px 30px rgba(0,0,0,0.15);';
+  dlg.className = 'modal';
   dlg.innerHTML = `
-    <h3 style="margin:0 0 0.6rem">${esc(purposeLabel)}</h3>
-    <p style="margin:0.2rem 0"><strong>${esc(name)}</strong> &lt;${esc(email)}&gt;</p>
-    <p style="margin:0.2rem 0" class="muted">Expires in ${esc(expiresRel)}</p>
-    <p style="margin:0.6rem 0">${deliveryLine}</p>
-    <div class="actions" style="margin-top:0.8rem"><button type="button" class="small" data-close>Close</button></div>
+    <h3 class="modal-title">${esc(purposeLabel)}</h3>
+    <p class="modal-line"><strong>${esc(name)}</strong> &lt;${esc(email)}&gt;</p>
+    <p class="modal-line muted">Expires in ${esc(expiresRel)}</p>
+    <p class="modal-body">${deliveryLine}</p>
+    <div class="actions mt-md"><button type="button" class="small" data-close>Close</button></div>
   `;
   document.body.appendChild(dlg);
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());

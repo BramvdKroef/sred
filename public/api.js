@@ -2,6 +2,56 @@
 export const TYPE_LABEL   = { sred: 'SR&ED', internal: 'Internal' };
 export const STATUS_LABEL = { concept: 'Concept', development: 'Development', complete: 'Complete' };
 
+// Canonical "status → pill class" mapping. Used everywhere a raw status
+// value is rendered as a coloured pill (user.status, attachment.status,
+// labour/expense.status, period.status, project.status, etc.). Previously
+// each renderer wrote its own ad-hoc ternary; the mapping drifted four
+// different ways (see VISUAL_DESIGN_REVIEW.md #6 / TODO P2 status-pill
+// mapping inconsistency).
+//
+// Returns a class name to use *together* with `pill`, e.g.
+//   <span class="pill ${pillClassFor(value)}">${value}</span>
+//
+// Mapping (canonical):
+//   active / open / approved              → success (green)
+//   pending / concept                     → warning (yellow)
+//   rejected                              → error (red)
+//   inactive / disabled / closed/complete → neutral (grey)
+//   development                           → brand-status (blue)
+//   anything unknown                      → no modifier (plain pill)
+export function pillClassFor(value) {
+  switch (value) {
+    case 'active':
+    case 'open':
+    case 'approved':
+      return 'open';
+    case 'pending':
+      return 'pending';
+    case 'rejected':
+      return 'rejected';
+    case 'inactive':
+    case 'disabled':
+    case 'closed':
+      return 'closed';
+    case 'concept':
+      return 'status-concept';
+    case 'development':
+      return 'status-development';
+    case 'complete':
+      return 'status-complete';
+    default:
+      return '';
+  }
+}
+
+// Convenience: render a fully-formed status pill from a raw value.
+// Falls back to a plain (uncoloured) pill if the value isn't mapped — keeps
+// the existing audit-log "pill with action verb" rendering working.
+export function statusPill(value) {
+  const cls = pillClassFor(value);
+  return `<span class="pill${cls ? ' ' + cls : ''}">${esc(value)}</span>`;
+}
+
 const JWT_KEY     = 'sred-jwt';
 const REFRESH_KEY = 'sred-refresh';
 
@@ -242,7 +292,7 @@ async function refreshPrefs(main) {
         <div><label>Name</label><div>${esc(me.user.name)}</div></div>
         <div><label>Email</label><div>${esc(me.user.email)}</div></div>
         <div><label>Role</label><div><span class="role">${esc(me.user.role)}</span></div></div>
-        <div><label>Status</label><div><span class="pill ${me.user.status === 'active' ? 'open' : 'pending'}">${esc(me.user.status)}</span></div></div>
+        <div><label>Status</label><div>${statusPill(me.user.status)}</div></div>
       </div>
     </div>
 
@@ -251,14 +301,14 @@ async function refreshPrefs(main) {
         <h2>Your passkeys (${data.items.length})</h2>
         <button id="add-passkey-toggle" class="secondary small">＋ Add a passkey</button>
       </div>
-      <div id="add-passkey-form" hidden style="margin-bottom: 0.8rem">
-        <form id="form-add-passkey" class="row" style="gap:0.5rem; align-items:flex-end">
-          <div style="flex:1; min-width:14rem"><label>Device label
+      <div id="add-passkey-form" class="mb-md" hidden>
+        <form id="form-add-passkey" class="row gap-md align-end">
+          <div class="input-grow"><label>Device label
             <input name="label" placeholder="${esc(navigator.platform || 'Device')}">
           </label></div>
           <div><button class="small">Add passkey</button></div>
         </form>
-        <p class="muted" style="font-size:0.85rem; margin-top:0.4rem">
+        <p class="caption mt-xs">
           Your browser will prompt you to use a passkey on this device.
         </p>
       </div>
@@ -506,7 +556,7 @@ async function fetchActivityDetail(type, id) {
 }
 
 function renderActivityDetail(type, e, auditItems, linkedEv) {
-  const head = `<div class="grid" style="gap:0.4rem; font-size:0.92rem">`;
+  const head = `<div class="grid activity-detail-grid">`;
   let body = head;
   if (type === 'labour') {
     body += `
@@ -543,9 +593,9 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
   body += `</div>`;
 
   if (type === 'labour' || type === 'expense') {
-    body += `<h4 style="margin:0.8rem 0 0.3rem; font-size:0.92rem">Linked evidence (${linkedEv.length})</h4>`;
+    body += `<h4 class="activity-detail-subhead">Linked evidence (${linkedEv.length})</h4>`;
     if (linkedEv.length) {
-      body += `<ul style="font-size:0.88rem; margin:0; padding-left:1.2rem">${linkedEv.map(ev =>
+      body += `<ul class="activity-detail-list">${linkedEv.map(ev =>
         `<li><span class="pill type-evidence">${esc(ev.kind)}</span> ${esc(ev.caption)} ${
           ev.kind === 'file' ? `· <a href="/api/evidence/${ev.id}/download" data-jwt-dl>${esc(ev.file_path)}</a>` :
           ev.kind === 'link' ? `· <a href="${esc(safeHref(ev.url))}" target="_blank" rel="noopener">${esc(ev.url)}</a>` :
@@ -554,9 +604,9 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
     }
     const entryDate = type === 'labour' ? e.work_date : e.expense_date;
     body += `
-      <details style="margin-top:0.5rem">
+      <details class="mt-sm">
         <summary class="summary-link">＋ Attach evidence</summary>
-        <form data-attach-form="${type}-${e.id}" data-project-id="${e.project_id}" data-entry-date="${esc(entryDate)}" class="row" style="gap:0.5rem; align-items:flex-end; flex-wrap:wrap; margin-top:0.5rem">
+        <form data-attach-form="${type}-${e.id}" data-project-id="${e.project_id}" data-entry-date="${esc(entryDate)}" class="row gap-md mt-sm align-end wrap">
           <div><label>Kind
             <select name="ev_kind" class="ev-kind">
               <option value="file">File</option>
@@ -572,11 +622,11 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
       </details>`;
   }
   if (auditItems.length) {
-    body += `<details style="margin-top:0.7rem"><summary class="muted" style="cursor:pointer; font-size:0.88rem">Audit log (${auditItems.length})</summary>
-      <ul style="font-size:0.85rem; margin:0.4rem 0 0 1.2rem">${auditItems.map(a =>
+    body += `<details class="mt-md"><summary class="caption summary-toggle">Audit log (${auditItems.length})</summary>
+      <ul class="activity-audit-list">${auditItems.map(a =>
         `<li>${esc(a.created_at)} · <strong>${esc(a.action)}</strong> by ${esc(a.actor_name ?? '(system)')}</li>`).join('')}</ul></details>`;
   }
-  return `<div style="padding:0.7rem 0.9rem; background:#fafbfc; border:1px solid var(--border); border-radius:4px">${body}</div>`;
+  return `<div class="card-inset">${body}</div>`;
 }
 
 // JWT-authenticated download interceptor, reusable across shells.
