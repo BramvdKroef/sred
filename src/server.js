@@ -53,6 +53,45 @@ app.use((req, res, next) => {
 app.use(cspMiddleware);
 app.use(express.json({ limit: '2mb' }));
 
+// --- Health / readiness probes ---------------------------------------------
+//
+// Two unauthenticated, dependency-free endpoints intended for orchestrators
+// (systemd, k8s, an external load balancer) to distinguish "the process is
+// alive" from "the process can serve real traffic":
+//
+//   GET /healthz  — pure liveness. 200 if the event loop runs. No DB hit,
+//                   no external calls, no I/O. A failing /healthz means the
+//                   supervisor should restart us.
+//   GET /readyz   — readiness. Probes the SQLite handle with `SELECT 1`.
+//                   200 if the DB answers; 503 if it doesn't. A failing
+//                   /readyz means take this instance out of the LB pool but
+//                   do NOT restart — the underlying issue (disk full, DB
+//                   handle closed, file locked) won't resolve on bounce.
+//
+// Mounted before `/api` so they sit outside the API namespace, do not pass
+// through any per-route auth or rate limiter, and remain reachable even if
+// the API router has a boot-time error. They also are not in the audit log
+// path — `audit()` is called from individual route handlers, never here.
+app.get('/healthz', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+app.get('/readyz', (_req, res) => {
+  try {
+    // better-sqlite3 is synchronous; this is a sub-millisecond call against
+    // the open handle. If the handle is closed, prepare() throws
+    // "The database connection is not open". If the file is gone or locked
+    // it surfaces as a SqliteError. Either way we catch and report 503.
+    db.prepare('SELECT 1').get();
+    res.status(200).json({ ok: true, checks: { db: 'ok' } });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      checks: { db: 'fail', error: err instanceof Error ? err.message : String(err) },
+    });
+  }
+});
+
 app.use('/api', api);
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
