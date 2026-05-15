@@ -169,7 +169,7 @@ import { PassThrough } from 'node:stream';
 // PDF rendering uses pdfkit. The output is a readable stream the export
 // route can pipe straight to the response.
 export function toPdf(totals) {
-  const doc = new PDFDocument({ size: 'LETTER', margins: { top: 60, bottom: 60, left: 60, right: 60 } });
+  const doc = new PDFDocument({ size: 'LETTER', margins: { top: 60, bottom: 60, left: 60, right: 60 }, compress: false });
   const out = new PassThrough();
   doc.pipe(out);
 
@@ -491,7 +491,7 @@ export function toCsvCompare(a, b, diff) {
 }
 
 export function toPdfCompare(a, b, diff) {
-  const doc = new PDFDocument({ size: 'LETTER', margins: { top: 60, bottom: 60, left: 60, right: 60 } });
+  const doc = new PDFDocument({ size: 'LETTER', margins: { top: 60, bottom: 60, left: 60, right: 60 }, compress: false });
   const out = new PassThrough();
   doc.pipe(out);
 

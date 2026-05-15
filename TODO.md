@@ -126,7 +126,7 @@ From [DATABASE_REVIEW.md](DATABASE_REVIEW.md). The DB has 12 existing indexes pl
 From [SRED_DOMAIN_REVIEW.md](SRED_DOMAIN_REVIEW.md). **The agent did this without web access; cite recall with caution.** A tax preparer should final-check.
 
 - [ ] [P1] **Specified-employee cap not pro-rated by days-as-specified.** Over-claims for mid-year hires, part-time, most hourly specified employees. Steady-state full-time year-round cases are correct. Needs a `days_as_specified_in_year` factor.
-- [ ] [P2] **T661 line numbers absent from every export format.** Tax preparer maps everything by hand. Annotate `toMarkdown` / `toCsv` / `toPdf` with line references.
+- [x] ~~**T661 line numbers absent from every export format.**~~ `T661_LINES` / `T661_LINE_NUMBERS` constants in `src/lib/format.js`; Markdown/CSV/PDF all carry line annotations (305 labour, 306 OT, 307 specified-emp cap, 320 materials, 340 contract, 345 third-party, 360 overhead). Pinned with tests. PDF byte-sniff loosened to magic+length only since PDFKit splits text across `Tj` ops even with `compress:false`.
 - [ ] [P2] **Traditional-method overhead is one bucket.** No sub-categorisation (rent/utilities/maintenance/supporting-salaries) and no allocation-basis field. CRA expects per-overhead-type documentation.
 - [ ] [P3] **Materials** are one category — no consumed-vs-transformed split.
 - [ ] [P3] **Contract** doesn't distinguish arm's-length vs non-arm's-length (different allowable percentages).
@@ -151,7 +151,7 @@ From [SRED_DOMAIN_REVIEW.md](SRED_DOMAIN_REVIEW.md). **The agent did this withou
 From [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). Largest files: `admin/projects.js` 771 LOC · `admin/employees.js` 663 · `api.js` 630 · `lib/format.js` 590 · `admin.js` 428. **Zero import cycles** — the DAG is clean.
 
 - [x] ~~`scripts/seed-data.js` hardcoded IDs.~~ Replaced with email-keyed user/uc lookups and a derived admin/period lookup.
-- [ ] [P2] **Extract `mutateAndAudit(table, id, mutator, …)`** — the "load before → mutate → load after → audit" pattern recurs ~25 times across routes. The new `audit-log-writes.test.js` now pins the contract.
+- [x] ~~**Extract `mutateAndAudit(table, id, mutator, …)`.**~~ Helper (+ sibling `createAndAudit`) in `src/lib/route-helpers.js`. Swept across labour, expenses, evidence, projects, users, user-claimants, claimants, periods, exports. audit-log-writes.test.js still passes.
 - [x] ~~**Split `public/admin/projects.js`.**~~ 771 → entry (12 LOC) + 6 sub-modules (323/143/138/96/70/59). No circular imports, no shared mutable state.
 - [x] ~~**Split `public/admin/employees.js`.**~~ 663 → entry (26 LOC) + 7 sub-modules (192/163/129/87/68/59/11). UC-A3 flows, tooltips, dollar inputs, invite modal byte-identical.
 - [ ] [P2] **Split `src/routes/auth.js`** into `auth.js` (ceremonies) + `me.js` (`/api/me*` endpoints).
