@@ -63,6 +63,7 @@ export async function render(main, ctx) {
     <div class="card">
       <h2>Pending labour (${labour.items.length})</h2>
       ${labour.items.length === 0 ? '<p class="empty">Nothing pending.</p>' : `
+      <div class="table-scroll">
       <table>
         <thead><tr>
           <th class="col-checkbox"><input type="checkbox" data-select-all-kind="labour" aria-label="Select all visible labour rows"></th>
@@ -83,11 +84,13 @@ export async function render(main, ctx) {
           </tr>
           <tr id="reject-row-labour-${e.id}" hidden><td colspan="7"></td></tr>`).join('')}
         </tbody>
-      </table>`}
+      </table>
+      </div>`}
     </div>
     <div class="card">
       <h2>Pending expenses (${expenses.items.length})</h2>
       ${expenses.items.length === 0 ? '<p class="empty">Nothing pending.</p>' : `
+      <div class="table-scroll">
       <table>
         <thead><tr>
           <th class="col-checkbox"><input type="checkbox" data-select-all-kind="expense" aria-label="Select all visible expense rows"></th>
@@ -109,7 +112,8 @@ export async function render(main, ctx) {
           </tr>
           <tr id="reject-row-expense-${e.id}" hidden><td colspan="8"></td></tr>`).join('')}
         </tbody>
-      </table>`}
+      </table>
+      </div>`}
     </div>
   `;
   bindFilterBar(main, ctx);

@@ -33,12 +33,14 @@ export function renderRevisionsCard(items) {
   return `
     <div class="card compact">
       <h2>Narrative revisions (${count})</h2>
+      <div class="table-scroll">
       <table>
         <thead><tr>
           <th>Date</th><th>Version</th><th>Revised by</th><th>Title</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      </div>
     </div>`;
 }
 

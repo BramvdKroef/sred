@@ -36,10 +36,10 @@ export function render(main, ctx) {
     <div class="card">
       <h2>Assigned projects</h2>
       ${state.projects.length === 0 ? '<p class="empty">No project assignments yet — ask your admin.</p>' : `
-      <table>
+      <table class="table-stack">
         <thead><tr><th>Project</th><th>Claimant</th><th>Status</th></tr></thead>
         <tbody>${state.projects.map(p => `
-          <tr><td>${esc(p.title)}</td><td>${esc(p.claimant_name)}</td><td>${statusPill(p.status)}</td></tr>
+          <tr><td data-label="Project">${esc(p.title)}</td><td data-label="Claimant">${esc(p.claimant_name)}</td><td data-label="Status">${statusPill(p.status)}</td></tr>
         `).join('')}</tbody>
       </table>`}
     </div>
@@ -48,19 +48,19 @@ export function render(main, ctx) {
     <div class="card">
       <h2>My labour (${state.labour.length})</h2>
       ${state.labour.length === 0 ? '<p class="empty">No entries.</p>' : `
-      <table>
+      <table class="table-stack">
         <thead><tr><th>Date</th><th>Project</th><th>Claimant</th><th>Hours</th><th>Description</th><th>Status</th><th></th></tr></thead>
         <tbody>${state.labour.map(e => {
           const reason = lockReason(e);
           const editable = reason === null;
           return `
           <tr>
-            <td>${esc(e.work_date)}</td>
-            <td>${esc(projTitle(e.project_id))}</td>
-            <td>${esc(e.claimant_name ?? '')}</td>
-            <td>${e.hours}${e.is_overtime ? ' <span class="pill overtime">OT</span>' : ''}</td>
-            <td>${esc(e.description)}</td>
-            <td>${statusPill(e.status)}${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
+            <td data-label="Date">${esc(e.work_date)}</td>
+            <td data-label="Project">${esc(projTitle(e.project_id))}</td>
+            <td data-label="Claimant">${esc(e.claimant_name ?? '')}</td>
+            <td data-label="Hours">${e.hours}${e.is_overtime ? ' <span class="pill overtime">OT</span>' : ''}</td>
+            <td data-label="Description">${esc(e.description)}</td>
+            <td data-label="Status">${statusPill(e.status)}${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
             <td class="actions">${editable ? `<button class="small secondary" data-edit-labour="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
           ${editable ? `<tr id="row-edit-labour-${e.id}" hidden><td colspan="7">${labourEditForm(e)}</td></tr>` : ''}
@@ -72,20 +72,20 @@ export function render(main, ctx) {
     <div class="card">
       <h2>My expenses (${state.expenses.length})</h2>
       ${state.expenses.length === 0 ? '<p class="empty">None.</p>' : `
-      <table>
+      <table class="table-stack">
         <thead><tr><th>Date</th><th>Project</th><th>Claimant</th><th>Category</th><th>Amount</th><th>Description</th><th>Status</th><th></th></tr></thead>
         <tbody>${state.expenses.map(e => {
           const reason = lockReason(e);
           const editable = reason === null;
           return `
           <tr>
-            <td>${esc(e.expense_date)}</td>
-            <td>${esc(projTitle(e.project_id))}</td>
-            <td>${esc(e.claimant_name ?? '')}</td>
-            <td>${esc(e.category)}</td>
-            <td>${cents(e.amount_cents)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</td>
-            <td>${esc(e.description)}</td>
-            <td>${statusPill(e.status)}${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
+            <td data-label="Date">${esc(e.expense_date)}</td>
+            <td data-label="Project">${esc(projTitle(e.project_id))}</td>
+            <td data-label="Claimant">${esc(e.claimant_name ?? '')}</td>
+            <td data-label="Category">${esc(e.category)}</td>
+            <td data-label="Amount">${cents(e.amount_cents)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</td>
+            <td data-label="Description">${esc(e.description)}</td>
+            <td data-label="Status">${statusPill(e.status)}${e.rejection_reason ? `<div class="muted">${esc(e.rejection_reason)}</div>` : ''}</td>
             <td class="actions">${editable ? `<button class="small secondary" data-edit-expense="${e.id}">Edit</button>` : lockPill(reason)}</td>
           </tr>
           ${editable ? `<tr id="row-edit-expense-${e.id}" hidden><td colspan="8">${expenseEditForm(e)}</td></tr>` : ''}
@@ -97,16 +97,16 @@ export function render(main, ctx) {
     <div class="card">
       <h2>My evidence (${state.evidence.length})</h2>
       ${state.evidence.length === 0 ? '<p class="empty">None.</p>' : `
-      <table>
+      <table class="table-stack">
         <thead><tr><th>Date</th><th>Project</th><th>Claimant</th><th>Kind</th><th>Caption</th><th>Reference</th><th></th></tr></thead>
         <tbody>${state.evidence.map(e => `
           <tr>
-            <td>${esc(e.evidence_date)}</td>
-            <td>${esc(projTitle(e.project_id))}</td>
-            <td>${esc(e.claimant_name ?? '')}</td>
-            <td>${esc(e.kind)}</td>
-            <td>${esc(e.caption)}</td>
-            <td>${e.kind === 'file'
+            <td data-label="Date">${esc(e.evidence_date)}</td>
+            <td data-label="Project">${esc(projTitle(e.project_id))}</td>
+            <td data-label="Claimant">${esc(e.claimant_name ?? '')}</td>
+            <td data-label="Kind">${esc(e.kind)}</td>
+            <td data-label="Caption">${esc(e.caption)}</td>
+            <td data-label="Reference">${e.kind === 'file'
                   ? `<a href="/api/evidence/${e.id}/download" data-jwt-dl>${esc(e.file_path)}</a>`
                   : e.kind === 'link' ? `<a href="${esc(safeHref(e.url))}" target="_blank" rel="noopener">${esc(e.url)}</a>`
                   : `<span class="muted">${esc(e.note_text)}</span>`}</td>
