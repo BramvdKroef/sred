@@ -47,7 +47,6 @@ export async function startRegistration({ user, existingCredentials }) {
     attestationType: 'none',
     excludeCredentials: existingCredentials.map(c => ({
       id: c.credential_id,
-      type: 'public-key',
       transports: c.transports ? JSON.parse(c.transports) : undefined,
     })),
     authenticatorSelection: {
@@ -76,7 +75,7 @@ export async function finishRegistration({ user, response, label }) {
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(
     user.id,
-    credential.id,                         // base64url string per SimpleWebAuthn v11
+    credential.id,                         // base64url string per SimpleWebAuthn v13 WebAuthnCredential
     Buffer.from(credential.publicKey),     // Uint8Array → BLOB
     credential.counter,
     response.response.transports ? JSON.stringify(response.response.transports) : null,
@@ -93,7 +92,6 @@ export async function startLogin({ user }) {
     rpID: config.rpId,
     allowCredentials: creds.map(c => ({
       id: c.credential_id,
-      type: 'public-key',
       transports: c.transports ? JSON.parse(c.transports) : undefined,
     })),
     userVerification: 'preferred',
