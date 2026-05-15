@@ -225,7 +225,19 @@ router.post('/:id/evidence-package', (req, res, next) => {
     const output = fs.createWriteStream(bundlePath);
     const archive = archiver('zip', { zlib: { level: 9 } });
 
+    // Disk-full cleanup pack: if archiver throws (corrupt entry, abort) or the
+    // output stream errors mid-write (ENOSPC, EIO), the half-written zip stays
+    // on disk forever. We only want to unlink ONCE, even if both streams fire
+    // an error event, and we want to forward the FIRST error to express.
+    let cleanedUp = false;
+    function cleanupBundle(err) {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      fs.unlink(bundlePath, () => next(err));
+    }
+
     output.on('close', () => {
+      if (cleanedUp) return; // error already flushed; don't double-respond
       db.prepare(`UPDATE t661_exports SET bundle_path = ? WHERE id = ?`).run(bundlePath, row.id);
       audit(req.user.id, 'export_bundle', 't661_export', row.id, undefined,
         { bundle_path: bundlePath, size_bytes: archive.pointer() });
@@ -235,7 +247,8 @@ router.post('/:id/evidence-package', (req, res, next) => {
         evidence_count: evidence.length,
       });
     });
-    archive.on('error', err => next(err));
+    archive.on('error', cleanupBundle);
+    output.on('error', cleanupBundle);
     archive.pipe(output);
 
     archive.append(JSON.stringify(totals, null, 2), { name: 'export.json' });

@@ -126,6 +126,13 @@ function validateLinkUrl(raw) {
 // Returns { mime, ext } — the effective MIME (used for the file_mime DB
 // column and any extension renaming) and the canonical extension. Throws
 // `badRequest` if the content doesn't agree with the allowlist.
+//
+// Disk-state determinism: on every rejection path we synchronously unlink
+// the on-disk file BEFORE throwing. The route's outer catch ALSO does an
+// async unlink as a safety net, but tests assert on directory state right
+// after the HTTP response returns, so the rejection path here is the one
+// that must be deterministic. (See the "rejects PDF Content-Type but HTML
+// body" test in tests/routes/evidence-upload.test.js.)
 async function sniffUpload(file) {
   const detected = await fileTypeFromFile(file.path);
   if (!detected) {
@@ -135,9 +142,11 @@ async function sniffUpload(file) {
     if (TEXT_FAMILY_MIME.has(file.mimetype)) {
       return { mime: file.mimetype, ext: MIME_TO_EXT.get(file.mimetype) ?? '' };
     }
+    try { fs.unlinkSync(file.path); } catch { /* already gone */ }
     throw badRequest(`file content does not match supplied type: ${file.mimetype}`);
   }
   if (!ALLOWED_MIME.has(detected.mime)) {
+    try { fs.unlinkSync(file.path); } catch { /* already gone */ }
     throw badRequest(`file type not allowed: ${detected.mime}`);
   }
   // Detected MIME wins over supplied MIME — that closes the "PDF supplied,
@@ -182,7 +191,23 @@ router.get('/', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/', upload.single('file'), async (req, res, next) => {
+// Wrap multer so any write-time error (ENOSPC mid-write, file-size limit
+// trip, fileFilter rejection that leaves a partial file behind) goes through
+// our unlink-on-error guard instead of landing straight in the global error
+// middleware. The route handler's own try/catch only fires for errors thrown
+// AFTER multer hands control to it; multer's internal `next(err)` skips it.
+//
+// We do the unlink inside this middleware (sync, before forwarding) so the
+// `uploads/` directory is in a deterministic state by the time any 4xx/5xx
+// response is rendered.
+function cleanupPartialUpload(err, req, _res, next) {
+  if (req.file?.path) {
+    try { fs.unlinkSync(req.file.path); } catch { /* already gone */ }
+  }
+  next(err);
+}
+
+router.post('/', upload.single('file'), cleanupPartialUpload, async (req, res, next) => {
   try {
     const body = req.body ?? {};
     const projectId      = Number(body.project_id);
