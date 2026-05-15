@@ -136,6 +136,12 @@ export function computeT661({ claimant, period }) {
         id: e.id,
         expense_date: e.expense_date,
         category: e.category,
+        // Migration 014: pass overhead sub-classification + allocation basis
+        // through to the formatter so the T661 export can surface the CRA
+        // sub-bucketing (SRED_DOMAIN_REVIEW F5). Null on non-overhead rows
+        // by schema CHECK.
+        overhead_subcategory: e.overhead_subcategory ?? null,
+        allocation_basis:     e.allocation_basis ?? null,
         amount_cents: e.amount_cents,
         currency: e.currency,
         fx_rate: e.fx_rate,
