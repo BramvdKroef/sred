@@ -25,7 +25,7 @@ From [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md) and [RENDER_REVIEW.md](R
 - [x] ~~**`:focus` styles.**~~ Unified `:focus-visible` outline (brand-blue on light backgrounds, white on the header gradient) for buttons, tabs, `.summary-link`, `<summary>`, `.card a`.
 - [x] ~~**`.pill.kind-sred` contrast.**~~ Foreground now `--brand-dark` (~5.4:1).
 - [x] ~~**Mobile tables overflow.**~~ Selector broadened from `.card > table` to `.card table` so the `#all-users-table` wrapper div doesn't escape the rule.
-- [ ] [P2] **Tables no longer stretch to fill their container** (regression from the mobile-tables work). The `overflow-x: auto` selector applied to `.card table` likely collapses the table to content-width. Fix: add `width: 100%` to `.card table` (or wrap the table in a `.table-scroll` div that has overflow + the inner `<table>` stays `width: 100%`).
+- [x] ~~**Tables no longer stretch to fill their container.**~~ Fixed: `width: 100%` on `.card table` + `.card .table-scroll`.
 - [x] ~~**Two `<h1>`s per page.**~~ Brand strip demoted to `<div class="brand">` (CSS duplicated to keep the visual). A single visually-hidden `<h1 id="page-heading" class="sr-only">` is populated from a `TAB_TITLES` map per render.
 - [x] ~~**No `<main>` wrapper.**~~ Admin/employee shells already had `<main id="main">`. Login + enroll in `public/app.js` now wrap their `.card` in `<main>`.
 - [x] ~~**`.loading` and `.error-banner` contrast.**~~ `.loading` uses `--text-muted` now; `.error-banner` text bumped to `#8a2521` (~7:1).
@@ -155,16 +155,16 @@ From [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). Largest files: `admin/pro
 - [x] ~~**Split `public/admin/projects.js`.**~~ 771 → entry (12 LOC) + 6 sub-modules (323/143/138/96/70/59). No circular imports, no shared mutable state.
 - [x] ~~**Split `public/admin/employees.js`.**~~ 663 → entry (26 LOC) + 7 sub-modules (192/163/129/87/68/59/11). UC-A3 flows, tooltips, dollar inputs, invite modal byte-identical.
 - [ ] [P2] **Split `src/routes/auth.js`** into `auth.js` (ceremonies) + `me.js` (`/api/me*` endpoints).
-- [ ] [P2] **109 inline `style="…"` attributes** in the SPA, ~25 replicating tokens (muted captions, breadcrumb decoration). The `<dialog>` invite modal is hand-rolled via `dlg.style.cssText`. Extract to classes.
-- [ ] [P2] **Status pill mapping inconsistency** across `admin/projects.js`, `admin/employees.js`, `api.js` — user/attachment "active" status is rendered four different ways. Pull into a single helper.
+- [x] ~~**109 inline `style="…"` attributes.**~~ 109 → 1 (only the data-driven bar-chart height left). ~30 new utility classes (`.mt-sm`, `.mb-md`, `.gap-sm`, `.flex-1`, `.wrap`, …) + component classes (`.card-inset`, `.modal`, `.action-bar.sticky`, `.bulk-reject-editor`, `.filter-bar`, etc.).
+- [x] ~~**Status pill mapping inconsistency.**~~ `pillClassFor()` + `statusPill()` helpers in `public/api.js` with a single canonical mapping; swept 12 ad-hoc ternaries across 6 files.
 - [ ] [P3] **Split `public/api.js`** (630 LOC). Do when it next needs a non-trivial edit.
   - [ ] Extract session storage + `setSession`/`clearSession` into `public/session.js`.
   - [ ] Extract `api`, `apiUpload`, refresh-on-401 into `public/fetch.js`.
   - [ ] Extract DOM helpers (`esc`, `cents`, `$`, `$$`, `safeHref`, `onSubmit`, `bindForm`) into `public/dom.js`.
   - [ ] Extract per-feature renderers (`activityHtml`, `wireActivityDetails`, `renderPreferencesPage`, etc.) into per-feature files.
 - [ ] [P3] **Remove unused exports** in `public/api.js`: `dollarInput`, `$$`. Move `setJwt`/`clearJwt`/`setRefresh`/`clearRefresh` to non-exported (used only internally).
-- [ ] [P3] **Unused tokens** `--gold` and `--green` are declared in `:root` but referenced nowhere. Either remove or use.
-- [ ] [P3] CSS is inconsistent — some utility classes, some inline styles, some per-form one-offs. Pick a single approach for new code.
+- [x] ~~**Unused tokens** `--gold`/`--green`~~ — removed; replaced with 9 new status-color tokens (`--status-pending-{bg,text,border}` + success + error triplets) consolidating recurring hex literals.
+- [x] ~~**CSS approach.**~~ Stylesheet reorganised into 19 banner-headed sections (tokens, base, layout, header, nav, search, cards, buttons, forms, tables, pills, banners, dialog, activity, misc, metrics, chart, utilities, responsive). 747 → 1101 LOC (growth is doc comments + utility classes; pure rules roughly flat).
 - [ ] [P3] Inline SQL is fine at this scale, but if the schema keeps growing, a thin `repositories/` layer would make handlers more testable.
 - [ ] [P3] Three different "new X" form patterns coexist (toggle-card, inline-expansion, separate page). Pick one.
 
