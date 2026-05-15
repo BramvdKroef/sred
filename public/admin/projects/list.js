@@ -2,6 +2,7 @@
 // cards) and the bindings for the list-side forms. Rendered when no project
 // is being drilled into.
 import { api, esc, bindForm, showTopBanner, statusPill, TYPE_LABEL, STATUS_LABEL } from '../../api.js';
+import { mountNarrativeHelper } from './narrative-helper.js';
 
 export function renderClaimantsTab(ctx) {
   const { state } = ctx;
@@ -304,6 +305,12 @@ export function bindList(ctx) {
     });
     await reloadAll();
   });
+
+  // Mount the narrative helper next to the new-project form (if present).
+  // The form lives inside a collapsible (`#new-project-form`) that starts
+  // hidden — the helper still mounts so it's ready when the form opens.
+  const newProjectForm = document.getElementById('project-form');
+  if (newProjectForm) mountNarrativeHelper(newProjectForm);
 
   bindForm('#project-form', async fd => {
     const managerRaw = fd.get('manager_user_id');

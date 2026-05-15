@@ -1146,3 +1146,197 @@ pre.json { background: #f6f8fa; padding: 0.75rem; overflow: auto; border-radius:
   .chart .bar-value { font-size: 0.7rem; }
   .chart .today-mark { font-size: 0.55rem; }
 }
+
+/* =========================================================================
+ * 20. NARRATIVE HELPER (project create/edit advisory panel)
+ *
+ * Right-rail panel that runs the rule-based narrative checks on the three
+ * SR&ED narrative textareas. Rendered next to the form on wide viewports
+ * (>= 1024px) and stacked below on narrow viewports. Findings are grouped
+ * by field with a severity pill, the quoted span, a one-line message, a
+ * canned hint, and a dismiss "×" button. A green "✓ Looks clean" line
+ * replaces the empty list when a field has content and zero findings.
+ *
+ * Phase 1: no server interaction. The "Suggest rewrite" slot exists per
+ * finding but is hidden until Phase 2 wires it.
+ * ========================================================================= */
+
+/* Two-column grid: form on the left, helper on the right. Falls back to a
+   single column under 1024px so the helper stacks below the form. The
+   layout wrapper is injected by mountNarrativeHelper() — the surrounding
+   card sees only its original `.grid` children, so nothing else needs to
+   know this layout exists. */
+.narrative-helper-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 1023px) {
+  .narrative-helper-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.narrative-helper {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.9rem;
+  /* Sticky on wide screens so the panel stays in view while scrolling
+     through a long form. Top offset clears the page header gradient. */
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.narrative-helper .nh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.narrative-helper .nh-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--brand-dark);
+}
+.narrative-helper .nh-blurb {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.78rem;
+}
+
+.narrative-helper .nh-field {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+}
+.narrative-helper .nh-field:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+.narrative-helper .nh-field h4 {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.narrative-helper .nh-clean {
+  margin: 0;
+  color: var(--status-success-text);
+  font-weight: 600;
+}
+.narrative-helper .nh-empty {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.narrative-helper .nh-findings {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.narrative-helper .nh-finding {
+  border-left: 3px solid var(--border);
+  background: var(--bg);
+  padding: 0.5rem 0.6rem;
+  border-radius: 0 6px 6px 0;
+}
+.narrative-helper .nh-finding-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.narrative-helper .nh-message {
+  margin: 0 0 0.25rem 0;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.narrative-helper .nh-quote {
+  margin: 0.25rem 0;
+  padding: 0.25rem 0.5rem;
+  border-left: 2px solid var(--text-muted);
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  /* Wrap long matched spans rather than overflowing the panel width. */
+  word-break: break-word;
+}
+.narrative-helper .nh-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.narrative-helper .nh-hint strong {
+  color: var(--text);
+}
+
+/* Severity pill + finding accent. One status colour per severity, pulled
+   from the existing status tokens so the panel inherits any future
+   palette shift. `error` reuses the rejected-red triplet, `warn` reuses
+   pending-yellow, `info` reuses the brand-light blue surface. */
+.narrative-helper .nh-sev-pill {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.narrative-helper .nh-sev-pill-error {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+  border-color: var(--status-error-border);
+}
+.narrative-helper .nh-sev-pill-warn {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-text);
+  border-color: var(--status-pending-border);
+}
+.narrative-helper .nh-sev-pill-info {
+  background: var(--brand-light);
+  color: var(--brand-dark);
+  border-color: var(--brand-light);
+}
+.narrative-helper .nh-finding.nh-sev-error  { border-left-color: var(--status-error-text); }
+.narrative-helper .nh-finding.nh-sev-warn   { border-left-color: var(--status-pending-text); }
+.narrative-helper .nh-finding.nh-sev-info   { border-left-color: var(--brand); }
+
+/* Dismiss button — small × glyph. Distinct from the .secondary button
+   style because it lives inline with the severity pill and needs to be
+   visually quiet. */
+.narrative-helper button.nh-dismiss {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+}
+.narrative-helper button.nh-dismiss:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+.narrative-helper button.nh-recheck {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+}
