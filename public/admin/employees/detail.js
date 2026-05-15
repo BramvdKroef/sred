@@ -77,7 +77,7 @@ export async function renderUserDetail(main, ctx) {
       ${activityHtml(activity.items, { showActor: false, showProject: true, showOpen: true })}
     </div>
   `;
-  wireActivityDetails(main);
+  wireActivityDetails(main, { currentUser: ctx?.state?.me?.user });
   document.querySelectorAll('[data-open-project]').forEach(tr => {
     tr.addEventListener('click', () => {
       ctx.selectProject({ id: Number(tr.dataset.openProject), claimant_id: Number(tr.dataset.cid) });
