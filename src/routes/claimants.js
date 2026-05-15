@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest } from '../lib/errors.js';
-import { audit } from '../lib/audit.js';
-import { getClaimant } from '../lib/route-helpers.js';
+import { getClaimant, mutateAndAudit, createAndAudit } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -32,23 +31,29 @@ router.post('/', (req, res, next) => {
     if (!['proxy', 'traditional'].includes(sred_method))
       throw badRequest('sred_method must be "proxy" or "traditional"');
 
-    const info = db.prepare(`
-      INSERT INTO claimants
-        (legal_name, business_number, fiscal_year_end_month, fiscal_year_end_day,
-         reporting_currency, sred_method)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      legal_name,
-      business_number ?? null,
-      fiscal_year_end_month,
-      fiscal_year_end_day,
-      reporting_currency,
-      sred_method,
-    );
-
-    const created = getClaimant(info.lastInsertRowid);
-    audit(req.user.id, 'create', 'claimant', created.id, undefined, created);
-    res.status(201).json(created);
+    const { after } = createAndAudit({
+      loader: getClaimant,
+      entityType: 'claimant',
+      actorUserId: req.user.id,
+      action: 'create',
+      write: () => {
+        const info = db.prepare(`
+          INSERT INTO claimants
+            (legal_name, business_number, fiscal_year_end_month, fiscal_year_end_day,
+             reporting_currency, sred_method)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          legal_name,
+          business_number ?? null,
+          fiscal_year_end_month,
+          fiscal_year_end_day,
+          reporting_currency,
+          sred_method,
+        );
+        return info.lastInsertRowid;
+      },
+    });
+    res.status(201).json(after);
   } catch (e) { next(e); }
 });
 
@@ -60,13 +65,16 @@ router.get('/:id', (req, res, next) => {
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getClaimant(req.params.id);
+    // Pre-flight: short-circuit no-op PATCH BEFORE writing an audit row.
+    // Validation (including sred_method lock) still runs so callers get the
+    // same error responses as before.
+    const current = getClaimant(req.params.id);
     const {
       legal_name, business_number, reporting_currency, sred_method,
       fiscal_year_end_month, fiscal_year_end_day,
     } = req.body ?? {};
 
-    if (sred_method !== undefined && sred_method !== before.sred_method) {
+    if (sred_method !== undefined && sred_method !== current.sred_method) {
       throw badRequest('sred_method is locked once set');
     }
 
@@ -92,14 +100,20 @@ router.patch('/:id', (req, res, next) => {
     }
 
     const keys = Object.keys(updates);
-    if (keys.length === 0) return res.json(before);
+    if (keys.length === 0) return res.json(current);
 
-    const setClause = keys.map(k => `${k} = ?`).join(', ');
-    db.prepare(`UPDATE claimants SET ${setClause} WHERE id = ?`)
-      .run(...keys.map(k => updates[k]), before.id);
-
-    const after = getClaimant(before.id);
-    audit(req.user.id, 'update', 'claimant', before.id, before, after);
+    const { after } = mutateAndAudit({
+      loader: getClaimant,
+      entityType: 'claimant',
+      id: req.params.id,
+      actorUserId: req.user.id,
+      action: 'update',
+      write: (before) => {
+        const setClause = keys.map(k => `${k} = ?`).join(', ');
+        db.prepare(`UPDATE claimants SET ${setClause} WHERE id = ?`)
+          .run(...keys.map(k => updates[k]), before.id);
+      },
+    });
     res.json(after);
   } catch (e) { next(e); }
 });
@@ -125,13 +139,22 @@ router.post('/:id/periods', (req, res, next) => {
     if (start_date >= end_date) throw badRequest('start_date must be before end_date');
 
     try {
-      const info = db.prepare(`
-        INSERT INTO fiscal_periods (claimant_id, start_date, end_date)
-        VALUES (?, ?, ?)
-      `).run(claimant.id, start_date, end_date);
-      const period = db.prepare(`SELECT * FROM fiscal_periods WHERE id = ?`).get(info.lastInsertRowid);
-      audit(req.user.id, 'create', 'fiscal_period', period.id, undefined, period);
-      res.status(201).json(period);
+      const { after } = createAndAudit({
+        // Inline loader: this table doesn't have a dedicated route-helpers
+        // loader and the row shape isn't shared with other routes.
+        loader: (id) => db.prepare(`SELECT * FROM fiscal_periods WHERE id = ?`).get(id),
+        entityType: 'fiscal_period',
+        actorUserId: req.user.id,
+        action: 'create',
+        write: () => {
+          const info = db.prepare(`
+            INSERT INTO fiscal_periods (claimant_id, start_date, end_date)
+            VALUES (?, ?, ?)
+          `).run(claimant.id, start_date, end_date);
+          return info.lastInsertRowid;
+        },
+      });
+      res.status(201).json(after);
     } catch (err) {
       if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw badRequest(`a period starting on ${start_date} already exists for this claimant`);
@@ -184,49 +207,58 @@ router.post('/:id/projects', (req, res, next) => {
       if (u.status !== 'active') throw badRequest(`manager_user_id ${manager_user_id} must be active`);
     }
 
-    const tx = db.transaction(() => {
-      const info = db.prepare(`
-        INSERT INTO projects
-          (claimant_id, title, field_of_science, start_date, end_date, status,
-           type, manager_user_id, advancement_sought, uncertainties, work_performed)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        claimant.id,
-        title,
-        field_of_science ?? null,
-        start_date,
-        end_date ?? null,
-        status,
-        type,
-        manager_user_id,
-        advancement_sought ?? null,
-        uncertainties ?? null,
-        work_performed ?? null,
-      );
-      const projectId = info.lastInsertRowid;
-      db.prepare(`
-        INSERT INTO project_revisions
-          (project_id, title, field_of_science, advancement_sought, uncertainties,
-           work_performed, type, manager_user_id, revised_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        projectId,
-        title,
-        field_of_science ?? null,
-        advancement_sought ?? null,
-        uncertainties ?? null,
-        work_performed ?? null,
-        type,
-        manager_user_id,
-        req.user.id,
-      );
-      return projectId;
+    const { after } = createAndAudit({
+      // Inline loader keeps the row shape exactly what this route was
+      // returning before (a raw `projects` row).
+      loader: (id) => db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id),
+      entityType: 'project',
+      actorUserId: req.user.id,
+      action: 'create',
+      write: () => {
+        // Project + initial project_revisions row are written in one
+        // transaction so a partially-snapshotted project is impossible.
+        const tx = db.transaction(() => {
+          const info = db.prepare(`
+            INSERT INTO projects
+              (claimant_id, title, field_of_science, start_date, end_date, status,
+               type, manager_user_id, advancement_sought, uncertainties, work_performed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            claimant.id,
+            title,
+            field_of_science ?? null,
+            start_date,
+            end_date ?? null,
+            status,
+            type,
+            manager_user_id,
+            advancement_sought ?? null,
+            uncertainties ?? null,
+            work_performed ?? null,
+          );
+          const projectId = info.lastInsertRowid;
+          db.prepare(`
+            INSERT INTO project_revisions
+              (project_id, title, field_of_science, advancement_sought, uncertainties,
+               work_performed, type, manager_user_id, revised_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            projectId,
+            title,
+            field_of_science ?? null,
+            advancement_sought ?? null,
+            uncertainties ?? null,
+            work_performed ?? null,
+            type,
+            manager_user_id,
+            req.user.id,
+          );
+          return projectId;
+        });
+        return tx();
+      },
     });
-
-    const projectId = tx();
-    const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId);
-    audit(req.user.id, 'create', 'project', project.id, undefined, project);
-    res.status(201).json(project);
+    res.status(201).json(after);
   } catch (e) { next(e); }
 });
 

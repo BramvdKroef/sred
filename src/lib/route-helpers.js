@@ -2,6 +2,7 @@
 // the labour, expense, evidence, and project flows.
 
 import { db } from '../db/index.js';
+import { audit } from './audit.js';
 import { badRequest, notFound, forbidden, unprocessable } from './errors.js';
 
 // --- Entity loaders --------------------------------------------------------
@@ -98,6 +99,45 @@ export function isOwnerOrAdmin(user, userClaimantId) {
 // the rejected-entry path (revert to pending, clear review fields) so
 // the entry has to be re-approved deliberately rather than silently
 // retaining its approved status across an edit.
+// --- Mutate-and-audit shape ------------------------------------------------
+//
+// The load-before / mutate / load-after / audit dance repeats ~25 times across
+// the route handlers. This pair of helpers compresses that to one call.
+//
+// `mutateAndAudit` loads the entity, runs the writer callback (which performs
+// the UPDATE/DELETE and may throw an HttpError to abort), reloads the entity,
+// and writes an audit_log row. Returns `{ before, after }` so callers can
+// respond with the fresh row and/or short-circuit on no-op writes.
+//
+// The writer callback receives `before` so multi-step mutations (period
+// re-inference, snapshot rows, transactional updates) can inline themselves
+// without losing access to the pre-mutation row.
+//
+// `loader` is one of the entity loaders above (`getProject`, `getLabourEntry`,
+// …) but can be any function `(id) -> row` that throws on not-found.
+export function mutateAndAudit({ loader, entityType, id, actorUserId, action, write }) {
+  const before = loader(id);
+  write(before);
+  const after = loader(before.id);
+  audit(actorUserId, action, entityType, before.id, before, after);
+  return { before, after };
+}
+
+// `createAndAudit` is the POST companion: runs the writer (which must return
+// the new row's id), reloads via `loader`, and writes an audit row with
+// `before = undefined`. Returns `{ after }`.
+//
+// The writer can optionally pass back an alternative `afterJson` object —
+// useful for the small number of "metadata-only" audit rows (invite,
+// evidence-package) where the captured after-state isn't the entity row
+// itself but a summary blob.
+export function createAndAudit({ loader, entityType, actorUserId, action, write, afterJson }) {
+  const id = write();
+  const after = loader(id);
+  audit(actorUserId, action, entityType, after.id, undefined, afterJson ?? after);
+  return { after };
+}
+
 export function assertEditable(entry, { user } = {}) {
   if (entry.status === 'approved') {
     const isAdminSelfApproved =

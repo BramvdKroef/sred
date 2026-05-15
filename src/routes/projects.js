@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
-import { audit } from '../lib/audit.js';
-import { getProject } from '../lib/route-helpers.js';
+import { getProject, mutateAndAudit, createAndAudit } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -64,7 +63,10 @@ router.get('/:id', (req, res, next) => {
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getProject(req.params.id);
+    // Pre-flight load: optimistic-concurrency precondition + body validation
+    // happen here so we can short-circuit no-op writes BEFORE mutateAndAudit
+    // touches the audit log.
+    const preflight = getProject(req.params.id);
 
     // Optimistic-concurrency precondition. The client MUST send back the
     // `updated_at` it saw when it loaded the edit form. If it doesn't match
@@ -79,10 +81,10 @@ router.patch('/:id', (req, res, next) => {
     if (expectedUpdatedAt === undefined || expectedUpdatedAt === null) {
       throw badRequest('__updated_at required on PATCH (optimistic-concurrency precondition)');
     }
-    if (expectedUpdatedAt !== before.updated_at) {
+    if (expectedUpdatedAt !== preflight.updated_at) {
       throw conflict(
         'project was modified by another admin since you loaded the form — reload to see the latest version, then re-apply your changes',
-        { current_updated_at: before.updated_at },
+        { current_updated_at: preflight.updated_at },
       );
     }
 
@@ -105,75 +107,84 @@ router.patch('/:id', (req, res, next) => {
     }
 
     const keys = Object.keys(updates);
-    if (keys.length === 0) return res.json(before);
+    if (keys.length === 0) return res.json(preflight);
 
-    const snapshotNeeded = SNAPSHOT_FIELDS.some(k => k in updates && updates[k] !== before[k]);
+    const { after } = mutateAndAudit({
+      loader: getProject,
+      entityType: 'project',
+      id: req.params.id,
+      actorUserId: req.user.id,
+      action: 'update',
+      write: (before) => {
+        const snapshotNeeded = SNAPSHOT_FIELDS.some(k => k in updates && updates[k] !== before[k]);
 
-    // Re-check the precondition inside the transaction so the read of
-    // updated_at and the UPDATE are serialised by SQLite's writer lock.
-    // Without this, two requests could both pass the precondition above
-    // before either lands its UPDATE. better-sqlite3 is synchronous so
-    // the window is sub-millisecond, but the transactional re-check is
-    // free insurance and makes the contract independent of the driver's
-    // execution model.
-    //
-    // We also generate the new `updated_at` with millisecond precision
-    // (strftime('%Y-%m-%d %H:%M:%f') instead of datetime('now')) and
-    // guarantee it's strictly greater than the previous value. SQLite's
-    // datetime('now') has only second precision, so two PATCHes that
-    // land in the same second would produce identical updated_at values
-    // and break the optimistic-concurrency contract for any subsequent
-    // request that observed the post-first-write state.
-    let raceLost = false;
-    const tx = db.transaction(() => {
-      const current = db.prepare(`SELECT updated_at FROM projects WHERE id = ?`).get(before.id);
-      if (!current || current.updated_at !== expectedUpdatedAt) {
-        raceLost = true;
-        return;
-      }
-      // Strictly-monotonic next stamp. If wall-clock ms <= current, bump
-      // current by 1 ms and use that. Otherwise use wall-clock ms.
-      const nowMs = db.prepare(`SELECT strftime('%Y-%m-%d %H:%M:%f', 'now') AS t`).get().t;
-      const bumped = db.prepare(`SELECT strftime('%Y-%m-%d %H:%M:%f', ?, '+0.001 second') AS t`)
-        .get(current.updated_at).t;
-      const newUpdatedAt = nowMs > current.updated_at ? nowMs : bumped;
+        // Re-check the precondition inside the transaction so the read of
+        // updated_at and the UPDATE are serialised by SQLite's writer lock.
+        // Without this, two requests could both pass the precondition above
+        // before either lands its UPDATE. better-sqlite3 is synchronous so
+        // the window is sub-millisecond, but the transactional re-check is
+        // free insurance and makes the contract independent of the driver's
+        // execution model.
+        //
+        // We also generate the new `updated_at` with millisecond precision
+        // (strftime('%Y-%m-%d %H:%M:%f') instead of datetime('now')) and
+        // guarantee it's strictly greater than the previous value. SQLite's
+        // datetime('now') has only second precision, so two PATCHes that
+        // land in the same second would produce identical updated_at values
+        // and break the optimistic-concurrency contract for any subsequent
+        // request that observed the post-first-write state.
+        let raceLost = false;
+        const tx = db.transaction(() => {
+          const current = db.prepare(`SELECT updated_at FROM projects WHERE id = ?`).get(before.id);
+          if (!current || current.updated_at !== expectedUpdatedAt) {
+            raceLost = true;
+            return;
+          }
+          // Strictly-monotonic next stamp. If wall-clock ms <= current, bump
+          // current by 1 ms and use that. Otherwise use wall-clock ms.
+          const nowMs = db.prepare(`SELECT strftime('%Y-%m-%d %H:%M:%f', 'now') AS t`).get().t;
+          const bumped = db.prepare(`SELECT strftime('%Y-%m-%d %H:%M:%f', ?, '+0.001 second') AS t`)
+            .get(current.updated_at).t;
+          const newUpdatedAt = nowMs > current.updated_at ? nowMs : bumped;
 
-      const setClause = keys.map(k => `${k} = ?`).join(', ') + `, updated_at = ?`;
-      db.prepare(`UPDATE projects SET ${setClause} WHERE id = ?`)
-        .run(...keys.map(k => updates[k]), newUpdatedAt, before.id);
+          const setClause = keys.map(k => `${k} = ?`).join(', ') + `, updated_at = ?`;
+          db.prepare(`UPDATE projects SET ${setClause} WHERE id = ?`)
+            .run(...keys.map(k => updates[k]), newUpdatedAt, before.id);
 
-      if (snapshotNeeded) {
-        const merged = { ...before, ...updates };
-        db.prepare(`
-          INSERT INTO project_revisions
-            (project_id, title, field_of_science, advancement_sought, uncertainties,
-             work_performed, type, manager_user_id, revised_by_user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          before.id,
-          merged.title,
-          merged.field_of_science,
-          merged.advancement_sought,
-          merged.uncertainties,
-          merged.work_performed,
-          merged.type,
-          merged.manager_user_id ?? null,
-          req.user.id,
-        );
-      }
+          if (snapshotNeeded) {
+            const merged = { ...before, ...updates };
+            db.prepare(`
+              INSERT INTO project_revisions
+                (project_id, title, field_of_science, advancement_sought, uncertainties,
+                 work_performed, type, manager_user_id, revised_by_user_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              before.id,
+              merged.title,
+              merged.field_of_science,
+              merged.advancement_sought,
+              merged.uncertainties,
+              merged.work_performed,
+              merged.type,
+              merged.manager_user_id ?? null,
+              req.user.id,
+            );
+          }
+        });
+        tx();
+
+        if (raceLost) {
+          // Throwing inside `write` aborts mutateAndAudit before the audit
+          // row gets written — the outer catch translates the HttpError to
+          // the standard 409 response shape.
+          const c = getProject(before.id);
+          throw conflict(
+            'project was modified by another admin since you loaded the form — reload to see the latest version, then re-apply your changes',
+            { current_updated_at: c.updated_at },
+          );
+        }
+      },
     });
-    tx();
-
-    if (raceLost) {
-      const current = getProject(before.id);
-      throw conflict(
-        'project was modified by another admin since you loaded the form — reload to see the latest version, then re-apply your changes',
-        { current_updated_at: current.updated_at },
-      );
-    }
-
-    const after = getProject(before.id);
-    audit(req.user.id, 'update', 'project', before.id, before, after);
     res.json(after);
   } catch (e) { next(e); }
 });
@@ -208,25 +219,42 @@ router.post('/:id/assignments', (req, res, next) => {
       throw badRequest("user_claimant does not belong to this project's claimant");
     }
 
+    const loadAssignment = (id) =>
+      db.prepare(`SELECT * FROM project_assignments WHERE id = ?`).get(id);
+
     const existing = db.prepare(
       `SELECT * FROM project_assignments WHERE project_id = ? AND user_claimant_id = ?`
     ).get(project.id, user_claimant_id);
 
     if (existing) {
       if (existing.status === 'inactive') {
-        db.prepare(`UPDATE project_assignments SET status = 'active' WHERE id = ?`).run(existing.id);
-        const reactivated = db.prepare(`SELECT * FROM project_assignments WHERE id = ?`).get(existing.id);
-        audit(req.user.id, 'update', 'project_assignment', existing.id, existing, reactivated);
-        return res.json(reactivated);
+        const { after } = mutateAndAudit({
+          loader: loadAssignment,
+          entityType: 'project_assignment',
+          id: existing.id,
+          actorUserId: req.user.id,
+          action: 'update',
+          write: (before) => {
+            db.prepare(`UPDATE project_assignments SET status = 'active' WHERE id = ?`).run(before.id);
+          },
+        });
+        return res.json(after);
       }
       return res.json(existing);
     }
 
-    const info = db.prepare(
-      `INSERT INTO project_assignments (project_id, user_claimant_id) VALUES (?, ?)`
-    ).run(project.id, user_claimant_id);
-    const assignment = db.prepare(`SELECT * FROM project_assignments WHERE id = ?`).get(info.lastInsertRowid);
-    audit(req.user.id, 'create', 'project_assignment', assignment.id, undefined, assignment);
+    const { after: assignment } = createAndAudit({
+      loader: loadAssignment,
+      entityType: 'project_assignment',
+      actorUserId: req.user.id,
+      action: 'create',
+      write: () => {
+        const info = db.prepare(
+          `INSERT INTO project_assignments (project_id, user_claimant_id) VALUES (?, ?)`
+        ).run(project.id, user_claimant_id);
+        return info.lastInsertRowid;
+      },
+    });
     res.status(201).json(assignment);
   } catch (e) { next(e); }
 });
@@ -235,15 +263,24 @@ router.delete('/:id/assignments/:user_claimant_id', (req, res, next) => {
   try {
     const project = getProject(req.params.id);
     const ucId = Number(req.params.user_claimant_id);
-    const before = db.prepare(
+    // Find by (project_id, user_claimant_id) pair to derive the id, then
+    // hand it to mutateAndAudit for the soft-delete (status = 'inactive').
+    const found = db.prepare(
       `SELECT * FROM project_assignments WHERE project_id = ? AND user_claimant_id = ?`
     ).get(project.id, ucId);
-    if (!before) throw notFound('assignment not found');
-    if (before.status === 'inactive') return res.status(204).end();
+    if (!found) throw notFound('assignment not found');
+    if (found.status === 'inactive') return res.status(204).end();
 
-    db.prepare(`UPDATE project_assignments SET status = 'inactive' WHERE id = ?`).run(before.id);
-    const after = db.prepare(`SELECT * FROM project_assignments WHERE id = ?`).get(before.id);
-    audit(req.user.id, 'update', 'project_assignment', before.id, before, after);
+    mutateAndAudit({
+      loader: (id) => db.prepare(`SELECT * FROM project_assignments WHERE id = ?`).get(id),
+      entityType: 'project_assignment',
+      id: found.id,
+      actorUserId: req.user.id,
+      action: 'update',
+      write: (before) => {
+        db.prepare(`UPDATE project_assignments SET status = 'inactive' WHERE id = ?`).run(before.id);
+      },
+    });
     res.status(204).end();
   } catch (e) { next(e); }
 });

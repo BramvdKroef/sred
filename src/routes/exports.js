@@ -13,7 +13,7 @@ import {
   toMarkdownCompare, toCsvCompare, toPdfCompare,
   buildCompareDiff,
 } from '../lib/format.js';
-import { getT661Export } from '../lib/route-helpers.js';
+import { getT661Export, createAndAudit } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -55,24 +55,35 @@ router.post('/t661', (req, res, next) => {
     const revisions = snapshotProjectRevisions(claimant.id);
     const evidenceManifest = collectEvidenceManifest(claimant.id, period.id);
 
-    const info = db.prepare(`
-      INSERT INTO t661_exports
-        (claimant_id, fiscal_period_id, generated_by_user_id, is_draft,
-         totals_json, project_revisions_json, evidence_manifest_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      claimant.id,
-      period.id,
-      req.user.id,
-      draft ? 1 : 0,
-      JSON.stringify(totals),
-      JSON.stringify(revisions),
-      JSON.stringify(evidenceManifest.map(e => e.id)),
-    );
-
-    const exportRow = getT661Export(info.lastInsertRowid);
-    audit(req.user.id, 'export_t661', 't661_export', exportRow.id, undefined,
-      { claimant_id, fiscal_period_id, is_draft: draft, total_cents: totals.grand_total.total_cents });
+    // The audit payload is a metadata summary (claimant_id + period_id +
+    // is_draft + total_cents) rather than the full row, which would otherwise
+    // dump all three JSON columns into audit_log. Pass it through
+    // `afterJson` so createAndAudit writes the summary while still using
+    // `getT661Export` for the response.
+    const { after: exportRow } = createAndAudit({
+      loader: getT661Export,
+      entityType: 't661_export',
+      actorUserId: req.user.id,
+      action: 'export_t661',
+      afterJson: { claimant_id, fiscal_period_id, is_draft: draft, total_cents: totals.grand_total.total_cents },
+      write: () => {
+        const info = db.prepare(`
+          INSERT INTO t661_exports
+            (claimant_id, fiscal_period_id, generated_by_user_id, is_draft,
+             totals_json, project_revisions_json, evidence_manifest_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          claimant.id,
+          period.id,
+          req.user.id,
+          draft ? 1 : 0,
+          JSON.stringify(totals),
+          JSON.stringify(revisions),
+          JSON.stringify(evidenceManifest.map(e => e.id)),
+        );
+        return info.lastInsertRowid;
+      },
+    });
 
     res.status(201).json({ ...exportRow, totals });
   } catch (e) { next(e); }

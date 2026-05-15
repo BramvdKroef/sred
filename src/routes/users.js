@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest, notFound, conflict } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import { mutateAndAudit, createAndAudit } from '../lib/route-helpers.js';
 import { mintEmailToken, buildMagicLink } from '../auth/tokens.js';
 import { sendMagicLink } from '../lib/email.js';
 import { inviteLimiter } from '../lib/rate-limit.js';
@@ -36,6 +37,15 @@ function validateAttachment(a) {
       typeof a.employment_start_date !== 'string')
     throw badRequest('attachment.employment_start_date must be a string (YYYY-MM-DD) or null');
   validateCompensation(a.compensation);
+}
+
+// Tight loader for mutateAndAudit/createAndAudit. The list/detail responses
+// use the heavier `loadUserBundle` below; the audit payload only ever needs
+// the raw `users` row.
+function loadUserRow(id) {
+  const row = db.prepare(`SELECT * FROM users WHERE id = ?`).get(id);
+  if (!row) throw notFound('user not found');
+  return row;
 }
 
 function loadUserBundle(userId) {
@@ -149,20 +159,28 @@ router.post('/', (req, res, next) => {
     const existing = db.prepare(`SELECT id, status FROM users WHERE email = ?`).get(email);
     if (existing) throw conflict('email already exists', { user_id: existing.id, status: existing.status });
 
-    const tx = db.transaction(() => {
-      const info = db.prepare(
-        `INSERT INTO users (email, name, role, status) VALUES (?, ?, ?, 'pending')`
-      ).run(email, name, role);
-      const userId = info.lastInsertRowid;
-      for (const a of attachments) insertAttachment(userId, a, req.user.id);
-      return userId;
+    const { after } = createAndAudit({
+      loader: loadUserRow,
+      entityType: 'user',
+      actorUserId: req.user.id,
+      action: 'create',
+      write: () => {
+        // User + attachments + per-attachment compensation rows all land in
+        // one transaction; the per-attachment audit rows are written by
+        // `insertAttachment` inside the tx as before.
+        const tx = db.transaction(() => {
+          const info = db.prepare(
+            `INSERT INTO users (email, name, role, status) VALUES (?, ?, ?, 'pending')`
+          ).run(email, name, role);
+          const newUserId = info.lastInsertRowid;
+          for (const a of attachments) insertAttachment(newUserId, a, req.user.id);
+          return newUserId;
+        });
+        return tx();
+      },
     });
 
-    const userId = tx();
-    const fresh = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
-    audit(req.user.id, 'create', 'user', userId, undefined, fresh);
-
-    res.status(201).json(loadUserBundle(userId));
+    res.status(201).json(loadUserBundle(after.id));
   } catch (e) { next(e); }
 });
 
@@ -174,8 +192,9 @@ router.get('/:id', (req, res, next) => {
 router.patch('/:id', (req, res, next) => {
   try {
     const userId = Number(req.params.id);
-    const before = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
-    if (!before) throw notFound('user not found');
+    // Pre-flight load so we can validate body fields, short-circuit no-op
+    // PATCH, and surface 404 before mutateAndAudit writes an audit row.
+    loadUserRow(userId);
 
     const { name, role, status } = req.body ?? {};
     const updates = {};
@@ -196,11 +215,18 @@ router.patch('/:id', (req, res, next) => {
     const keys = Object.keys(updates);
     if (keys.length === 0) return res.json(loadUserBundle(userId));
 
-    const setClause = keys.map(k => `${k} = ?`).join(', ');
-    db.prepare(`UPDATE users SET ${setClause} WHERE id = ?`).run(...keys.map(k => updates[k]), userId);
-
-    const after = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
-    audit(req.user.id, 'update', 'user', userId, before, after);
+    mutateAndAudit({
+      loader: loadUserRow,
+      entityType: 'user',
+      id: userId,
+      actorUserId: req.user.id,
+      action: 'update',
+      write: (before) => {
+        const setClause = keys.map(k => `${k} = ?`).join(', ');
+        db.prepare(`UPDATE users SET ${setClause} WHERE id = ?`)
+          .run(...keys.map(k => updates[k]), before.id);
+      },
+    });
     res.json(loadUserBundle(userId));
   } catch (e) { next(e); }
 });
@@ -208,30 +234,38 @@ router.patch('/:id', (req, res, next) => {
 router.post('/:id/deactivate', (req, res, next) => {
   try {
     const userId = Number(req.params.id);
-    const before = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
-    if (!before) throw notFound('user not found');
-    if (before.id === req.user.id) throw badRequest("you can't deactivate your own account");
-    if (before.status === 'disabled') return res.json(before);
+    // Pre-flight short-circuit for no-op deactivate (already disabled) AND
+    // the self-deactivate guard. Both happen before mutateAndAudit so no
+    // audit row is written if we early-return / reject.
+    const current = loadUserRow(userId);
+    if (current.id === req.user.id) throw badRequest("you can't deactivate your own account");
+    if (current.status === 'disabled') return res.json(current);
 
-    // Bulk-flip every currently-active attachment AND tag it with this
-    // user_id so reactivate can later distinguish "deactivated together
-    // with the user" from "deactivated independently for some other
-    // reason" (e.g. the employee left one claimant while still active on
-    // another). Already-inactive rows are left alone — they keep
-    // whatever provenance they had, including a NULL marker.
-    const tx = db.transaction(() => {
-      db.prepare(`UPDATE users SET status = 'disabled' WHERE id = ?`).run(userId);
-      db.prepare(`
-        UPDATE user_claimants
-           SET status = 'inactive',
-               deactivated_with_user_id = ?
-         WHERE user_id = ? AND status = 'active'
-      `).run(userId, userId);
+    const { after } = mutateAndAudit({
+      loader: loadUserRow,
+      entityType: 'user',
+      id: userId,
+      actorUserId: req.user.id,
+      action: 'deactivate',
+      write: (before) => {
+        // Bulk-flip every currently-active attachment AND tag it with this
+        // user_id so reactivate can later distinguish "deactivated together
+        // with the user" from "deactivated independently for some other
+        // reason" (e.g. the employee left one claimant while still active
+        // on another). Already-inactive rows are left alone — they keep
+        // whatever provenance they had, including a NULL marker.
+        const tx = db.transaction(() => {
+          db.prepare(`UPDATE users SET status = 'disabled' WHERE id = ?`).run(before.id);
+          db.prepare(`
+            UPDATE user_claimants
+               SET status = 'inactive',
+                   deactivated_with_user_id = ?
+             WHERE user_id = ? AND status = 'active'
+          `).run(before.id, before.id);
+        });
+        tx();
+      },
     });
-    tx();
-
-    const after = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
-    audit(req.user.id, 'deactivate', 'user', userId, before, after);
     res.json(after);
   } catch (e) { next(e); }
 });
@@ -239,28 +273,36 @@ router.post('/:id/deactivate', (req, res, next) => {
 router.post('/:id/reactivate', (req, res, next) => {
   try {
     const userId = Number(req.params.id);
-    const before = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
-    if (!before) throw notFound('user not found');
-    if (before.status === 'active') return res.json(before);
+    // Pre-flight short-circuit for no-op reactivate. Avoids writing an
+    // audit row when the user is already active.
+    const current = loadUserRow(userId);
+    if (current.status === 'active') return res.json(current);
 
-    // Symmetric to deactivate: flip back only the user_claimants rows that
-    // were taken inactive by the same user-level deactivate (identified by
-    // `deactivated_with_user_id = userId`), and clear the marker. Rows that
-    // had been independently set to inactive (no marker) keep their state —
-    // the admin can re-activate them individually if desired.
-    const tx = db.transaction(() => {
-      db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).run(userId);
-      db.prepare(`
-        UPDATE user_claimants
-           SET status = 'active',
-               deactivated_with_user_id = NULL
-         WHERE user_id = ? AND deactivated_with_user_id = ?
-      `).run(userId, userId);
+    const { after } = mutateAndAudit({
+      loader: loadUserRow,
+      entityType: 'user',
+      id: userId,
+      actorUserId: req.user.id,
+      action: 'reactivate',
+      write: (before) => {
+        // Symmetric to deactivate: flip back only the user_claimants rows
+        // that were taken inactive by the same user-level deactivate
+        // (identified by `deactivated_with_user_id = userId`), and clear
+        // the marker. Rows that had been independently set to inactive
+        // (no marker) keep their state — the admin can re-activate them
+        // individually if desired.
+        const tx = db.transaction(() => {
+          db.prepare(`UPDATE users SET status = 'active' WHERE id = ?`).run(before.id);
+          db.prepare(`
+            UPDATE user_claimants
+               SET status = 'active',
+                   deactivated_with_user_id = NULL
+             WHERE user_id = ? AND deactivated_with_user_id = ?
+          `).run(before.id, before.id);
+        });
+        tx();
+      },
     });
-    tx();
-
-    const after = db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId);
-    audit(req.user.id, 'reactivate', 'user', userId, before, after);
     res.json(after);
   } catch (e) { next(e); }
 });
