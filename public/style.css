@@ -532,13 +532,81 @@ table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
    rule here intended to make wide tables scroll horizontally on phones.
    It broke wide-screen layout because `display: block` on a <table>
    makes the inner thead/tbody render as table-row-groups inside a block
-   context — they don't stretch with the block's width. Removed.
-   Mobile-overflow handling is a separate concern; see TODO under "UI:
-   usability" → "Restructure wide table rows on small screens". */
+   context — they don't stretch with the block's width. The fix is two
+   per-table opt-ins, both kept off the bare <table> selector so wide-screen
+   layout isn't affected:
+
+   1. `.table-scroll` — wrap the <table> in `<div class="table-scroll">`.
+      The wrapper scrolls horizontally on narrow viewports while the table
+      itself keeps `display: table` (so column widths stay sane). Used on
+      admin-facing tables where horizontal swipe is acceptable.
+   2. `<table class="table-stack" …>` — flips rows to stacked cards under
+      600px. Each <td> must carry `data-label="<column header>"` so the
+      pseudo-element can render "Label: value" lines. Used on employee-
+      facing tables (#activity) where horizontal scrolling is hostile on
+      a phone. */
+
+/* Option B: horizontal-scroll wrapper. The wrapper takes the overflow so
+   the table itself can keep its natural intrinsic width. A subtle inset
+   scroll-shadow on the right edge hints that there's more content. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Right-edge fade hints at horizontal overflow without a JS shadow. The
+     gradient only renders when there's actually content under it; on a
+     fully-visible table the user just sees a 1px column of white. */
+  background:
+    linear-gradient(to right, white 30%, rgba(255, 255, 255, 0)) left center / 20px 100% no-repeat local,
+    linear-gradient(to right, rgba(255, 255, 255, 0), white 70%) right center / 20px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)) left center / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)) right center / 14px 100% no-repeat scroll;
+}
+
 /* Hide a column (header + body cells, or any element flagged narrow-only)
    under 600px. Used to drop low-value columns on phones. */
 @media (max-width: 600px) {
   .hide-on-narrow { display: none; }
+
+  /* Option A: stacked-card rows under 600px. Opt-in per <table> via the
+     `.table-stack` class. Each <td> must carry `data-label="<column>"` so
+     the ::before pseudo-element renders the column header inline.
+
+     The thead is visually hidden (display: none) — screen readers also
+     skip it, but every <td> carries its own label via data-label so the
+     column meaning is preserved. */
+  table.table-stack { display: block; }
+  table.table-stack thead { display: none; }
+  table.table-stack tbody { display: block; }
+  table.table-stack tr {
+    display: block;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.table-stack tr:last-child { border-bottom: none; }
+  table.table-stack tr:hover td { background: transparent; }
+  table.table-stack td {
+    display: block;
+    padding: 0.2rem 0;
+    border: none;
+  }
+  table.table-stack td::before {
+    content: attr(data-label) ': ';
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-right: 0.35rem;
+  }
+  /* Cells flagged data-label="" (or no attribute, like the trailing
+     "actions" column whose <th> is empty) render without the prefix. */
+  table.table-stack td[data-label=""]::before,
+  table.table-stack td:not([data-label])::before { content: none; }
+  /* The "actions" column gets a little extra top space so the buttons
+     don't crowd the previous label:value line. */
+  table.table-stack td.actions { padding-top: 0.45rem; }
+  /* The inline-edit / row-detail expansion rows are wrapped in their own
+     tr with a single full-width td. Don't add a label prefix on that
+     interior cell. */
+  table.table-stack tr td[colspan]::before { content: none; }
+  table.table-stack tr td[colspan] { padding: 0.25rem 0; }
 }
 th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 th {

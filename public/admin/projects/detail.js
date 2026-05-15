@@ -60,7 +60,7 @@ export async function renderProjectDetail(main, ctx) {
       ${renderAssignForm(project, state.users)}
       ${project.assignments.length === 0
         ? '<p class="empty">No assignments yet.</p>'
-        : `<table>
+        : `<div class="table-scroll"><table>
             <thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead>
             <tbody>${project.assignments.map(a => `
               <tr>
@@ -72,7 +72,7 @@ export async function renderProjectDetail(main, ctx) {
                   : `<button class="small secondary" data-reassign="${a.user_claimant_id}">Re-assign</button>`}</td>
               </tr>`).join('')}
             </tbody>
-          </table>`}
+          </table></div>`}
     </div>
 
     ${renderLogOnBehalfCards(project, claimant)}

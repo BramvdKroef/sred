@@ -45,6 +45,7 @@ export async function render(main, ctx) {
     <div class="card">
       <h2>Exports for this claimant</h2>
       ${exports.length === 0 ? '<p class="empty">None yet.</p>' : `
+      <div class="table-scroll">
       <table>
         <thead><tr><th>ID</th><th>Period</th><th>Draft</th><th>Generated</th><th>Download</th><th>Audit package</th></tr></thead>
         <tbody>${exports.map(x => `
@@ -66,7 +67,8 @@ export async function render(main, ctx) {
             </td>
           </tr>`).join('')}
         </tbody>
-      </table>`}
+      </table>
+      </div>`}
     </div>
   `;
 
@@ -100,6 +102,7 @@ export async function render(main, ctx) {
     const out = main.querySelector('#compare-result');
     out.innerHTML = `
       <h3>Grand totals</h3>
+      <div class="table-scroll">
       <table>
         <thead><tr><th>Line</th><th>A</th><th>B</th><th>Δ</th><th>Δ%</th></tr></thead>
         <tbody>
@@ -120,6 +123,7 @@ export async function render(main, ctx) {
             </tr>`).join('')}
         </tbody>
       </table>
+      </div>
       <p>
         Download:
         <a href="/api/exports/compare/download?${baseQs}&format=${esc(format)}" data-jwt-dl>${esc(format)}</a>

@@ -314,7 +314,7 @@ async function refreshPrefs(main) {
       </div>
       ${data.items.length === 0
         ? '<p class="empty">No passkeys registered yet.</p>'
-        : `<table>
+        : `<div class="table-scroll"><table>
             <thead><tr><th>Label</th><th>Transports</th><th>Registered</th><th>Last used</th><th></th></tr></thead>
             <tbody>${data.items.map(c => `
               <tr>
@@ -327,7 +327,7 @@ async function refreshPrefs(main) {
                   : '<span class="muted">cannot remove the last one</span>'}</td>
               </tr>`).join('')}
             </tbody>
-          </table>`}
+          </table></div>`}
     </div>
   `;
   bindPrefs(main);
@@ -457,12 +457,12 @@ export function weekBars(entries, days) {
 
 export function activityHtml(items, { showActor = true, showProject = true, showOpen = false } = {}) {
   if (!items.length) return '<p class="empty">No activity yet.</p>';
-  return `<table class="activity">
+  return `<div class="table-scroll"><table class="activity">
     <thead><tr>
       <th>When</th><th>Type</th>${showActor ? '<th>Who</th>' : ''}${showProject ? '<th>Project</th>' : ''}<th>Details</th>${showOpen ? '<th></th>' : ''}
     </tr></thead>
     <tbody>${items.map(it => activityRow(it, { showActor, showProject, showOpen })).join('')}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function activityRow(it, { showActor, showProject, showOpen }) {

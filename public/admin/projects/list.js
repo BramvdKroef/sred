@@ -122,7 +122,7 @@ function renderProjectsAndUsers(state) {
 
 function renderPeriodsTable(periods) {
   if (!periods.length) return '<p class="empty">No periods yet.</p>';
-  return `<table>
+  return `<div class="table-scroll"><table>
     <thead><tr><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>${periods.map(p => `
       <tr>
@@ -135,12 +135,12 @@ function renderPeriodsTable(periods) {
             : `<button class="secondary small" data-act-period="reopen" data-id="${p.id}">Reopen</button>`}
         </td>
       </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table></div>`;
 }
 
 function renderProjectsTable(projects) {
   if (!projects.length) return '<p class="empty">No projects yet.</p>';
-  return `<table class="rows-clickable">
+  return `<div class="table-scroll"><table class="rows-clickable">
     <thead><tr><th>Title</th><th>Type</th><th class="hide-on-narrow">Field</th><th>Start</th><th>Status</th></tr></thead>
     <tbody>${projects.map(p => `
       <tr data-open-project="${p.id}">
@@ -150,12 +150,12 @@ function renderProjectsTable(projects) {
         <td>${esc(p.start_date)}</td>
         <td><span class="pill status-${esc(p.status)}">${esc(STATUS_LABEL[p.status] ?? p.status)}</span></td>
       </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table></div>`;
 }
 
 function renderUsersUnderClaimantTable(users) {
   if (!users.length) return '<p class="empty">No users attached to this claimant yet. Invite from the Employees tab.</p>';
-  return `<table>
+  return `<div class="table-scroll"><table>
     <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
     <tbody>${users.map(u => `
       <tr>
@@ -164,7 +164,7 @@ function renderUsersUnderClaimantTable(users) {
         <td>${esc(u.role)}</td>
         <td>${statusPill(u.status)}</td>
       </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table></div>`;
 }
 
 function renderEditClaimantForm(c) {

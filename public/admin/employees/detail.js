@@ -38,7 +38,7 @@ export async function renderUserDetail(main, ctx) {
       <h2>Claimant attachments</h2>
       ${bundle.attachments.length === 0
         ? '<p class="empty">Not attached to any claimant.</p>'
-        : `<table>
+        : `<div class="table-scroll"><table>
             <thead><tr><th>Claimant</th><th>Title</th><th>Specified</th><th>Status</th><th>Latest compensation</th></tr></thead>
             <tbody>${bundle.attachments.map(a => {
               const latest = (a.compensation_history ?? [])[0];
@@ -53,14 +53,14 @@ export async function renderUserDetail(main, ctx) {
                 <td>${compStr}</td>
               </tr>`;
             }).join('')}</tbody>
-          </table>`}
+          </table></div>`}
     </div>
 
     <div class="card compact">
       <h2>Active project assignments (${bundle.projects.length})</h2>
       ${bundle.projects.length === 0
         ? '<p class="empty">Not assigned to any active projects.</p>'
-        : `<table class="rows-clickable">
+        : `<div class="table-scroll"><table class="rows-clickable">
             <thead><tr><th>Project</th><th>Claimant</th><th>Type</th><th>Status</th></tr></thead>
             <tbody>${bundle.projects.map(p => `
               <tr data-open-project="${p.id}" data-cid="${p.claimant_id}">
@@ -69,7 +69,7 @@ export async function renderUserDetail(main, ctx) {
                 <td><span class="pill kind-${esc(p.type)}">${esc(TYPE_LABEL[p.type] ?? p.type)}</span></td>
                 <td><span class="pill status-${esc(p.status)}">${esc(STATUS_LABEL[p.status] ?? p.status)}</span></td>
               </tr>`).join('')}</tbody>
-          </table>`}
+          </table></div>`}
     </div>
 
     <div class="card">

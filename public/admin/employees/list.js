@@ -104,6 +104,7 @@ function renderUsersTab(ctx, users) {
 function renderAllUsersTable(ctx, users) {
   if (!users.length) return '<p class="empty">No users yet.</p>';
   return `
+    <div class="table-scroll">
     <table>
       <thead><tr><th class="hide-on-narrow">ID</th><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>${users.map(u => `
@@ -125,7 +126,8 @@ function renderAllUsersTable(ctx, users) {
         </tr>
         <tr id="user-edit-row-${u.id}" hidden><td colspan="6"></td></tr>`).join('')}
       </tbody>
-    </table>`;
+    </table>
+    </div>`;
 }
 
 function bindList(ctx, users) {

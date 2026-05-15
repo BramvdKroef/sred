@@ -55,10 +55,12 @@ export async function render(main, ctx) {
       </div>
       <p class="caption scope-tag">${esc(scopeLabel)}</p>
       ${data.items.length === 0 ? '<p class="empty">No events.</p>' : `
+        <div class="table-scroll">
         <table>
           <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>Summary</th></tr></thead>
           <tbody>${data.items.map(renderAuditRow).join('')}</tbody>
-        </table>`}
+        </table>
+        </div>`}
     </div>
   `;
   document.getElementById('audit-entity-filter').addEventListener('change', e => {
