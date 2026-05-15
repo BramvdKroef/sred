@@ -212,8 +212,9 @@ test('GET /api/exports/:id/download?format=csv returns text/csv and a non-empty 
   assert.match(res.headers.get('content-type') || '', /text\/csv/);
   const body = await res.text();
   assert.ok(body.length > 0, 'csv body must be non-empty');
-  // Has the header row.
-  assert.match(body, /^line,project_id,project_title,currency,amount_cents/);
+  // Has the header row. (t661_line column inserted between project_title and
+  // currency for the SRED_DOMAIN_REVIEW F2 fix.)
+  assert.match(body, /^line,project_id,project_title,t661_line,currency,amount_cents/);
 });
 
 test('GET /api/exports/:id/download?format=md returns text/markdown and includes the project title', async () => {

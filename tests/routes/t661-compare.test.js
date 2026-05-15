@@ -282,7 +282,8 @@ test('GET compare download format=csv returns text/csv with header row', async (
   assert.match(res.headers.get('content-type') || '', /text\/csv/);
   const body = await res.text();
   // Header columns include scope, delta_cents, delta_pct, etc.
-  assert.match(body, /^scope,project_id,project_title,line,currency/);
+  // (t661_line column inserted between `line` and `currency` for the F2 fix.)
+  assert.match(body, /^scope,project_id,project_title,line,t661_line,currency/);
   assert.match(body, /delta_cents/);
 });
 
