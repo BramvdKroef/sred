@@ -182,10 +182,12 @@ test('requireAuth: token references a user that no longer exists → 401', () =>
   assert.equal(called, false);
   assert.equal(err.status, 401);
   assert.equal(err.code, 'unauthorized');
-  // Middleware's branch sets message to 'user not active' for both the
-  // not-found and the not-active case. Pin that so a future split into
-  // distinct messages is a deliberate change.
-  assert.match(err.message, /user not active/);
+  // Response must match the generic unauthorized shape: distinguishing
+  // "user row exists but inactive/deleted" from "bad token" leaks user
+  // enumeration to an attacker. The inactive-user case is logged server-
+  // side (see log.warn('auth_inactive_user_attempt', ...)) instead.
+  assert.doesNotMatch(err.message, /user not active/);
+  assert.doesNotMatch(err.message, /inactive/i);
 });
 
 test('requireAuth: token references a deactivated user (status=disabled) → 401', () => {
@@ -196,7 +198,10 @@ test('requireAuth: token references a deactivated user (status=disabled) → 401
   assert.equal(called, false);
   assert.equal(err.status, 401);
   assert.equal(err.code, 'unauthorized');
-  assert.match(err.message, /user not active/);
+  // Same enumeration concern as the deleted-user case above: the response
+  // must be indistinguishable from a generic JWT-failure 401.
+  assert.doesNotMatch(err.message, /user not active/);
+  assert.doesNotMatch(err.message, /disabled/i);
 });
 
 // --- requireAuth: happy path (unit) -----------------------------------------
