@@ -540,10 +540,15 @@ table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
 .card table,
 .card .table-scroll {
   display: block;
-  width: 100%;                    /* keep the table filling its card; fixes
-                                     the regression where overflow-x: auto
-                                     + display: block collapsed it to
-                                     content width. */
+  /* `display: block` enables overflow-x: auto, but the inner thead/tbody/tr
+     keep their table-row-group display, which means `width: 100%` doesn't
+     propagate from the block to the internal table layout. The fix is the
+     pair below: `width: max-content` lets the table grow to its full content
+     width (so columns don't collapse on narrow viewports → horizontal
+     scroll), and `min-width: 100%` forces it to at least fill the card
+     when content is narrower than the container. */
+  width: max-content;
+  min-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   max-width: 100%;
