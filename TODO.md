@@ -12,7 +12,7 @@ From [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md). Verdict: 
 - [x] ~~**SIGTERM/SIGINT shutdown hook.**~~ `shutdown()` closes the listener, drains in-flight, calls `db.close()` to flush WAL. 10s force-exit safety. Also: `unhandledRejection` exits 1 so a supervisor restarts.
 - [x] ~~**Backup + retention strategy.**~~ `npm run backup` (WAL-safe via `db.backup()`, tars `uploads/`, default 30-day retention). `npm run cleanup:bundles` (default 90-day). `email_tokens` is reaped on each mint (V-09 pattern). README has a Backup-and-restore section.
 - [x] ~~**Structured logging.**~~ `src/lib/logger.js` (dep-free, JSON-lines). Per-request logger middleware attaches `req.id` + emits `http_request` lines with method/path/status/duration. `x-request-id` header set on every response. ~10 source sites converted from `console.*`. `LOG_LEVEL` env var (default `info`).
-- [ ] [P2] **Health / readiness endpoints** (`/healthz`, `/ready`) for load-balancer probes.
+- [x] ~~**Health / readiness endpoints.**~~ `GET /healthz` → `{ok:true}` (no DB hit). `GET /readyz` → 200 `{ok:true, checks:{db:'ok'}}` or 503 `{ok:false, checks:{db:'fail', error:...}}`. Mounted before auth middleware; bypasses rate limiter and audit log.
 - [ ] [P3] Error-monitoring hook (Sentry/Honeybadger integration point).
 - [ ] [P3] Request correlation IDs flowing into logs + `audit_log`.
 
@@ -26,7 +26,7 @@ From [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md) and [RENDER_REVIEW.md](R
 - [x] ~~**`.pill.kind-sred` contrast.**~~ Foreground now `--brand-dark` (~5.4:1).
 - [x] ~~**Mobile tables overflow.**~~ Selector broadened from `.card > table` to `.card table` so the `#all-users-table` wrapper div doesn't escape the rule.
 - [x] ~~**Tables no longer stretch to fill their container.**~~ Fixed by removing the `display: block` rule the mobile-tables work added on `.card table`. The block layout broke `thead`/`tbody` stretching (table-row-groups inside a block context don't inherit the block's width).
-- [ ] [P2] **Restructure wide table rows on small screens.** Removing the `display: block` overflow-scroll fix means wide tables (audit log, employees list, review queue) overflow the card on narrow viewports. The proper fix is a per-table responsive design: either collapse rows to stacked cards under ~600px (each cell becomes a `label: value` line), or wrap the table in a dedicated `<div class="table-scroll">` at the render sites and accept the horizontal swipe. Pick a pattern and apply consistently.
+- [x] ~~**Restructure wide table rows on small screens.**~~ Hybrid: stacked-card rows (`.table-stack` + per-`<td>` `data-label`) on the 4 employee-facing activity tables; `.table-scroll` wrapper on 15 admin tables. Both patterns keep `display: table` on the table itself — the wide-screen layout is untouched, only the <600px breakpoint flips stacked.
 - [x] ~~**Two `<h1>`s per page.**~~ Brand strip demoted to `<div class="brand">` (CSS duplicated to keep the visual). A single visually-hidden `<h1 id="page-heading" class="sr-only">` is populated from a `TAB_TITLES` map per render.
 - [x] ~~**No `<main>` wrapper.**~~ Admin/employee shells already had `<main id="main">`. Login + enroll in `public/app.js` now wrap their `.card` in `<main>`.
 - [x] ~~**`.loading` and `.error-banner` contrast.**~~ `.loading` uses `--text-muted` now; `.error-banner` text bumped to `#8a2521` (~7:1).
@@ -174,7 +174,7 @@ From [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). Largest files: `admin/pro
 From [DEPENDENCY_REVIEW.md](DEPENDENCY_REVIEW.md). License posture clean (292 packages, all permissive); `npm audit` reports 0 vulnerabilities.
 
 - [x] ~~**Upgrade `multer` 1.4.5-lts → 2.x.**~~ Now on `^2.1.1`. `npm audit --omit=dev` still clean. Existing evidence-upload tests pass unchanged.
-- [ ] [P2] **Upgrade `@simplewebauthn/server` 11 → 13.** Two majors stale; v13 also drops the deprecated `@simplewebauthn/types@11` transitive.
+- [x] ~~**Upgrade `@simplewebauthn/server` 11 → 13.**~~ Now on `^13.3.0`. Single API break: dropped `type: 'public-key'` from `excludeCredentials`/`allowCredentials`. Deprecated `@simplewebauthn/types@11` transitive gone. `npm audit --omit=dev` clean.
 - [ ] [P3] **Resolve `file-type@22` engine mismatch** — declares `engines.node >=22`; project says `>=20`. Either bump `engines.node` or downgrade to `^21`.
 - [ ] [P3] **`express` 4.x is in maintenance.** 5.x migration when convenient.
 
