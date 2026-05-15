@@ -45,6 +45,18 @@ function dollars(cents, currency = 'CAD') {
   return `${(cents / 100).toFixed(2)} ${currency}`;
 }
 
+// Format an expense category for human consumption. For overhead rows we
+// append the CRA sub-classification + allocation basis when present
+// (migration 014 — SRED_DOMAIN_REVIEW F5). Non-overhead rows pass through
+// as-is. The T661 line is unchanged (line 360) — this is presentation only.
+function categoryLabel(e) {
+  if (e.category !== 'overhead') return e.category;
+  const parts = ['overhead'];
+  if (e.overhead_subcategory) parts.push(e.overhead_subcategory);
+  if (e.allocation_basis)     parts.push(e.allocation_basis);
+  return parts.join(' · ');
+}
+
 export function toMarkdown(totals) {
   const c = totals.claimant;
   const p = totals.fiscal_period;
@@ -122,7 +134,7 @@ export function toMarkdown(totals) {
       lines.push(`| Date | Category | Amount | Currency | FX | In ${c.reporting_currency} | Description |`);
       lines.push(`| --- | --- | ---: | --- | ---: | ---: | --- |`);
       for (const e of proj.expense_lines) {
-        lines.push(`| ${e.expense_date} | ${e.category} | ${(e.amount_cents/100).toFixed(2)} | ${e.currency} | ${e.fx_rate ?? '1'} | ${(e.reporting_amount_cents/100).toFixed(2)} | ${e.description} |`);
+        lines.push(`| ${e.expense_date} | ${categoryLabel(e)} | ${(e.amount_cents/100).toFixed(2)} | ${e.currency} | ${e.fx_rate ?? '1'} | ${(e.reporting_amount_cents/100).toFixed(2)} | ${e.description} |`);
       }
       lines.push(``);
     }
@@ -251,7 +263,7 @@ export function toPdf(totals) {
       doc.fontSize(9).font('Helvetica');
       for (const e of proj.expense_lines) {
         const fx = e.fx_rate ? ` @ ${e.fx_rate}` : '';
-        doc.text(`  ${e.expense_date}  ·  ${e.category}  ·  ${(e.amount_cents/100).toFixed(2)} ${e.currency}${fx}  (${cents(e.reporting_amount_cents)})  — ${e.description}`);
+        doc.text(`  ${e.expense_date}  ·  ${categoryLabel(e)}  ·  ${(e.amount_cents/100).toFixed(2)} ${e.currency}${fx}  (${cents(e.reporting_amount_cents)})  — ${e.description}`);
       }
       doc.moveDown(0.4);
     }

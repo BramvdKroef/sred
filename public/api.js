@@ -454,19 +454,45 @@ export function labourEditFormHtml(e, opts = {}) {
 
 // Inline edit-form markup for expense entries. See labourEditFormHtml for
 // the configurability rationale.
+//
+// Overhead fields (migration 014 / SRED_DOMAIN_REVIEW F5): when the row is
+// (or becomes) category='overhead' we expose a subcategory <select> and an
+// allocation-basis <input>. The wrapping div carries data-overhead-only so
+// bindExpenseOverheadToggle can show/hide both on a category-change
+// listener. Initial visibility follows the row's saved category.
 export function expenseEditFormHtml(e, opts = {}) {
   const cats = ['material','contract','third_party_payment','overhead'];
+  const subcats = ['rent','utilities','maintenance','supporting_salaries','other'];
   const attr = opts.formAttr ?? `data-form-edit-expense="${e.id}"`;
+  const isOverhead = e.category === 'overhead';
   return `<form ${attr} class="row gap-md inline-edit-row wrap">
     <div><label>Date <input type="date" name="expense_date" value="${esc(e.expense_date)}" required></label></div>
-    <div><label>Category <select name="category">${cats.map(c =>
+    <div><label>Category <select name="category" data-expense-category>${cats.map(c =>
       `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
     <div><label>Amount <span class="muted">(${esc(e.currency)})</span> <input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required class="w-amount"></label></div>
     <div><label>Currency <input name="currency" value="${esc(e.currency)}" required class="w-ccy"></label></div>
     <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" class="w-hours"></label></div>
     <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
+    <div data-overhead-only ${isOverhead ? '' : 'hidden'}><label>Overhead type <select name="overhead_subcategory">${subcats.map(s =>
+      `<option value="${s}" ${s === e.overhead_subcategory ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
+    <div class="input-grow" data-overhead-only ${isOverhead ? '' : 'hidden'}><label>Allocation basis <input name="allocation_basis" value="${esc(e.allocation_basis ?? '')}" placeholder="e.g. 30% of total floor area"></label></div>
     <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save expense</button>${opts.cancelAttr ? `<button type="button" class="small secondary" ${opts.cancelAttr}>Cancel</button>` : ''}</div></div>
   </form>`;
+}
+
+// Wire the category <select> in an expense-edit form to toggle the
+// overhead-only wrappers. Idempotent — safe to call after every render.
+// Mirrors the pattern in employee/forms.js and admin/projects/on-behalf.js.
+export function bindExpenseOverheadToggle(form) {
+  const sel = form.querySelector('[data-expense-category]');
+  if (!sel) return;
+  const overheadOnlyDivs = form.querySelectorAll('[data-overhead-only]');
+  const sync = () => {
+    const isOverhead = sel.value === 'overhead';
+    overheadOnlyDivs.forEach(d => { d.hidden = !isOverhead; });
+  };
+  sel.addEventListener('change', sync);
+  sync();
 }
 
 // Submit a PATCH /api/labour/:id from a FormData built off labourEditFormHtml.
@@ -484,19 +510,34 @@ export async function submitLabourEdit(id, fd) {
 
 // Submit a PATCH /api/expenses/:id from a FormData built off
 // expenseEditFormHtml. See submitLabourEdit for the rationale.
+//
+// Overhead fields (migration 014): when category='overhead' we pass through
+// the subcategory + basis from the form. When category is anything else, we
+// explicitly send `null` for both so the server clears any stale values
+// from a row that was previously overhead — the server route also
+// auto-nulls these, but sending the explicit clear keeps the wire payload
+// self-describing.
 export async function submitExpenseEdit(id, fd) {
   const amountCents = dollarsToCents(fd.get('amount'));
   if (amountCents == null || Number.isNaN(amountCents))
     throw new Error('Enter the amount in dollars (e.g. 1234.56).');
+  const category = fd.get('category');
   const body = {
     expense_date: fd.get('expense_date'),
-    category: fd.get('category'),
+    category,
     amount_cents: amountCents,
     currency: fd.get('currency') || 'CAD',
     description: fd.get('description'),
   };
   const fx = fd.get('fx_rate');
   body.fx_rate = fx ? Number(fx) : null;
+  if (category === 'overhead') {
+    body.overhead_subcategory = fd.get('overhead_subcategory') || null;
+    body.allocation_basis     = fd.get('allocation_basis') || null;
+  } else {
+    body.overhead_subcategory = null;
+    body.allocation_basis     = null;
+  }
   return api('PATCH', `/api/expenses/${id}`, body);
 }
 
@@ -607,6 +648,9 @@ async function renderAndWireDetail(cell, type, id, opts = {}) {
 function wireInlineEditForm(cell, type, id, opts) {
   const form = cell.querySelector('[data-inline-edit-form]');
   if (!form) return;
+  // Expense forms get the overhead-fields toggle wired; safe no-op for
+  // labour forms (no data-expense-category present).
+  if (type === 'expense') bindExpenseOverheadToggle(form);
   onSubmit(form, async fd => {
     if (type === 'labour')       await submitLabourEdit(id, fd);
     else if (type === 'expense') await submitExpenseEdit(id, fd);
@@ -673,12 +717,16 @@ function renderActivityDetail(type, e, auditItems, linkedEv, opts = {}) {
       ${e.rejection_reason ? `<div class="full"><strong>Rejection reason:</strong> <span class="muted">${esc(e.rejection_reason)}</span></div>` : ''}
     `;
   } else if (type === 'expense') {
+    const overheadLabel = e.category === 'overhead' && e.overhead_subcategory
+      ? `${esc(e.category)} · ${esc(e.overhead_subcategory)}`
+      : esc(e.category);
     body += `
       <div><strong>Date:</strong> ${esc(e.expense_date)}</div>
-      <div><strong>Category:</strong> ${esc(e.category)}</div>
+      <div><strong>Category:</strong> ${overheadLabel}</div>
       <div><strong>Amount:</strong> ${(e.amount_cents/100).toFixed(2)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</div>
       <div><strong>Status:</strong> <span class="pill ${e.status}">${esc(e.status)}</span></div>
       <div class="full"><strong>Description:</strong> ${esc(e.description)}</div>
+      ${e.category === 'overhead' && e.allocation_basis ? `<div class="full"><strong>Allocation basis:</strong> ${esc(e.allocation_basis)}</div>` : ''}
       ${e.reviewed_at ? `<div class="full muted"><strong>Reviewed</strong> ${esc(e.reviewed_at)} (user #${e.reviewed_by_user_id})</div>` : ''}
       ${e.rejection_reason ? `<div class="full"><strong>Rejection reason:</strong> <span class="muted">${esc(e.rejection_reason)}</span></div>` : ''}
     `;

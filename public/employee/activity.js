@@ -1,5 +1,6 @@
 import { api, esc, cents, onSubmit, wireJwtDownloads, safeHref, lockReason, statusPill,
-         labourEditFormHtml, expenseEditFormHtml, submitLabourEdit, submitExpenseEdit } from '../api.js';
+         labourEditFormHtml, expenseEditFormHtml, submitLabourEdit, submitExpenseEdit,
+         bindExpenseOverheadToggle } from '../api.js';
 
 // Pure reducer over the three lists currently in state. Sums approved-vs-
 // pending hours, expense amounts (in cents, grouped per-currency since FX
@@ -264,10 +265,13 @@ function bindActivity(main, ctx) {
     await ctx.reload();
   }));
 
-  main.querySelectorAll('[data-form-edit-expense]').forEach(form => onSubmit(form, async fd => {
-    await submitExpenseEdit(form.dataset.formEditExpense, fd);
-    await ctx.reload();
-  }));
+  main.querySelectorAll('[data-form-edit-expense]').forEach(form => {
+    bindExpenseOverheadToggle(form);
+    onSubmit(form, async fd => {
+      await submitExpenseEdit(form.dataset.formEditExpense, fd);
+      await ctx.reload();
+    });
+  });
 
   main.querySelectorAll('[data-form-edit-evidence]').forEach(form => onSubmit(form, async fd => {
     const body = {

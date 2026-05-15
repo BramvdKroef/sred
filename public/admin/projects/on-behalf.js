@@ -63,7 +63,7 @@ export function renderLogOnBehalfCards(project, claimant) {
               </label></div>
               <div><label>Date <input type="date" name="expense_date" required></label></div>
               <div><label>Category
-                <select name="category">
+                <select name="category" data-expense-category>
                   <option value="material">material</option>
                   <option value="contract">contract</option>
                   <option value="third_party_payment">third-party payment</option>
@@ -74,6 +74,16 @@ export function renderLogOnBehalfCards(project, claimant) {
               <div><label>Currency <input name="currency" value="${esc(reportingCcy)}" required></label></div>
               <div><label>FX rate (if not ${esc(reportingCcy)}) <input type="number" step="0.0001" name="fx_rate"></label></div>
               <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
+              <div data-overhead-only hidden><label>Overhead type
+                <select name="overhead_subcategory">
+                  <option value="rent">rent</option>
+                  <option value="utilities">utilities</option>
+                  <option value="maintenance">maintenance</option>
+                  <option value="supporting_salaries">supporting salaries</option>
+                  <option value="other">other</option>
+                </select>
+              </label></div>
+              <div class="full" data-overhead-only hidden><label>Allocation basis <input name="allocation_basis" placeholder="e.g. 30% of total floor area"></label></div>
             </div>
             <details class="mt-sm" open>
               <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
@@ -116,23 +126,50 @@ export function bindLogOnBehalfForms(project, ctx) {
     });
   }
 
-  onSubmit(document.getElementById('form-behalf-expense'), async fd => {
+  const expenseFormEl = document.getElementById('form-behalf-expense');
+  if (expenseFormEl) bindOverheadFieldsToggle(expenseFormEl);
+
+  onSubmit(expenseFormEl, async fd => {
     const amountCents = dollarsToCents(fd.get('amount'));
     if (amountCents == null || Number.isNaN(amountCents))
       throw new Error('Enter the amount in dollars (e.g. 1234.56).');
+    const category = fd.get('category');
     const body = {
       project_id: project.id,
       user_claimant_id: Number(fd.get('user_claimant_id')),
       expense_date: fd.get('expense_date'),
-      category: fd.get('category'),
+      category,
       amount_cents: amountCents,
       currency: fd.get('currency') || 'CAD',
       description: fd.get('description'),
     };
     const fx = fd.get('fx_rate');
     if (fx) body.fx_rate = Number(fx);
+    if (category === 'overhead') {
+      body.overhead_subcategory = fd.get('overhead_subcategory') || null;
+      body.allocation_basis     = fd.get('allocation_basis') || null;
+    }
     const entry = await api('POST', '/api/expenses', body);
     await attachInlineReceipt(fd, { project_id: entry.project_id, expense_id: entry.id, evidence_date: entry.expense_date });
     ctx.render();
   });
+}
+
+// Show/hide the two overhead fields (subcategory select + allocation basis
+// input) based on the category select. Mirrors bindEvidenceKindToggle: the
+// caller marks the form with `data-expense-category` on the <select> and
+// `data-overhead-only` on each wrapping div. Hidden = visually gone AND
+// detached from FormData submission for non-overhead rows (the wrapping div
+// hides; the input inside doesn't submit because the name attribute is
+// scoped per-form to the active category check above).
+function bindOverheadFieldsToggle(form) {
+  const sel = form.querySelector('[data-expense-category]');
+  const overheadOnlyDivs = form.querySelectorAll('[data-overhead-only]');
+  if (!sel) return;
+  const sync = () => {
+    const isOverhead = sel.value === 'overhead';
+    overheadOnlyDivs.forEach(d => { d.hidden = !isOverhead; });
+  };
+  sel.addEventListener('change', sync);
+  sync();
 }

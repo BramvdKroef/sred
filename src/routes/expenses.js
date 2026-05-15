@@ -13,6 +13,11 @@ router.use(requireAuth);
 
 const VALID_CATEGORIES = ['material', 'contract', 'third_party_payment', 'overhead'];
 
+// Traditional-method overhead bucket — required when category='overhead' so the
+// T661 export can surface the right CRA sub-classification (SRED_DOMAIN_REVIEW
+// F5). Schema-level CHECK at migration 014 mirrors this list.
+const VALID_OVERHEAD_SUBCATEGORIES = ['rent', 'utilities', 'maintenance', 'supporting_salaries', 'other'];
+
 // --- helpers ---------------------------------------------------------------
 
 function validateAmount(amount_cents) {
@@ -24,6 +29,31 @@ function validateFxAgainstClaimant(currency, fx_rate, claimant) {
   if (currency && currency !== claimant.reporting_currency) {
     if (typeof fx_rate !== 'number' || fx_rate <= 0)
       throw badRequest(`fx_rate (to ${claimant.reporting_currency}) required when currency != reporting currency`);
+  }
+}
+
+// Cross-field validator for overhead subcategory + basis. Called from both
+// POST (with the full row) and PATCH (with the merged-after-update row) so
+// the two paths can't drift. The CRA requirement is per-row: every overhead
+// expense needs a typed bucket and a human-readable allocation note.
+//
+// For non-overhead categories both fields must be absent/null. The schema
+// CHECK at migration 014 also enforces this — duplicating in the route
+// gives a clean 400 (vs an opaque SQLITE_CONSTRAINT message) before we
+// reach the INSERT/UPDATE.
+function validateOverheadFields(category, overhead_subcategory, allocation_basis) {
+  if (category === 'overhead') {
+    if (!overhead_subcategory)
+      throw badRequest(`overhead_subcategory required when category='overhead' (one of ${VALID_OVERHEAD_SUBCATEGORIES.join('|')})`);
+    if (!VALID_OVERHEAD_SUBCATEGORIES.includes(overhead_subcategory))
+      throw badRequest(`overhead_subcategory must be ${VALID_OVERHEAD_SUBCATEGORIES.join('|')}`);
+    if (typeof allocation_basis !== 'string' || !allocation_basis.trim())
+      throw badRequest(`allocation_basis required when category='overhead' (free-text methodology, e.g. "30% of total floor area")`);
+  } else {
+    if (overhead_subcategory != null)
+      throw badRequest(`overhead_subcategory must be null when category != 'overhead'`);
+    if (allocation_basis != null)
+      throw badRequest(`allocation_basis must be null when category != 'overhead'`);
   }
 }
 
@@ -79,6 +109,7 @@ router.post('/', (req, res, next) => {
     const {
       project_id, expense_date, category, amount_cents,
       currency = 'CAD', fx_rate, description, user_claimant_id,
+      overhead_subcategory, allocation_basis,
     } = req.body ?? {};
 
     if (!Number.isInteger(project_id)) throw badRequest('project_id required');
@@ -87,6 +118,7 @@ router.post('/', (req, res, next) => {
       throw badRequest(`category must be ${VALID_CATEGORIES.join('|')}`);
     validateAmount(amount_cents);
     if (!description || typeof description !== 'string') throw badRequest('description required');
+    validateOverheadFields(category, overhead_subcategory, allocation_basis);
 
     const project = getProject(project_id);
     const claimant = getClaimant(project.claimant_id);
@@ -108,11 +140,14 @@ router.post('/', (req, res, next) => {
           INSERT INTO expenses
             (project_id, user_claimant_id, fiscal_period_id, expense_date, category,
              amount_cents, currency, fx_rate, description,
+             overhead_subcategory, allocation_basis,
              status, reviewed_by_user_id, reviewed_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${isAdmin ? "datetime('now')" : 'NULL'})
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${isAdmin ? "datetime('now')" : 'NULL'})
         `).run(
           project.id, uc.id, period.id, expense_date, category,
           amount_cents, currency, fx_rate ?? null, description,
+          category === 'overhead' ? overhead_subcategory : null,
+          category === 'overhead' ? allocation_basis     : null,
           initialStatus, isAdmin ? req.user.id : null,
         );
         return info.lastInsertRowid;
@@ -145,7 +180,8 @@ router.patch('/:id', (req, res, next) => {
     if (!isOwnerOrAdmin(req.user, current.user_claimant_id)) throw forbidden();
     assertEditable(current, { user: req.user });
 
-    const { expense_date, category, amount_cents, currency, fx_rate, description } = req.body ?? {};
+    const { expense_date, category, amount_cents, currency, fx_rate, description,
+            overhead_subcategory, allocation_basis } = req.body ?? {};
     const updates = {};
     if (expense_date !== undefined) updates.expense_date = expense_date;
     if (category !== undefined) {
@@ -160,6 +196,27 @@ router.patch('/:id', (req, res, next) => {
       if (!description) throw badRequest('description cannot be empty');
       updates.description = description;
     }
+    // Overhead fields: pass through; the cross-field validator below runs on
+    // the merged state so toggling category↔overhead is handled in one
+    // place. Treating `undefined` as "not supplied" and `null` as "explicit
+    // clear" — both surface to the merged-state check correctly because we
+    // only stash explicit-set updates here.
+    if (overhead_subcategory !== undefined) updates.overhead_subcategory = overhead_subcategory;
+    if (allocation_basis !== undefined) updates.allocation_basis = allocation_basis;
+
+    // Cross-field auto-null + validation: when category changes away from
+    // overhead and the caller didn't supply explicit nulls for the overhead
+    // fields, clear them automatically so the schema CHECK doesn't trip on
+    // stale data. Conversely, when category changes to 'overhead' we
+    // require both fields below (via validateOverheadFields on the merged
+    // row). Must happen before `keys` is captured so the auto-null entries
+    // are written to the UPDATE.
+    if (updates.category && updates.category !== 'overhead') {
+      if (updates.overhead_subcategory === undefined && current.overhead_subcategory !== null)
+        updates.overhead_subcategory = null;
+      if (updates.allocation_basis === undefined && current.allocation_basis !== null)
+        updates.allocation_basis = null;
+    }
 
     const keys = Object.keys(updates);
     if (keys.length === 0) return res.json(current);
@@ -172,6 +229,7 @@ router.patch('/:id', (req, res, next) => {
     const project = getProject(current.project_id);
     const claimant = getClaimant(project.claimant_id);
     validateFxAgainstClaimant(merged.currency, merged.fx_rate, claimant);
+    validateOverheadFields(merged.category, merged.overhead_subcategory, merged.allocation_basis);
 
     const { after } = mutateAndAudit({
       loader: getExpense,
