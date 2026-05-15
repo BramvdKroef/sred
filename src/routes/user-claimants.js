@@ -2,15 +2,16 @@ import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { badRequest } from '../lib/errors.js';
-import { audit } from '../lib/audit.js';
-import { getUserClaimant } from '../lib/route-helpers.js';
+import { getUserClaimant, mutateAndAudit, createAndAudit } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getUserClaimant(req.params.id);
+    // Pre-flight load so we can validate body fields and short-circuit no-op
+    // PATCH before writing an audit row.
+    const current = getUserClaimant(req.params.id);
     const { title, is_specified_employee, status, employment_start_date } = req.body ?? {};
 
     const updates = {};
@@ -32,14 +33,20 @@ router.patch('/:id', (req, res, next) => {
     }
 
     const keys = Object.keys(updates);
-    if (keys.length === 0) return res.json(before);
+    if (keys.length === 0) return res.json(current);
 
-    const setClause = keys.map(k => `${k} = ?`).join(', ');
-    db.prepare(`UPDATE user_claimants SET ${setClause} WHERE id = ?`)
-      .run(...keys.map(k => updates[k]), before.id);
-
-    const after = db.prepare(`SELECT * FROM user_claimants WHERE id = ?`).get(before.id);
-    audit(req.user.id, 'update', 'user_claimant', before.id, before, after);
+    const { after } = mutateAndAudit({
+      loader: getUserClaimant,
+      entityType: 'user_claimant',
+      id: req.params.id,
+      actorUserId: req.user.id,
+      action: 'update',
+      write: (before) => {
+        const setClause = keys.map(k => `${k} = ?`).join(', ');
+        db.prepare(`UPDATE user_claimants SET ${setClause} WHERE id = ?`)
+          .run(...keys.map(k => updates[k]), before.id);
+      },
+    });
     res.json(after);
   } catch (e) { next(e); }
 });
@@ -57,15 +64,21 @@ router.post('/:id/compensation', (req, res, next) => {
       throw badRequest('hours_per_year must be a positive integer');
     if (!effective_from) throw badRequest('effective_from required');
 
-    const info = db.prepare(`
-      INSERT INTO compensation_rows
-        (user_claimant_id, comp_type, amount_cents, hours_per_year, effective_from)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(uc.id, comp_type, amount_cents, hours_per_year ?? 2080, effective_from);
-
-    const row = db.prepare(`SELECT * FROM compensation_rows WHERE id = ?`).get(info.lastInsertRowid);
-    audit(req.user.id, 'create', 'compensation_row', row.id, undefined, row);
-    res.status(201).json(row);
+    const { after } = createAndAudit({
+      loader: (id) => db.prepare(`SELECT * FROM compensation_rows WHERE id = ?`).get(id),
+      entityType: 'compensation_row',
+      actorUserId: req.user.id,
+      action: 'create',
+      write: () => {
+        const info = db.prepare(`
+          INSERT INTO compensation_rows
+            (user_claimant_id, comp_type, amount_cents, hours_per_year, effective_from)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(uc.id, comp_type, amount_cents, hours_per_year ?? 2080, effective_from);
+        return info.lastInsertRowid;
+      },
+    });
+    res.status(201).json(after);
   } catch (e) { next(e); }
 });
 

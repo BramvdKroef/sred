@@ -29,6 +29,8 @@ let findOpenPeriod;
 let resolveUserClaimant;
 let isOwnerOrAdmin;
 let assertEditable;
+let mutateAndAudit;
+let createAndAudit;
 
 before(async () => {
   ctx = await setupTempDb();
@@ -41,6 +43,8 @@ before(async () => {
     resolveUserClaimant,
     isOwnerOrAdmin,
     assertEditable,
+    mutateAndAudit,
+    createAndAudit,
   } = await import('../../src/lib/route-helpers.js'));
 });
 
@@ -382,6 +386,123 @@ test('assertEditable: throws badRequest when the entry fiscal period is closed',
       return true;
     }
   );
+});
+
+// --- mutateAndAudit / createAndAudit ---------------------------------------
+
+function auditCount() {
+  return ctx.db.prepare(`SELECT COUNT(*) AS n FROM audit_log`).get().n;
+}
+
+function latestAuditRow() {
+  return ctx.db.prepare(`SELECT * FROM audit_log ORDER BY id DESC LIMIT 1`).get();
+}
+
+test('mutateAndAudit: reloads after writer, audits with before+after, returns both', () => {
+  const actorId = insertUser(ctx.db, { role: 'admin', email: 'mau-admin@example.com' });
+  const claimantId = insertClaimant(ctx.db, { legal_name: 'Mutate Co' });
+
+  const beforeCount = auditCount();
+  const { before, after } = mutateAndAudit({
+    loader: getClaimant,
+    entityType: 'claimant',
+    id: claimantId,
+    actorUserId: actorId,
+    action: 'update',
+    write: (b) => {
+      ctx.db.prepare(`UPDATE claimants SET legal_name = ? WHERE id = ?`)
+        .run('Mutate Co (renamed)', b.id);
+    },
+  });
+
+  assert.equal(before.legal_name, 'Mutate Co');
+  assert.equal(after.legal_name, 'Mutate Co (renamed)');
+  assert.equal(auditCount(), beforeCount + 1);
+  const row = latestAuditRow();
+  assert.equal(row.action, 'update');
+  assert.equal(row.entity_type, 'claimant');
+  assert.equal(row.entity_id, claimantId);
+  assert.equal(row.actor_user_id, actorId);
+  assert.equal(JSON.parse(row.before_json).legal_name, 'Mutate Co');
+  assert.equal(JSON.parse(row.after_json).legal_name, 'Mutate Co (renamed)');
+});
+
+test('mutateAndAudit: writer throw aborts mutation AND skips the audit row', () => {
+  const actorId = insertUser(ctx.db, { role: 'admin', email: 'mau-abort@example.com' });
+  const claimantId = insertClaimant(ctx.db, { legal_name: 'Abort Co' });
+
+  const beforeCount = auditCount();
+  assert.throws(() => mutateAndAudit({
+    loader: getClaimant,
+    entityType: 'claimant',
+    id: claimantId,
+    actorUserId: actorId,
+    action: 'update',
+    write: () => { throw new Error('boom'); },
+  }), /boom/);
+
+  // No audit row written.
+  assert.equal(auditCount(), beforeCount);
+  // Row unchanged.
+  assert.equal(getClaimant(claimantId).legal_name, 'Abort Co');
+});
+
+test('createAndAudit: writer returns new id, loader fetches row, audit has before=NULL', () => {
+  const actorId = insertUser(ctx.db, { role: 'admin', email: 'cau-admin@example.com' });
+
+  const beforeCount = auditCount();
+  const { after } = createAndAudit({
+    loader: getClaimant,
+    entityType: 'claimant',
+    actorUserId: actorId,
+    action: 'create',
+    write: () => {
+      const info = ctx.db.prepare(`
+        INSERT INTO claimants
+          (legal_name, business_number, fiscal_year_end_month, fiscal_year_end_day,
+           reporting_currency, sred_method)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run('Created Co', '111222333RC0001', 12, 31, 'CAD', 'proxy');
+      return info.lastInsertRowid;
+    },
+  });
+
+  assert.equal(after.legal_name, 'Created Co');
+  assert.equal(auditCount(), beforeCount + 1);
+  const row = latestAuditRow();
+  assert.equal(row.action, 'create');
+  assert.equal(row.entity_type, 'claimant');
+  assert.equal(row.entity_id, after.id);
+  assert.equal(row.before_json, null);
+  assert.equal(JSON.parse(row.after_json).legal_name, 'Created Co');
+});
+
+test('createAndAudit: afterJson overrides the row in the audit payload', () => {
+  const actorId = insertUser(ctx.db, { role: 'admin', email: 'cau-summary@example.com' });
+  const summary = { delivered_to: 'someone@example.com', total_cents: 12345 };
+
+  const { after } = createAndAudit({
+    loader: getClaimant,
+    entityType: 'claimant',
+    actorUserId: actorId,
+    action: 'export_summary',
+    afterJson: summary,
+    write: () => {
+      const info = ctx.db.prepare(`
+        INSERT INTO claimants
+          (legal_name, business_number, fiscal_year_end_month, fiscal_year_end_day,
+           reporting_currency, sred_method)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run('Summary Co', '999000111RC0001', 12, 31, 'CAD', 'proxy');
+      return info.lastInsertRowid;
+    },
+  });
+
+  // Response carries the full row…
+  assert.equal(after.legal_name, 'Summary Co');
+  // …but the audit row's after_json is the summary, not the entity row.
+  const row = latestAuditRow();
+  assert.deepEqual(JSON.parse(row.after_json), summary);
 });
 
 test('assertEditable: throws notFound when the entry\'s fiscal period row is missing', () => {

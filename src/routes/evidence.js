@@ -9,7 +9,7 @@ import { requireAuth } from '../auth/middleware.js';
 import { badRequest, notFound, forbidden } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { randomToken } from '../lib/random.js';
-import { getEvidence, findOpenPeriod } from '../lib/route-helpers.js';
+import { getEvidence, findOpenPeriod, mutateAndAudit, createAndAudit } from '../lib/route-helpers.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -247,20 +247,26 @@ router.post('/', upload.single('file'), async (req, res, next) => {
       noteVal = noteText;
     }
 
-    const info = db.prepare(`
-      INSERT INTO evidence_items
-        (project_id, fiscal_period_id, uploaded_by_user_id, labour_entry_id, expense_id,
-         kind, caption, evidence_date, file_path, file_size, file_mime, url, note_text)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      project.id, fiscalPeriodId, req.user.id,
-      labourEntryId, expenseId,
-      kind, caption, evidenceDate,
-      filePath, fileSize, fileMime, urlVal, noteVal,
-    );
-
-    const created = getEvidence(info.lastInsertRowid);
-    audit(req.user.id, 'create', 'evidence_item', created.id, undefined, created);
+    const { after: created } = createAndAudit({
+      loader: getEvidence,
+      entityType: 'evidence_item',
+      actorUserId: req.user.id,
+      action: 'create',
+      write: () => {
+        const info = db.prepare(`
+          INSERT INTO evidence_items
+            (project_id, fiscal_period_id, uploaded_by_user_id, labour_entry_id, expense_id,
+             kind, caption, evidence_date, file_path, file_size, file_mime, url, note_text)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          project.id, fiscalPeriodId, req.user.id,
+          labourEntryId, expenseId,
+          kind, caption, evidenceDate,
+          filePath, fileSize, fileMime, urlVal, noteVal,
+        );
+        return info.lastInsertRowid;
+      },
+    });
     res.status(201).json(created);
   } catch (e) {
     // Clean up the uploaded file if validation rejected the request.
@@ -291,9 +297,11 @@ router.get('/:id/download', (req, res, next) => {
 
 router.patch('/:id', (req, res, next) => {
   try {
-    const before = getEvidence(req.params.id);
-    if (!canSee(req.user, before)) throw forbidden();
-    const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(before.fiscal_period_id);
+    // Pre-flight load + validation BEFORE mutateAndAudit so no audit row is
+    // written if the period is closed / body is empty / fields don't apply.
+    const current = getEvidence(req.params.id);
+    if (!canSee(req.user, current)) throw forbidden();
+    const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(current.fiscal_period_id);
     if (period?.status === 'closed') throw badRequest('fiscal period is closed');
 
     const { caption, evidence_date, url, note_text } = req.body ?? {};
@@ -303,32 +311,38 @@ router.patch('/:id', (req, res, next) => {
       updates.caption = caption;
     }
     if (evidence_date !== undefined) updates.evidence_date = evidence_date;
-    if (before.kind === 'link' && url !== undefined) {
+    if (current.kind === 'link' && url !== undefined) {
       if (!url) throw badRequest('url cannot be empty');
       updates.url = validateLinkUrl(url);
     }
-    if (before.kind === 'note' && note_text !== undefined) {
+    if (current.kind === 'note' && note_text !== undefined) {
       if (!note_text) throw badRequest('note_text cannot be empty');
       updates.note_text = note_text;
     }
 
     const keys = Object.keys(updates);
-    if (keys.length === 0) return res.json(before);
+    if (keys.length === 0) return res.json(current);
 
-    // Re-bucket the fiscal period if evidence_date moves.
-    let newPeriodId = before.fiscal_period_id;
-    if (updates.evidence_date && updates.evidence_date !== before.evidence_date) {
-      const proj = db.prepare(`SELECT claimant_id FROM projects WHERE id = ?`).get(before.project_id);
-      newPeriodId = findOpenPeriod(proj.claimant_id, updates.evidence_date).id;
-    }
+    const { after } = mutateAndAudit({
+      loader: getEvidence,
+      entityType: 'evidence_item',
+      id: req.params.id,
+      actorUserId: req.user.id,
+      action: 'update',
+      write: (before) => {
+        // Re-bucket the fiscal period if evidence_date moves.
+        let newPeriodId = before.fiscal_period_id;
+        if (updates.evidence_date && updates.evidence_date !== before.evidence_date) {
+          const proj = db.prepare(`SELECT claimant_id FROM projects WHERE id = ?`).get(before.project_id);
+          newPeriodId = findOpenPeriod(proj.claimant_id, updates.evidence_date).id;
+        }
 
-    const setParts = keys.map(k => `${k} = ?`);
-    setParts.push('fiscal_period_id = ?');
-    const values = [...keys.map(k => updates[k]), newPeriodId, before.id];
-    db.prepare(`UPDATE evidence_items SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
-
-    const after = getEvidence(before.id);
-    audit(req.user.id, 'update', 'evidence_item', before.id, before, after);
+        const setParts = keys.map(k => `${k} = ?`);
+        setParts.push('fiscal_period_id = ?');
+        const values = [...keys.map(k => updates[k]), newPeriodId, before.id];
+        db.prepare(`UPDATE evidence_items SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
+      },
+    });
     res.json(after);
   } catch (e) { next(e); }
 });
