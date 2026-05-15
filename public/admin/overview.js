@@ -42,7 +42,7 @@ export async function render(main, ctx) {
       ${activityHtml(activity.items, { showActor: true, showOpen: true })}
     </div>
   `;
-  wireActivityDetails(main);
+  wireActivityDetails(main, { currentUser: ctx?.state?.me?.user });
 }
 
 function renderFirstRunChecklist(main) {

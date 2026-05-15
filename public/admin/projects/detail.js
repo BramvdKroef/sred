@@ -84,7 +84,7 @@ export async function renderProjectDetail(main, ctx) {
       ${activityHtml(activity.items, { showActor: true, showProject: false, showOpen: true })}
     </div>
   `;
-  wireActivityDetails(main);
+  wireActivityDetails(main, { currentUser: ctx?.state?.me?.user });
   wireRevisionsCard(main);
   document.getElementById('back-to-projects').addEventListener('click', e => {
     e.preventDefault();

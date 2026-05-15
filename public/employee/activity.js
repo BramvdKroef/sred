@@ -1,4 +1,5 @@
-import { api, esc, cents, dollarsToCents, onSubmit, wireJwtDownloads, safeHref, lockReason, statusPill } from '../api.js';
+import { api, esc, cents, onSubmit, wireJwtDownloads, safeHref, lockReason, statusPill,
+         labourEditFormHtml, expenseEditFormHtml, submitLabourEdit, submitExpenseEdit } from '../api.js';
 
 // Pure reducer over the three lists currently in state. Sums approved-vs-
 // pending hours, expense amounts (in cents, grouped per-currency since FX
@@ -211,28 +212,16 @@ function totalsCard(state) {
 
 // --- Inline row-edit forms (one per type) ---------------------------------
 
+// Inline edit forms — markup shared with the admin activity-feed expansion
+// via labourEditFormHtml / expenseEditFormHtml in public/api.js. This shell
+// passes its own data-cancel-* attribute so the row's Cancel button hides
+// the form-row rather than re-rendering the detail panel.
 function labourEditForm(e) {
-  return `<form data-form-edit-labour="${e.id}" class="row gap-md inline-edit-row">
-    <div><label>Date <input type="date" name="work_date" value="${esc(e.work_date)}" required></label></div>
-    <div><label>Hours <input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required class="w-hours"></label></div>
-    <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime" ${e.is_overtime ? 'checked' : ''}> Overtime</label></div>
-    <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
-    <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save labour entry</button><button type="button" class="small secondary" data-cancel-labour="${e.id}">Cancel</button></div></div>
-  </form>`;
+  return labourEditFormHtml(e, { cancelAttr: `data-cancel-labour="${e.id}"` });
 }
 
 function expenseEditForm(e) {
-  const cats = ['material','contract','third_party_payment','overhead'];
-  return `<form data-form-edit-expense="${e.id}" class="row gap-md inline-edit-row wrap">
-    <div><label>Date <input type="date" name="expense_date" value="${esc(e.expense_date)}" required></label></div>
-    <div><label>Category <select name="category">${cats.map(c =>
-      `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
-    <div><label>Amount <span class="muted">(${esc(e.currency)})</span> <input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required class="w-amount"></label></div>
-    <div><label>Currency <input name="currency" value="${esc(e.currency)}" required class="w-ccy"></label></div>
-    <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" class="w-hours"></label></div>
-    <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
-    <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save expense</button><button type="button" class="small secondary" data-cancel-expense="${e.id}">Cancel</button></div></div>
-  </form>`;
+  return expenseEditFormHtml(e, { cancelAttr: `data-cancel-expense="${e.id}"` });
 }
 
 function evidenceEditForm(e) {
@@ -271,29 +260,12 @@ function bindActivity(main, ctx) {
   }
 
   main.querySelectorAll('[data-form-edit-labour]').forEach(form => onSubmit(form, async fd => {
-    await api('PATCH', `/api/labour/${form.dataset.formEditLabour}`, {
-      work_date: fd.get('work_date'),
-      hours: Number(fd.get('hours')),
-      description: fd.get('description'),
-      is_overtime: fd.get('is_overtime') === 'on',
-    });
+    await submitLabourEdit(form.dataset.formEditLabour, fd);
     await ctx.reload();
   }));
 
   main.querySelectorAll('[data-form-edit-expense]').forEach(form => onSubmit(form, async fd => {
-    const amountCents = dollarsToCents(fd.get('amount'));
-    if (amountCents == null || Number.isNaN(amountCents))
-      throw new Error('Enter the amount in dollars (e.g. 1234.56).');
-    const body = {
-      expense_date: fd.get('expense_date'),
-      category: fd.get('category'),
-      amount_cents: amountCents,
-      currency: fd.get('currency') || 'CAD',
-      description: fd.get('description'),
-    };
-    const fx = fd.get('fx_rate');
-    body.fx_rate = fx ? Number(fx) : null;
-    await api('PATCH', `/api/expenses/${form.dataset.formEditExpense}`, body);
+    await submitExpenseEdit(form.dataset.formEditExpense, fd);
     await ctx.reload();
   }));
 

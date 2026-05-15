@@ -126,8 +126,14 @@ router.get('/:id', (req, res, next) => {
   try {
     const e = getExpense(req.params.id);
     if (!isOwnerOrAdmin(req.user, e.user_claimant_id)) throw forbidden();
-    res.json(e);
-  } catch (e) { next(e); }
+    // Mirror the list endpoint by exposing the parent period's status as a
+    // derived field. The admin inline-edit affordance in the activity-feed
+    // expansion needs this to decide whether to render the edit form (a
+    // closed period locks the entry — same rule the server's assertEditable
+    // already enforces).
+    const period = db.prepare(`SELECT status FROM fiscal_periods WHERE id = ?`).get(e.fiscal_period_id);
+    res.json({ ...e, period_status: period?.status ?? null });
+  } catch (e2) { next(e2); }
 });
 
 router.patch('/:id', (req, res, next) => {

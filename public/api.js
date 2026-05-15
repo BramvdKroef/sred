@@ -415,6 +415,91 @@ export function lockReason(entry, period) {
   return null;
 }
 
+// Can the currently-signed-in admin edit this labour/expense entry?
+// Mirrors the server's assertEditable rules in src/lib/route-helpers.js:
+//   - pending / rejected entries: editable
+//   - approved entries: editable ONLY by the admin who approved them
+//                       (so they can fix their own auto-approved typos)
+//   - closed period: never editable
+// `currentUser` must be the admin's `me.user` (carries id + role).
+// Non-admins always get false here — employees use their own inline editor
+// in the employee SPA, not the activity-feed expansion. Returns false on
+// missing inputs so callers can guard the affordance unconditionally.
+export function canAdminEdit(entry, currentUser) {
+  if (!entry || !currentUser || currentUser.role !== 'admin') return false;
+  if (entry.period_status === 'closed') return false;
+  if (entry.status === 'approved') {
+    return entry.reviewed_by_user_id === currentUser.id;
+  }
+  // pending or rejected → admin can edit (rejected PATCH reverts to pending,
+  // approved-self PATCH also reverts to pending — both handled server-side).
+  return entry.status === 'pending' || entry.status === 'rejected';
+}
+
+// Inline edit-form markup for labour entries. Used by both the employee SPA
+// row-edit (one form per row) AND by the admin activity-feed expansion
+// (one form per opened detail panel). The form name is intentionally
+// configurable so callers can scope event delegation by id; default matches
+// the employee SPA's existing `data-form-edit-labour="<id>"` selector.
+export function labourEditFormHtml(e, opts = {}) {
+  const attr = opts.formAttr ?? `data-form-edit-labour="${e.id}"`;
+  return `<form ${attr} class="row gap-md inline-edit-row">
+    <div><label>Date <input type="date" name="work_date" value="${esc(e.work_date)}" required></label></div>
+    <div><label>Hours <input type="number" name="hours" step="0.25" min="0.25" max="24" value="${e.hours}" required class="w-hours"></label></div>
+    <div><label>&nbsp;</label><label class="checkbox-label"><input type="checkbox" name="is_overtime" ${e.is_overtime ? 'checked' : ''}> Overtime</label></div>
+    <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
+    <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save labour entry</button>${opts.cancelAttr ? `<button type="button" class="small secondary" ${opts.cancelAttr}>Cancel</button>` : ''}</div></div>
+  </form>`;
+}
+
+// Inline edit-form markup for expense entries. See labourEditFormHtml for
+// the configurability rationale.
+export function expenseEditFormHtml(e, opts = {}) {
+  const cats = ['material','contract','third_party_payment','overhead'];
+  const attr = opts.formAttr ?? `data-form-edit-expense="${e.id}"`;
+  return `<form ${attr} class="row gap-md inline-edit-row wrap">
+    <div><label>Date <input type="date" name="expense_date" value="${esc(e.expense_date)}" required></label></div>
+    <div><label>Category <select name="category">${cats.map(c =>
+      `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
+    <div><label>Amount <span class="muted">(${esc(e.currency)})</span> <input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required class="w-amount"></label></div>
+    <div><label>Currency <input name="currency" value="${esc(e.currency)}" required class="w-ccy"></label></div>
+    <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" class="w-hours"></label></div>
+    <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
+    <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save expense</button>${opts.cancelAttr ? `<button type="button" class="small secondary" ${opts.cancelAttr}>Cancel</button>` : ''}</div></div>
+  </form>`;
+}
+
+// Submit a PATCH /api/labour/:id from a FormData built off labourEditFormHtml.
+// Pure helper so both shells (employee row-edit + admin activity expansion)
+// hit the same wire format. Throws on validation errors so the calling
+// onSubmit wrapper renders the inline banner.
+export async function submitLabourEdit(id, fd) {
+  return api('PATCH', `/api/labour/${id}`, {
+    work_date: fd.get('work_date'),
+    hours: Number(fd.get('hours')),
+    description: fd.get('description'),
+    is_overtime: fd.get('is_overtime') === 'on',
+  });
+}
+
+// Submit a PATCH /api/expenses/:id from a FormData built off
+// expenseEditFormHtml. See submitLabourEdit for the rationale.
+export async function submitExpenseEdit(id, fd) {
+  const amountCents = dollarsToCents(fd.get('amount'));
+  if (amountCents == null || Number.isNaN(amountCents))
+    throw new Error('Enter the amount in dollars (e.g. 1234.56).');
+  const body = {
+    expense_date: fd.get('expense_date'),
+    category: fd.get('category'),
+    amount_cents: amountCents,
+    currency: fd.get('currency') || 'CAD',
+    description: fd.get('description'),
+  };
+  const fx = fd.get('fx_rate');
+  body.fx_rate = fx ? Number(fx) : null;
+  return api('PATCH', `/api/expenses/${id}`, body);
+}
+
 export const $ = sel => document.querySelector(sel);
 export const $$ = sel => document.querySelectorAll(sel);
 
@@ -488,7 +573,11 @@ function activityRow(it, { showActor, showProject, showOpen }) {
 }
 
 // Wire Open buttons in any container that has activityHtml({ showOpen: true }).
-export function wireActivityDetails(root) {
+// `opts.currentUser` (optional) enables the admin inline-edit affordance for
+// labour/expense rows: when the signed-in admin is the approving admin (or
+// the entry is pending/rejected) AND the period is open, the expansion shows
+// a "✎ Edit fields" details block that PATCHes the entry on submit.
+export function wireActivityDetails(root, opts = {}) {
   root.querySelectorAll('[data-open-activity]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const type = btn.dataset.actType;
@@ -499,19 +588,34 @@ export function wireActivityDetails(root) {
       tr.hidden = false;
       btn.textContent = 'Close';
       cell.innerHTML = '<p class="muted">Loading…</p>';
-      try { await renderAndWireDetail(cell, type, id); }
+      try { await renderAndWireDetail(cell, type, id, opts); }
       catch (e) { cell.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
     });
   });
 }
 
-async function renderAndWireDetail(cell, type, id) {
-  cell.innerHTML = await fetchActivityDetail(type, id);
+async function renderAndWireDetail(cell, type, id, opts = {}) {
+  cell.innerHTML = await fetchActivityDetail(type, id, opts);
   wireJwtDownloads(cell);
-  wireAttachForm(cell, type, id);
+  wireAttachForm(cell, type, id, opts);
+  wireInlineEditForm(cell, type, id, opts);
 }
 
-function wireAttachForm(cell, type, id) {
+// Wire the admin inline-edit form (if rendered). The form re-renders the
+// whole expansion on success so the freshly-PATCHed values + audit log
+// appear without a page reload — same pattern wireAttachForm uses.
+function wireInlineEditForm(cell, type, id, opts) {
+  const form = cell.querySelector('[data-inline-edit-form]');
+  if (!form) return;
+  onSubmit(form, async fd => {
+    if (type === 'labour')       await submitLabourEdit(id, fd);
+    else if (type === 'expense') await submitExpenseEdit(id, fd);
+    else return;
+    await renderAndWireDetail(cell, type, id, opts);
+  });
+}
+
+function wireAttachForm(cell, type, id, opts = {}) {
   const form = cell.querySelector('[data-attach-form]');
   if (!form) return;
   bindEvidenceKindToggle(form);
@@ -541,21 +645,21 @@ function wireAttachForm(cell, type, id) {
     } else {
       throw new Error('Pick a kind');
     }
-    await renderAndWireDetail(cell, type, id);
+    await renderAndWireDetail(cell, type, id, opts);
   });
 }
 
-async function fetchActivityDetail(type, id) {
+async function fetchActivityDetail(type, id, opts = {}) {
   const auditType = type === 'labour' ? 'labour_entry' : type === 'expense' ? 'expense' : 'evidence_item';
   const entityUrl = type === 'labour' ? `/api/labour/${id}` : type === 'expense' ? `/api/expenses/${id}` : `/api/evidence/${id}`;
   const linkedUrl = type === 'labour' ? `/api/evidence?labour_entry_id=${id}` : type === 'expense' ? `/api/evidence?expense_id=${id}` : null;
   const tasks = [api('GET', entityUrl), api('GET', `/api/audit-log?entity_type=${auditType}&entity_id=${id}&limit=20`)];
   if (linkedUrl) tasks.push(api('GET', linkedUrl));
   const [entity, audit, linked] = await Promise.all(tasks);
-  return renderActivityDetail(type, entity, audit.items, (linked?.items ?? []));
+  return renderActivityDetail(type, entity, audit.items, (linked?.items ?? []), opts);
 }
 
-function renderActivityDetail(type, e, auditItems, linkedEv) {
+function renderActivityDetail(type, e, auditItems, linkedEv, opts = {}) {
   const head = `<div class="grid activity-detail-grid">`;
   let body = head;
   if (type === 'labour') {
@@ -601,6 +705,20 @@ function renderActivityDetail(type, e, auditItems, linkedEv) {
           ev.kind === 'link' ? `· <a href="${esc(safeHref(ev.url))}" target="_blank" rel="noopener">${esc(ev.url)}</a>` :
           `· <span class="muted">${esc((ev.note_text ?? '').slice(0, 120))}</span>`
         }</li>`).join('')}</ul>`;
+    }
+    // Admin inline-edit affordance: only when the signed-in admin is allowed
+    // to PATCH this entry per the same rules the server enforces in
+    // assertEditable. Renders above the attach-evidence form so the order
+    // matches the natural "fix data, then attach evidence" workflow.
+    if (canAdminEdit(e, opts.currentUser)) {
+      const formHtml = type === 'labour'
+        ? labourEditFormHtml(e, { formAttr: 'data-inline-edit-form' })
+        : expenseEditFormHtml(e, { formAttr: 'data-inline-edit-form' });
+      body += `
+        <details class="mt-sm">
+          <summary class="summary-link">✎ Edit fields</summary>
+          <div class="mt-sm">${formHtml}</div>
+        </details>`;
     }
     const entryDate = type === 'labour' ? e.work_date : e.expense_date;
     body += `
