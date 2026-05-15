@@ -2,6 +2,7 @@
 // edit-project card and wires its PATCH submission, including the 409
 // conflict banner that fires when another admin saved a newer version.
 import { api, esc } from '../../api.js';
+import { mountNarrativeHelper } from './narrative-helper.js';
 
 export function renderEditProjectForm(project, managers) {
   const managerOpts = managers.map(u =>
@@ -76,6 +77,10 @@ export function bindEditProjectForm(project, ctx) {
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   if (cancel) cancel.addEventListener('click', () => { card.hidden = true; });
+
+  // Mount the narrative helper next to the edit-project form. Advisory
+  // only — it doesn't gate submit. Re-runs on debounced input.
+  mountNarrativeHelper(form);
 
   // Snapshot the updated_at at form-bind time. We pass it on PATCH so the
   // server can reject (409) if another admin saved a newer version while
