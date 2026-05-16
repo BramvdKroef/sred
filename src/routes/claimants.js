@@ -189,6 +189,8 @@ router.post('/:id/projects', (req, res, next) => {
       advancement_sought,
       uncertainties,
       work_performed,
+      hypothesis,
+      uncertainty_identified_at,
     } = req.body ?? {};
 
     if (!title || typeof title !== 'string') throw badRequest('title required');
@@ -197,6 +199,13 @@ router.post('/:id/projects', (req, res, next) => {
       throw badRequest('status must be concept|development|complete');
     if (!['sred', 'internal'].includes(type))
       throw badRequest('type must be sred|internal');
+    // Date shape mirrors the column CHECK. We catch it here so a malformed
+    // value surfaces as a 400 (not as a CHECK violation -> 500).
+    if (uncertainty_identified_at !== undefined &&
+        uncertainty_identified_at !== null &&
+        !/^\d{4}-\d{2}-\d{2}$/.test(String(uncertainty_identified_at))) {
+      throw badRequest('uncertainty_identified_at must be an ISO date (YYYY-MM-DD) or null');
+    }
     if (manager_user_id !== null) {
       if (!Number.isInteger(manager_user_id))
         throw badRequest('manager_user_id must be an integer or null');
@@ -221,8 +230,9 @@ router.post('/:id/projects', (req, res, next) => {
           const info = db.prepare(`
             INSERT INTO projects
               (claimant_id, title, field_of_science, start_date, end_date, status,
-               type, manager_user_id, advancement_sought, uncertainties, work_performed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               type, manager_user_id, advancement_sought, uncertainties, work_performed,
+               hypothesis, uncertainty_identified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             claimant.id,
             title,
@@ -235,13 +245,16 @@ router.post('/:id/projects', (req, res, next) => {
             advancement_sought ?? null,
             uncertainties ?? null,
             work_performed ?? null,
+            hypothesis ?? null,
+            uncertainty_identified_at ?? null,
           );
           const projectId = info.lastInsertRowid;
           db.prepare(`
             INSERT INTO project_revisions
               (project_id, title, field_of_science, advancement_sought, uncertainties,
-               work_performed, type, manager_user_id, revised_by_user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               work_performed, hypothesis, uncertainty_identified_at,
+               type, manager_user_id, revised_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             projectId,
             title,
@@ -249,6 +262,8 @@ router.post('/:id/projects', (req, res, next) => {
             advancement_sought ?? null,
             uncertainties ?? null,
             work_performed ?? null,
+            hypothesis ?? null,
+            uncertainty_identified_at ?? null,
             type,
             manager_user_id,
             req.user.id,

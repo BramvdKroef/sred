@@ -106,6 +106,12 @@ function renderProjectsAndUsers(state) {
             <div class="full"><label>Technological uncertainties
               <textarea name="uncertainties" rows="3" placeholder="What is uncertain or not knowable from existing knowledge?"></textarea>
             </label></div>
+            <div class="full"><label>Hypothesis
+              <textarea name="hypothesis" rows="3" placeholder="The working hypothesis the team tested to resolve the uncertainty."></textarea>
+            </label></div>
+            <div><label>Uncertainty identified on
+              <input type="date" name="uncertainty_identified_at">
+            </label></div>
             <div class="full"><label>Work performed
               <textarea name="work_performed" rows="4" placeholder="Systematic investigation: experiments, hypotheses tested, outcomes."></textarea>
             </label></div>
@@ -324,6 +330,8 @@ export function bindList(ctx) {
       advancement_sought: fd.get('advancement_sought') || null,
       uncertainties: fd.get('uncertainties') || null,
       work_performed: fd.get('work_performed') || null,
+      hypothesis: fd.get('hypothesis') || null,
+      uncertainty_identified_at: fd.get('uncertainty_identified_at') || null,
     });
     await reloadAll();
   });

@@ -69,6 +69,15 @@ export function mountNarrativeHelper(formEl, fields = FIELDS) {
       const el = formEl.elements?.namedItem?.(name) ?? formEl.querySelector(`[name="${name}"]`);
       out[name] = el ? (el.value ?? '') : '';
     }
+    // Migration 016: pass `hypothesis` through to the checker even though
+    // it isn't one of the three primary narrative fields. The checker uses
+    // its presence to soften the "uncertainties needs a hypothesis-shaped
+    // phrase" rule (the hypothesis now lives in its own field, so requiring
+    // it inside `uncertainties` produces false noise).
+    if (!('hypothesis' in out)) {
+      const hypEl = formEl.elements?.namedItem?.('hypothesis') ?? formEl.querySelector('[name="hypothesis"]');
+      if (hypEl) out.hypothesis = hypEl.value ?? '';
+    }
     return out;
   }
 
@@ -98,7 +107,11 @@ export function mountNarrativeHelper(formEl, fields = FIELDS) {
   // Attach listeners on each textarea. We use 'input' for live typing
   // and 'change' as a safety net for paste / programmatic value sets.
   const listenerOff = [];
-  for (const name of fields) {
+  // Also watch the migration-016 `hypothesis` field if it's present, so
+  // editing it triggers a re-check (which toggles the
+  // uncertainties-needs-hypothesis carve-out).
+  const watchNames = fields.includes('hypothesis') ? fields : [...fields, 'hypothesis'];
+  for (const name of watchNames) {
     const el = formEl.elements?.namedItem?.(name) ?? formEl.querySelector(`[name="${name}"]`);
     if (!el) continue;
     const onInput = () => schedule();

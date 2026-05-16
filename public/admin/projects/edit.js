@@ -51,6 +51,12 @@ export function renderEditProjectForm(project, managers) {
           <div class="full"><label>Technological uncertainties
             <textarea name="uncertainties" rows="3">${esc(project.uncertainties ?? '')}</textarea>
           </label></div>
+          <div class="full"><label>Hypothesis
+            <textarea name="hypothesis" rows="3">${esc(project.hypothesis ?? '')}</textarea>
+          </label></div>
+          <div><label>Uncertainty identified on
+            <input type="date" name="uncertainty_identified_at" value="${esc(project.uncertainty_identified_at ?? '')}">
+          </label></div>
           <div class="full"><label>Work performed
             <textarea name="work_performed" rows="4">${esc(project.work_performed ?? '')}</textarea>
           </label></div>
@@ -110,6 +116,8 @@ export function bindEditProjectForm(project, ctx) {
         advancement_sought: fd.get('advancement_sought') || null,
         uncertainties: fd.get('uncertainties') || null,
         work_performed: fd.get('work_performed') || null,
+        hypothesis: fd.get('hypothesis') || null,
+        uncertainty_identified_at: fd.get('uncertainty_identified_at') || null,
       });
       await ctx.reloadAll();
     } catch (err) {

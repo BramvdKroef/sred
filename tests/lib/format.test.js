@@ -45,7 +45,10 @@ function makeTotals({ worksheet, projectOvertimeHours, projectRegularHours }) {
         start_date: '2025-01-01',
         end_date: null,
         status: 'development',
-        narrative: { advancement_sought: '', uncertainties: '', work_performed: '' },
+        narrative: {
+          advancement_sought: '', uncertainties: '', work_performed: '',
+          hypothesis: null, uncertainty_identified_at: null,
+        },
         totals: {
           labour_cost_cents: labourCostCents,
           labour_hours_total:    (projectRegularHours ?? 0) + (projectOvertimeHours ?? 0),
@@ -239,6 +242,47 @@ test('toCsv: header row exposes t661_line column and each total row carries its 
   assert.ok(lines.some(l => l.startsWith('overhead,10,P1,360,CAD,')),  `overhead row missing 360:\n${csv}`);
   // Dollar amount (in cents) still present (regression guard).
   assert.ok(csv.includes(',40000'), 'labour cost cents value still present');
+});
+
+// Migration 016 (SRED_DOMAIN_REVIEW P3) — the Narrative section in the
+// per-project block must surface the new hypothesis + uncertainty-identified
+// fields next to the existing three free-text fields.
+test('toMarkdown: per-project Narrative surfaces hypothesis + uncertainty_identified_at', () => {
+  const totals = makeTotals({
+    projectRegularHours: 8, projectOvertimeHours: 0,
+    worksheet: [{
+      user_claimant_id: 1, user_id: 1, employee_name: 'Alice', employee_email: 'a@example.com',
+      is_specified_employee: false,
+      total_hours: 8, regular_hours: 8, overtime_hours: 0,
+      labour_cost_cents: 40_000, cap_applied: false,
+    }],
+  });
+  totals.projects[0].narrative = {
+    advancement_sought: 'adv',
+    uncertainties: 'unc',
+    work_performed: 'wp',
+    hypothesis: 'token-bucket converges under correlated churn',
+    uncertainty_identified_at: '2024-04-22',
+  };
+  const md = toMarkdown(totals);
+  assert.match(md, /\*\*Hypothesis:\*\* token-bucket converges under correlated churn/);
+  assert.match(md, /\*\*Uncertainty identified:\*\* 2024-04-22/);
+});
+
+test('toMarkdown: null hypothesis + null uncertainty_identified_at render as "(unset)"', () => {
+  const totals = makeTotals({
+    projectRegularHours: 8, projectOvertimeHours: 0,
+    worksheet: [{
+      user_claimant_id: 1, user_id: 1, employee_name: 'Alice', employee_email: 'a@example.com',
+      is_specified_employee: false,
+      total_hours: 8, regular_hours: 8, overtime_hours: 0,
+      labour_cost_cents: 40_000, cap_applied: false,
+    }],
+  });
+  // Default narrative already has hypothesis=null + uncertainty_identified_at=null
+  const md = toMarkdown(totals);
+  assert.match(md, /\*\*Hypothesis:\*\* _\(unset\)_/);
+  assert.match(md, /\*\*Uncertainty identified:\*\* _\(unset\)_/);
 });
 
 test('toPdf: emits T661 line annotations for each total category', async () => {

@@ -54,6 +54,8 @@ function renderRevisionDetail(r) {
       <div><strong>Manager:</strong> ${esc(managerName)}</div>
       <div class="full"><strong>Advancement sought:</strong><br>${esc(r.advancement_sought ?? '—')}</div>
       <div class="full"><strong>Uncertainties:</strong><br>${esc(r.uncertainties ?? '—')}</div>
+      <div class="full"><strong>Hypothesis:</strong><br>${esc(r.hypothesis ?? '—')}</div>
+      <div><strong>Uncertainty identified:</strong> ${esc(r.uncertainty_identified_at ?? '—')}</div>
       <div class="full"><strong>Work performed:</strong><br>${esc(r.work_performed ?? '—')}</div>
     </div>`;
 }
