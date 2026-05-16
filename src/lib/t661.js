@@ -142,9 +142,17 @@ export function computeT661({ claimant, period }) {
         // by schema CHECK.
         overhead_subcategory: e.overhead_subcategory ?? null,
         allocation_basis:     e.allocation_basis ?? null,
+        // Migration 015 P3: material disposition (320 vs 325), contract
+        // arm's-length flag, and fx-rate source attribution. Each is null
+        // for rows where the category doesn't apply (schema CHECKs ensure
+        // this). The formatter uses these to print the CRA sub-bucketing
+        // in `categoryLabel`.
+        material_disposition: e.material_disposition ?? null,
+        contract_arms_length: e.contract_arms_length ?? null,
         amount_cents: e.amount_cents,
         currency: e.currency,
         fx_rate: e.fx_rate,
+        fx_rate_source: e.fx_rate_source ?? null,
         reporting_amount_cents: rep,
         description: e.description,
       };

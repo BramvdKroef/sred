@@ -18,6 +18,21 @@ const VALID_CATEGORIES = ['material', 'contract', 'third_party_payment', 'overhe
 // F5). Schema-level CHECK at migration 014 mirrors this list.
 const VALID_OVERHEAD_SUBCATEGORIES = ['rent', 'utilities', 'maintenance', 'supporting_salaries', 'other'];
 
+// Migration 015 / SRED_DOMAIN_REVIEW P3:
+//
+//   - material_disposition: T661 line 320 vs 325 split — required when
+//     category='material'. The schema CHECK keeps it null on non-material
+//     rows; the route enforces presence here so a bare 'material' POST
+//     fails 400 (not SQLITE_CONSTRAINT).
+//   - contract_arms_length: 1/0 flag for arm's-length vs non-arm's-length
+//     SR&ED contracts — required when category='contract'. CRA caps NAL
+//     contract eligibility at the contractor's allowable cost; surfacing
+//     the flag is the first hop to enforcing that downstream.
+//   - fx_rate_source: free-text attribution required whenever fx_rate is
+//     populated. Audit-defensibility (cf. SRED_DOMAIN_REVIEW F4) — the
+//     tax preparer needs to know which rate was used.
+const VALID_MATERIAL_DISPOSITIONS = ['consumed', 'transformed'];
+
 // --- helpers ---------------------------------------------------------------
 
 function validateAmount(amount_cents) {
@@ -29,6 +44,62 @@ function validateFxAgainstClaimant(currency, fx_rate, claimant) {
   if (currency && currency !== claimant.reporting_currency) {
     if (typeof fx_rate !== 'number' || fx_rate <= 0)
       throw badRequest(`fx_rate (to ${claimant.reporting_currency}) required when currency != reporting currency`);
+  }
+}
+
+// Migration 015 / P3.3 — whenever fx_rate is populated, fx_rate_source must
+// be a non-empty string. Documenting which CRA-acceptable rate was used
+// (e.g. "Bank of Canada noon rate, 2026-03-15") so the conversion is
+// defensible at audit. Called on the merged-state row from both POST and
+// PATCH so toggling fx_rate on/off resolves consistently.
+function validateFxRateSource(fx_rate, fx_rate_source) {
+  if (fx_rate == null) {
+    // No fx_rate → fx_rate_source must be absent/null. Mirrors the overhead
+    // pattern: if you didn't convert, you don't get to attach a source.
+    if (fx_rate_source != null && fx_rate_source !== '')
+      throw badRequest(`fx_rate_source must be null when fx_rate is null`);
+    return;
+  }
+  if (typeof fx_rate_source !== 'string' || !fx_rate_source.trim())
+    throw badRequest(`fx_rate_source required when fx_rate is set (e.g. "Bank of Canada noon rate, 2026-03-15")`);
+}
+
+// Migration 015 / P3.1 — `material_disposition` is required when
+// category='material' and must be null otherwise. Schema CHECK enforces
+// the null-when-not-material half; this validator gives a clean 400 for
+// the required-when-material half.
+function validateMaterialDisposition(category, material_disposition) {
+  if (category === 'material') {
+    if (!material_disposition)
+      throw badRequest(`material_disposition required when category='material' (one of ${VALID_MATERIAL_DISPOSITIONS.join('|')})`);
+    if (!VALID_MATERIAL_DISPOSITIONS.includes(material_disposition))
+      throw badRequest(`material_disposition must be ${VALID_MATERIAL_DISPOSITIONS.join('|')}`);
+  } else {
+    if (material_disposition != null)
+      throw badRequest(`material_disposition must be null when category != 'material'`);
+  }
+}
+
+// Migration 015 / P3.2 — `contract_arms_length` (1 or 0) required when
+// category='contract', null otherwise. We accept booleans and coerce
+// liberally on the way in: callers may send `true`/`false`, `1`/`0`, or
+// the string equivalents. Anything else is a 400. This mirrors how the
+// existing `is_overtime` field is parsed in /api/labour (best-effort
+// truthiness check on the wire) — keep the API tolerant of the two
+// reasonable serialisations.
+function coerceArmsLengthFlag(v) {
+  if (v === true || v === 1 || v === '1') return 1;
+  if (v === false || v === 0 || v === '0') return 0;
+  return null;
+}
+
+function validateContractArmsLength(category, contract_arms_length) {
+  if (category === 'contract') {
+    if (contract_arms_length !== 0 && contract_arms_length !== 1)
+      throw badRequest(`contract_arms_length required when category='contract' (1 = arm's length, 0 = non-arm's-length)`);
+  } else {
+    if (contract_arms_length != null)
+      throw badRequest(`contract_arms_length must be null when category != 'contract'`);
   }
 }
 
@@ -110,7 +181,15 @@ router.post('/', (req, res, next) => {
       project_id, expense_date, category, amount_cents,
       currency = 'CAD', fx_rate, description, user_claimant_id,
       overhead_subcategory, allocation_basis,
+      material_disposition, fx_rate_source,
     } = req.body ?? {};
+    // P3.2: arms-length flag is a tri-state on the wire (true/false/null);
+    // coerce to {0,1,null} early so the rest of the path sees only the
+    // canonical form. An unknown shape (e.g. "yes", 2) reads as null and
+    // trips the require-when-contract validator below with a useful 400.
+    const contract_arms_length = req.body?.contract_arms_length === undefined
+      ? null
+      : coerceArmsLengthFlag(req.body.contract_arms_length);
 
     if (!Number.isInteger(project_id)) throw badRequest('project_id required');
     if (!expense_date) throw badRequest('expense_date required');
@@ -119,6 +198,9 @@ router.post('/', (req, res, next) => {
     validateAmount(amount_cents);
     if (!description || typeof description !== 'string') throw badRequest('description required');
     validateOverheadFields(category, overhead_subcategory, allocation_basis);
+    validateMaterialDisposition(category, material_disposition);
+    validateContractArmsLength(category, contract_arms_length);
+    validateFxRateSource(fx_rate, fx_rate_source);
 
     const project = getProject(project_id);
     const claimant = getClaimant(project.claimant_id);
@@ -139,15 +221,20 @@ router.post('/', (req, res, next) => {
         const info = db.prepare(`
           INSERT INTO expenses
             (project_id, user_claimant_id, fiscal_period_id, expense_date, category,
-             amount_cents, currency, fx_rate, description,
+             amount_cents, currency, fx_rate, fx_rate_source, description,
              overhead_subcategory, allocation_basis,
+             material_disposition, contract_arms_length,
              status, reviewed_by_user_id, reviewed_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${isAdmin ? "datetime('now')" : 'NULL'})
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${isAdmin ? "datetime('now')" : 'NULL'})
         `).run(
           project.id, uc.id, period.id, expense_date, category,
-          amount_cents, currency, fx_rate ?? null, description,
+          amount_cents, currency, fx_rate ?? null,
+          fx_rate != null ? fx_rate_source : null,
+          description,
           category === 'overhead' ? overhead_subcategory : null,
           category === 'overhead' ? allocation_basis     : null,
+          category === 'material' ? material_disposition : null,
+          category === 'contract' ? contract_arms_length : null,
           initialStatus, isAdmin ? req.user.id : null,
         );
         return info.lastInsertRowid;
@@ -181,7 +268,8 @@ router.patch('/:id', (req, res, next) => {
     assertEditable(current, { user: req.user });
 
     const { expense_date, category, amount_cents, currency, fx_rate, description,
-            overhead_subcategory, allocation_basis } = req.body ?? {};
+            overhead_subcategory, allocation_basis,
+            material_disposition, fx_rate_source } = req.body ?? {};
     const updates = {};
     if (expense_date !== undefined) updates.expense_date = expense_date;
     if (category !== undefined) {
@@ -192,6 +280,7 @@ router.patch('/:id', (req, res, next) => {
     if (amount_cents !== undefined) { validateAmount(amount_cents); updates.amount_cents = amount_cents; }
     if (currency !== undefined) updates.currency = currency;
     if (fx_rate !== undefined) updates.fx_rate = fx_rate;
+    if (fx_rate_source !== undefined) updates.fx_rate_source = fx_rate_source;
     if (description !== undefined) {
       if (!description) throw badRequest('description cannot be empty');
       updates.description = description;
@@ -203,19 +292,43 @@ router.patch('/:id', (req, res, next) => {
     // only stash explicit-set updates here.
     if (overhead_subcategory !== undefined) updates.overhead_subcategory = overhead_subcategory;
     if (allocation_basis !== undefined) updates.allocation_basis = allocation_basis;
+    // Migration 015 P3 fields. Same pass-through pattern as the overhead
+    // fields — the validators run on the merged row below.
+    if (material_disposition !== undefined) updates.material_disposition = material_disposition;
+    if (req.body?.contract_arms_length !== undefined) {
+      updates.contract_arms_length = req.body.contract_arms_length === null
+        ? null
+        : coerceArmsLengthFlag(req.body.contract_arms_length);
+    }
 
-    // Cross-field auto-null + validation: when category changes away from
-    // overhead and the caller didn't supply explicit nulls for the overhead
-    // fields, clear them automatically so the schema CHECK doesn't trip on
-    // stale data. Conversely, when category changes to 'overhead' we
-    // require both fields below (via validateOverheadFields on the merged
-    // row). Must happen before `keys` is captured so the auto-null entries
-    // are written to the UPDATE.
+    // Cross-field auto-null + validation: when category changes we auto-
+    // clear the now-stale category-specific fields so the schema CHECKs
+    // don't trip on data that the caller didn't think to clear. Conversely,
+    // when category changes *to* a category that requires its companion
+    // field, the validators below catch a missing one with a 400.
     if (updates.category && updates.category !== 'overhead') {
       if (updates.overhead_subcategory === undefined && current.overhead_subcategory !== null)
         updates.overhead_subcategory = null;
       if (updates.allocation_basis === undefined && current.allocation_basis !== null)
         updates.allocation_basis = null;
+    }
+    if (updates.category && updates.category !== 'material') {
+      if (updates.material_disposition === undefined && current.material_disposition !== null)
+        updates.material_disposition = null;
+    }
+    if (updates.category && updates.category !== 'contract') {
+      if (updates.contract_arms_length === undefined && current.contract_arms_length !== null)
+        updates.contract_arms_length = null;
+    }
+    // P3.3 auto-clear: when the merged row drops `fx_rate` to null (either
+    // because the PATCH cleared it explicitly or it was already null), the
+    // accompanying `fx_rate_source` must also be null. Auto-null here so a
+    // caller that PATCHes fx_rate→null doesn't also have to remember to
+    // null out fx_rate_source. Must happen before `keys` is captured.
+    const fxRateAfterPatch = updates.fx_rate !== undefined ? updates.fx_rate : current.fx_rate;
+    if (fxRateAfterPatch == null && updates.fx_rate_source === undefined &&
+        current.fx_rate_source != null) {
+      updates.fx_rate_source = null;
     }
 
     const keys = Object.keys(updates);
@@ -230,6 +343,33 @@ router.patch('/:id', (req, res, next) => {
     const claimant = getClaimant(project.claimant_id);
     validateFxAgainstClaimant(merged.currency, merged.fx_rate, claimant);
     validateOverheadFields(merged.category, merged.overhead_subcategory, merged.allocation_basis);
+    // Migration 015 PATCH semantics: we only enforce the "required when
+    // category=X" rules on the new fields when the caller actually touches
+    // the relevant slice — i.e. category is changing, or the field itself
+    // is in the PATCH body. Otherwise we let an unrelated edit pass on a
+    // grandfathered pre-015 row (the migration explicitly preserves the
+    // null-on-existing-rows pattern). The "must be null when category !=
+    // X" half is always enforced via the schema CHECKs and the auto-null
+    // logic above, so a stale field can never sneak through.
+    if (updates.category !== undefined || updates.material_disposition !== undefined) {
+      validateMaterialDisposition(merged.category, merged.material_disposition);
+    } else if (merged.category !== 'material' && merged.material_disposition != null) {
+      // Defensive: if the merged row has stale data for some reason, surface it.
+      throw badRequest(`material_disposition must be null when category != 'material'`);
+    }
+    if (updates.category !== undefined || updates.contract_arms_length !== undefined) {
+      validateContractArmsLength(merged.category, merged.contract_arms_length);
+    } else if (merged.category !== 'contract' && merged.contract_arms_length != null) {
+      throw badRequest(`contract_arms_length must be null when category != 'contract'`);
+    }
+    // fx_rate_source: enforce on writes that touch fx_rate or fx_rate_source.
+    // For a pure description edit on a grandfathered row with fx_rate set
+    // but fx_rate_source null, we don't force the back-fill here.
+    if (updates.fx_rate !== undefined || updates.fx_rate_source !== undefined) {
+      validateFxRateSource(merged.fx_rate, merged.fx_rate_source);
+    } else if (merged.fx_rate == null && merged.fx_rate_source != null) {
+      throw badRequest(`fx_rate_source must be null when fx_rate is null`);
+    }
 
     const { after } = mutateAndAudit({
       loader: getExpense,

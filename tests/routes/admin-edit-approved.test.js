@@ -149,6 +149,7 @@ test('admin can PATCH their own auto-approved expense; row reverts to pending', 
       amount_cents: 5_000,
       currency: 'CAD',
       description: 'typoed expense',
+      material_disposition: 'consumed', // required since migration 015 (P3.1)
     },
   });
   assert.equal(created.status, 201, `expected 201, got ${created.status}: ${JSON.stringify(created.body)}`);

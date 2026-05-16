@@ -234,6 +234,7 @@ function buildCases(state) {
         amount_cents: 12_500,
         currency: 'CAD',
         description: 'audit-log expense',
+        material_disposition: 'consumed', // required since migration 015 (P3.1)
       }),
       expectedAction: 'create', expectedEntityType: 'expense',
     },
