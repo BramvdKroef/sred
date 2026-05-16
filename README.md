@@ -4,7 +4,7 @@ An in-house tracking tool for Canadian SR&ED (Scientific Research & Experimental
 
 ## Tech stack
 
-- **Backend** — Node.js (20+), Express, SQLite via `better-sqlite3`. Plain JS modules (ESM), no transpile step.
+- **Backend** — Node.js (22+), Express, SQLite via `better-sqlite3`. Plain JS modules (ESM), no transpile step.
 - **Auth** — WebAuthn passkeys (`@simplewebauthn/server`) with magic-link invites & recovery; JWT access tokens + rotating refresh tokens.
 - **Frontend** — Vanilla JS SPA, no bundler. Montserrat from Google Fonts, brand-themed CSS variables. Hash routing.
 - **Files & PDF** — `multer` for uploads, `pdfkit` for T661 PDF output, `archiver` for audit-bundle zips.
