@@ -8,6 +8,12 @@ import { errorMiddleware } from './lib/errors.js';
 import { cspMiddleware } from './lib/csp.js';
 import { log, requestLogger } from './lib/logger.js';
 
+// To enable error monitoring, uncomment and configure:
+// import * as Sentry from '@sentry/node';
+// Sentry.init({ dsn: process.env.SENTRY_DSN });
+// import { setErrorReporter } from './lib/error-reporter.js';
+// setErrorReporter((err, ctx) => Sentry.captureException(err, { extra: ctx }));
+
 const app = express();
 app.disable('x-powered-by');
 
