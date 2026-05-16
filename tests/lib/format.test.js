@@ -285,6 +285,145 @@ test('toMarkdown: null hypothesis + null uncertainty_identified_at render as "(u
   assert.match(md, /\*\*Uncertainty identified:\*\* _\(unset\)_/);
 });
 
+// ── Per-expense T661 line split (migration 015 follow-up) ────────────────
+//
+// SRED_DOMAIN_REVIEW (migration 015 P3.1/P3.2): materials split 320 (consumed)
+// vs 325 (transformed); contracts split 340 (arm's-length) vs 350 (non-arm's-
+// length — line number flagged as best-guess pending verification against
+// the current T661 PDF). The split is per-row in the worksheet detail; the
+// category-level grand-totals stay aggregated under 320 / 340.
+
+function expensesTotals(expense_lines) {
+  return {
+    claimant: {
+      id: 1, legal_name: 'Test Co', business_number: '123',
+      reporting_currency: 'CAD', sred_method: 'traditional',
+    },
+    fiscal_period: { id: 1, start_date: '2025-01-01', end_date: '2025-12-31', status: 'open' },
+    projects: [{
+      id: 10, title: 'P1', field_of_science: 'cs',
+      start_date: '2025-01-01', end_date: null, status: 'development',
+      narrative: {
+        advancement_sought: '', uncertainties: '', work_performed: '',
+        hypothesis: null, uncertainty_identified_at: null,
+      },
+      totals: {
+        labour_cost_cents: 0,
+        labour_hours_total: 0, labour_hours_regular: 0, labour_hours_overtime: 0,
+        materials_cents: 0, contract_expenditures_cents: 0,
+        third_party_payments_cents: 0, overhead_cents: 0, total_cents: 0,
+      },
+      labour_worksheet: [],
+      expense_lines,
+    }],
+    grand_total: {
+      labour_cost_cents: 0, materials_cents: 0, contract_expenditures_cents: 0,
+      third_party_payments_cents: 0, overhead_cents: 0, total_cents: 0,
+    },
+    generated_at: '2025-05-14T00:00:00.000Z',
+  };
+}
+
+test('toMarkdown: transformed-material expense row tags T661 line 325', () => {
+  const totals = expensesTotals([{
+    expense_date: '2025-03-01', category: 'material',
+    material_disposition: 'transformed', contract_arms_length: null,
+    amount_cents: 5_000, currency: 'CAD', fx_rate: 1,
+    reporting_amount_cents: 5_000, description: 'aluminium stock',
+  }]);
+  const md = toMarkdown(totals);
+  // Header advertises the new T661 line column.
+  assert.match(md, /\| Date \| Category \| T661 line \| Amount \|/);
+  // Row carries `line 325` and the transformed label.
+  assert.match(md, /material · transformed \| line 325 \|/);
+});
+
+test('toMarkdown: consumed-material expense row tags T661 line 320', () => {
+  const totals = expensesTotals([{
+    expense_date: '2025-03-02', category: 'material',
+    material_disposition: 'consumed', contract_arms_length: null,
+    amount_cents: 5_000, currency: 'CAD', fx_rate: 1,
+    reporting_amount_cents: 5_000, description: 'lab consumables',
+  }]);
+  const md = toMarkdown(totals);
+  assert.match(md, /material · consumed \| line 320 \|/);
+});
+
+test('toMarkdown: non-arms-length contract row tags T661 line 350', () => {
+  const totals = expensesTotals([{
+    expense_date: '2025-03-03', category: 'contract',
+    material_disposition: null, contract_arms_length: 0,
+    amount_cents: 10_000, currency: 'CAD', fx_rate: 1,
+    reporting_amount_cents: 10_000, description: 'related-party sub',
+  }]);
+  const md = toMarkdown(totals);
+  assert.match(md, /contract · non-arms-length \| line 350 \|/);
+});
+
+test('toMarkdown: arms-length contract row tags T661 line 340', () => {
+  const totals = expensesTotals([{
+    expense_date: '2025-03-04', category: 'contract',
+    material_disposition: null, contract_arms_length: 1,
+    amount_cents: 10_000, currency: 'CAD', fx_rate: 1,
+    reporting_amount_cents: 10_000, description: 'external contractor',
+  }]);
+  const md = toMarkdown(totals);
+  assert.match(md, /contract · arms-length \| line 340 \|/);
+});
+
+test('toCsv: transformed-material expense row carries 325; consumed carries 320', () => {
+  const totals = expensesTotals([
+    {
+      expense_date: '2025-03-01', category: 'material',
+      material_disposition: 'transformed', contract_arms_length: null,
+      amount_cents: 5_000, currency: 'CAD', fx_rate: 1,
+      reporting_amount_cents: 5_000, description: 'aluminium stock',
+    },
+    {
+      expense_date: '2025-03-02', category: 'material',
+      material_disposition: 'consumed', contract_arms_length: null,
+      amount_cents: 3_000, currency: 'CAD', fx_rate: 1,
+      reporting_amount_cents: 3_000, description: 'lab consumables',
+    },
+  ]);
+  const csv = toCsv(totals);
+  const lines = csv.split('\n');
+  // Per-expense detail rows are emitted with the resolved per-row line number.
+  assert.ok(lines.some(l => l.includes('expense:material · transformed') && l.includes(',325,CAD,5000')),
+    `expected transformed expense row with line 325, got:\n${csv}`);
+  assert.ok(lines.some(l => l.includes('expense:material · consumed') && l.includes(',320,CAD,3000')),
+    `expected consumed expense row with line 320, got:\n${csv}`);
+  // Category-level aggregate still buckets the whole materials total under 320.
+  assert.ok(lines.some(l => l.startsWith('materials,10,P1,320,CAD,')),
+    `aggregate materials row missing under line 320:\n${csv}`);
+});
+
+test('toCsv: non-arms-length contract row carries 350; arms-length carries 340', () => {
+  const totals = expensesTotals([
+    {
+      expense_date: '2025-03-03', category: 'contract',
+      material_disposition: null, contract_arms_length: 0,
+      amount_cents: 10_000, currency: 'CAD', fx_rate: 1,
+      reporting_amount_cents: 10_000, description: 'related-party sub',
+    },
+    {
+      expense_date: '2025-03-04', category: 'contract',
+      material_disposition: null, contract_arms_length: 1,
+      amount_cents: 20_000, currency: 'CAD', fx_rate: 1,
+      reporting_amount_cents: 20_000, description: 'external contractor',
+    },
+  ]);
+  const csv = toCsv(totals);
+  const lines = csv.split('\n');
+  assert.ok(lines.some(l => l.includes('expense:contract · non-arms-length') && l.includes(',350,CAD,10000')),
+    `expected NAL contract row with line 350, got:\n${csv}`);
+  assert.ok(lines.some(l => l.includes('expense:contract · arms-length') && l.includes(',340,CAD,20000')),
+    `expected arm's-length contract row with line 340, got:\n${csv}`);
+  // Category-level aggregate still uses 340 for the whole contract bucket.
+  assert.ok(lines.some(l => l.startsWith('contract,10,P1,340,CAD,')),
+    `aggregate contract row missing under line 340:\n${csv}`);
+});
+
 test('toPdf: emits T661 line annotations for each total category', async () => {
   const totals = makeTotals({
     projectRegularHours: 8, projectOvertimeHours: 0,

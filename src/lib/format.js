@@ -16,30 +16,80 @@
 //     for the OT hours-bucket rows in the CSV, which is an internal worksheet
 //     annotation, not a T661 form field. Reconfirm against the live PDF.
 //   - 307 is the specified-employee cap subset.
-//   - 320 — materials consumed/transformed. Schema does not split 320 vs 325.
-//   - 340 — arms-length contract expenditures.
+//   - 320 — materials *consumed* in SR&ED (default for `material_disposition='consumed'`).
+//   - 325 — materials *transformed* (consumed then incorporated into a product
+//     that's subsequently sold/leased). Per-row split surfaced in the worksheet
+//     detail only; the category-level grand-total for materials remains
+//     aggregated under 320 since the schema doesn't split totals.
+//   - 340 — arm's-length contract expenditures (75% allowable downstream,
+//     reported full here per CRA instruction).
+//   - 350 — non-arm's-length (NAL) contract expenditures. BEST-GUESS, FLAG
+//     FOR TAX PREPARER: NAL contracts have a separate line that has historically
+//     been numbered 350 on the T661, but the current form revision may carry
+//     355 or a sub-letter (e.g. 340b) instead. Verify against the live PDF
+//     before relying on this value — the per-row tag is for worksheet
+//     navigation, not direct form transcription. (SRED_DOMAIN_REVIEW v2/F6
+//     style follow-up to migration 015.)
 //   - 345 — third-party payments (approved entities: universities, etc.).
 //   - 360 — proxy / overhead (also the traditional overhead bucket).
 export const T661_LINES = Object.freeze({
-  labour:                'line 305',
-  labour_overtime:       'line 306',
-  labour_specified_cap:  'line 307',
-  materials:             'line 320',
-  contract:              'line 340',
-  third_party_payment:   'line 345',
-  overhead:              'line 360',
+  labour:                  'line 305',
+  labour_overtime:         'line 306',
+  labour_specified_cap:    'line 307',
+  materials:               'line 320',
+  materials_transformed:   'line 325',
+  contract:                'line 340',
+  contract_non_arms_length:'line 350',
+  third_party_payment:     'line 345',
+  overhead:                'line 360',
 });
 
 // Numeric-only variants for CSV / non-prose contexts.
 export const T661_LINE_NUMBERS = Object.freeze({
-  labour:                305,
-  labour_overtime:       306,
-  labour_specified_cap:  307,
-  materials:             320,
-  contract:              340,
-  third_party_payment:   345,
-  overhead:              360,
+  labour:                  305,
+  labour_overtime:         306,
+  labour_specified_cap:    307,
+  materials:               320,
+  materials_transformed:   325,
+  contract:                340,
+  contract_non_arms_length:350,
+  third_party_payment:     345,
+  overhead:                360,
 });
+
+// Per-row T661 line resolver: materials and contracts split into sub-lines
+// based on `material_disposition` / `contract_arms_length` (migration 015).
+// Falls back to the primary line for the category when the new column is
+// null (legacy rows not yet back-filled) so the renderer remains safe.
+// Returns the prose-form string ('line 325'); use `expenseT661LineNumber`
+// for the numeric variant in CSV contexts.
+export function expenseT661Line(e) {
+  if (e.category === 'material' && e.material_disposition === 'transformed')
+    return T661_LINES.materials_transformed;
+  if (e.category === 'material')
+    return T661_LINES.materials;
+  if (e.category === 'contract' && e.contract_arms_length === 0)
+    return T661_LINES.contract_non_arms_length;
+  if (e.category === 'contract')
+    return T661_LINES.contract;
+  if (e.category === 'third_party_payment') return T661_LINES.third_party_payment;
+  if (e.category === 'overhead')            return T661_LINES.overhead;
+  return null;
+}
+
+export function expenseT661LineNumber(e) {
+  if (e.category === 'material' && e.material_disposition === 'transformed')
+    return T661_LINE_NUMBERS.materials_transformed;
+  if (e.category === 'material')
+    return T661_LINE_NUMBERS.materials;
+  if (e.category === 'contract' && e.contract_arms_length === 0)
+    return T661_LINE_NUMBERS.contract_non_arms_length;
+  if (e.category === 'contract')
+    return T661_LINE_NUMBERS.contract;
+  if (e.category === 'third_party_payment') return T661_LINE_NUMBERS.third_party_payment;
+  if (e.category === 'overhead')            return T661_LINE_NUMBERS.overhead;
+  return null;
+}
 
 function dollars(cents, currency = 'CAD') {
   return `${(cents / 100).toFixed(2)} ${currency}`;
@@ -53,11 +103,11 @@ function dollars(cents, currency = 'CAD') {
 //   - `contract · arms-length`                    (migration 015, P3.2)
 //   - `contract · non-arms-length`                (migration 015, P3.2)
 //   - `third_party_payment`                       (no sub-classification)
-// T661 lines are unchanged (320 still maps to all materials regardless of
-// disposition; 340 to all contracts regardless of NAL flag) — this is
-// presentation only. The line-number split between 320 and 325 is a
-// follow-up; the column is now populated so the formatter can drive that
-// split when ready.
+// Per-row T661 line tags now split materials 320/325 by `material_disposition`
+// and contracts 340/350 by `contract_arms_length` via `expenseT661Line` /
+// `expenseT661LineNumber`. Category-level grand totals stay aggregated under
+// the primary lines (320 / 340) since the schema doesn't split totals — the
+// disposition / NAL split surfaces only in the per-expense worksheet detail.
 function categoryLabel(e) {
   if (e.category === 'overhead') {
     const parts = ['overhead'];
@@ -160,10 +210,11 @@ export function toMarkdown(totals) {
     if (proj.expense_lines.length) {
       lines.push(`### Expenses`);
       lines.push(``);
-      lines.push(`| Date | Category | Amount | Currency | FX | In ${c.reporting_currency} | Description |`);
-      lines.push(`| --- | --- | ---: | --- | ---: | ---: | --- |`);
+      lines.push(`| Date | Category | T661 line | Amount | Currency | FX | In ${c.reporting_currency} | Description |`);
+      lines.push(`| --- | --- | --- | ---: | --- | ---: | ---: | --- |`);
       for (const e of proj.expense_lines) {
-        lines.push(`| ${e.expense_date} | ${categoryLabel(e)} | ${(e.amount_cents/100).toFixed(2)} | ${e.currency} | ${e.fx_rate ?? '1'} | ${(e.reporting_amount_cents/100).toFixed(2)} | ${e.description} |`);
+        const t661 = expenseT661Line(e) ?? '';
+        lines.push(`| ${e.expense_date} | ${categoryLabel(e)} | ${t661} | ${(e.amount_cents/100).toFixed(2)} | ${e.currency} | ${e.fx_rate ?? '1'} | ${(e.reporting_amount_cents/100).toFixed(2)} | ${e.description} |`);
       }
       lines.push(``);
     }
@@ -193,6 +244,14 @@ export function toCsv(totals) {
     rows.push(['third_party_payment', p.id, p.title, T661_LINE_NUMBERS.third_party_payment, ccy, p.totals.third_party_payments_cents]);
     rows.push(['overhead',            p.id, p.title, T661_LINE_NUMBERS.overhead,            ccy, p.totals.overhead_cents]);
     rows.push(['project_total',       p.id, p.title, '',                                    ccy, p.totals.total_cents]);
+    // Per-expense worksheet detail rows. The category-level aggregates above
+    // continue to bucket all materials under 320 / all contracts under 340;
+    // these per-row entries surface the 320/325 + 340/350 split driven by
+    // the migration-015 columns (`material_disposition`, `contract_arms_length`).
+    for (const e of p.expense_lines ?? []) {
+      const t661 = expenseT661LineNumber(e) ?? '';
+      rows.push([`expense:${categoryLabel(e)}`, p.id, p.title, t661, ccy, e.reporting_amount_cents]);
+    }
   }
   rows.push(['grand_total', '', '', '', ccy, totals.grand_total.total_cents]);
   return rows.map(r => r.map(csvCell).join(',')).join('\n');
@@ -296,7 +355,9 @@ export function toPdf(totals) {
       doc.fontSize(9).font('Helvetica');
       for (const e of proj.expense_lines) {
         const fx = e.fx_rate ? ` @ ${e.fx_rate}` : '';
-        doc.text(`  ${e.expense_date}  ·  ${categoryLabel(e)}  ·  ${(e.amount_cents/100).toFixed(2)} ${e.currency}${fx}  (${cents(e.reporting_amount_cents)})  — ${e.description}`);
+        const t661 = expenseT661Line(e);
+        const lineTag = t661 ? `  ·  T661 ${t661}` : '';
+        doc.text(`  ${e.expense_date}  ·  ${categoryLabel(e)}${lineTag}  ·  ${(e.amount_cents/100).toFixed(2)} ${e.currency}${fx}  (${cents(e.reporting_amount_cents)})  — ${e.description}`);
       }
       doc.moveDown(0.4);
     }
