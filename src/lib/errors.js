@@ -1,4 +1,5 @@
 import { log } from './logger.js';
+import { reportError } from './error-reporter.js';
 
 export class HttpError extends Error {
   constructor(status, code, message, details) {
@@ -22,6 +23,16 @@ export function errorMiddleware(err, req, res, _next) {
       error: { code: err.code, message: err.message, details: err.details },
     });
   }
+  // Forward to the pluggable external error reporter (Sentry / Honeybadger /
+  // etc.) BEFORE we touch the logger, so even a logger-side failure won't
+  // hide the incident from the monitoring service. Default is a no-op; an
+  // operator wires this up in src/server.js via `setErrorReporter()`.
+  // `reportError` swallows its own failures, so this call is fire-and-forget.
+  reportError(err, {
+    request_id: req?.id,
+    route: req?.originalUrl,
+    user_id: req?.user?.id ?? null,
+  });
   // Prefer the per-request logger (carries request_id + user_id) so the
   // operator can correlate a 500 to a specific incoming request. Fall back
   // to the bare logger if the error fired before the request-id middleware
