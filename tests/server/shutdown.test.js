@@ -12,18 +12,15 @@
 //   2. An in-flight request started before the signal completes successfully
 //      (server.close lets active sockets drain instead of severing them).
 //   3. A second SIGTERM after shutdown is in progress is a no-op (idempotency).
+//
+// Each test gets its own child because the test *is* the shutdown — once the
+// signal lands the server is gone. We pay one boot per test here.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import net from 'node:net';
-import os from 'node:os';
-import path from 'node:path';
-import fs from 'node:fs';
-import crypto from 'node:crypto';
 
-const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..');
-const SERVER_PATH = path.join(REPO_ROOT, 'src', 'server.js');
+import { spawnServer } from '../helpers/spawn-server.js';
 
 // Reserve a free port in the parent by opening + immediately closing a
 // listener; the kernel won't hand the same port to another listener for a few
@@ -41,69 +38,9 @@ function findFreePort() {
   });
 }
 
-// Boot src/server.js in a fresh child process, resolved once the listening
-// banner has been observed on stdout. Caller is responsible for sending the
-// shutdown signal and awaiting exitPromise.
-async function bootServer(extraEnv = {}) {
-  const tmpDb = path.join(
-    os.tmpdir(),
-    `sred-shutdown-${process.pid}-${crypto.randomBytes(4).toString('hex')}.db`
-  );
-
-  // Need to run migrations first or routes crash on first request. Easiest:
-  // dynamic import migrate before importing server.js.
-  const script = `
-    await import(${JSON.stringify(path.join(REPO_ROOT, 'src', 'db', 'migrate.js'))});
-    await import(${JSON.stringify(SERVER_PATH)});
-  `;
-
-  const env = {
-    PATH: process.env.PATH,
-    DATABASE_PATH: tmpDb,
-    JWT_SECRET: 'test-only-' + crypto.randomBytes(24).toString('hex'),
-    ORIGIN: 'http://localhost:3000',
-    PORT: '0', // ephemeral
-    ...extraEnv,
-  };
-
-  const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
-    env, cwd: REPO_ROOT,
-  });
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', d => { stdout += d.toString(); });
-  child.stderr.on('data', d => { stderr += d.toString(); });
-
-  const exitPromise = new Promise((resolve) => {
-    child.on('exit', (code, signal) => {
-      for (const suffix of ['', '-wal', '-shm']) {
-        try { fs.unlinkSync(tmpDb + suffix); } catch { /* fine */ }
-      }
-      resolve({ code, signal, stdout, stderr });
-    });
-  });
-
-  await waitForBanner(child, 4000, () => stdout);
-  return { child, stdout, stderr, exitPromise };
-}
-
-async function waitForBanner(child, timeoutMs, getStdout) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    // The boot banner is now a JSON log line; "server_listening" is the
-    // canonical msg for "express bound the port".
-    if (/"msg":"server_listening"/.test(getStdout())) return;
-    if (child.exitCode !== null) {
-      throw new Error(`child exited before banner; stdout=${getStdout()}`);
-    }
-    await new Promise(r => setTimeout(r, 25));
-  }
-  throw new Error(`banner not seen within ${timeoutMs}ms; stdout=${getStdout()}`);
-}
-
 test('SIGTERM triggers graceful shutdown and exit 0 within 2s', async () => {
   const port = await findFreePort();
-  const { child, exitPromise } = await bootServer({ PORT: String(port) });
+  const { child, exitPromise } = await spawnServer({ port });
 
   const tStart = Date.now();
   child.kill('SIGTERM');
@@ -121,7 +58,7 @@ test('SIGTERM triggers graceful shutdown and exit 0 within 2s', async () => {
 
 test('SIGINT also triggers graceful shutdown', async () => {
   const port = await findFreePort();
-  const { child, exitPromise } = await bootServer({ PORT: String(port) });
+  const { child, exitPromise } = await spawnServer({ port });
 
   child.kill('SIGINT');
   const result = await Promise.race([
@@ -135,13 +72,13 @@ test('SIGINT also triggers graceful shutdown', async () => {
 
 test('in-flight request started before SIGTERM completes successfully', async () => {
   const port = await findFreePort();
-  const { child, exitPromise } = await bootServer({ PORT: String(port) });
+  const { child, url, exitPromise } = await spawnServer({ port });
 
   // Hit a guaranteed-public endpoint. /api/auth/refresh exists and returns
   // 401 quickly with an invalid token; that's enough to prove the socket
   // wasn't yanked mid-request. We fire the request, then SIGTERM almost
   // immediately, and assert the response still resolves.
-  const reqPromise = fetch(`http://127.0.0.1:${port}/api/auth/refresh`, {
+  const reqPromise = fetch(`${url}/api/auth/refresh`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ refresh_token: 'invalid' }),
@@ -167,7 +104,7 @@ test('in-flight request started before SIGTERM completes successfully', async ()
 
 test('double SIGTERM is idempotent (shutdown only fires once)', async () => {
   const port = await findFreePort();
-  const { child, exitPromise } = await bootServer({ PORT: String(port) });
+  const { child, exitPromise } = await spawnServer({ port });
 
   child.kill('SIGTERM');
   child.kill('SIGTERM'); // second one should be a no-op (shuttingDown guard)
