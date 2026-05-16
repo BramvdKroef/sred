@@ -1,12 +1,16 @@
 import { startRegistration, startAuthentication }
   from 'https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11/+esm';
-import { api, getJwt, getRefresh, setSession, clearSession, $, esc } from './api.js';
+import { api, getJwt, hasRefreshSession, purgeLegacyRefresh, tryRefresh, setSession, clearSession, $, esc } from './api.js';
 import { renderAdmin } from './admin.js';
 import { renderEmployee } from './employee.js';
 
 window.addEventListener('DOMContentLoaded', main);
 
 async function main() {
+  // V-11: drop any stale localStorage refresh token left behind by a tab
+  // that loaded before the cookie migration. Cheap, idempotent, no-op once
+  // gone.
+  purgeLegacyRefresh();
   const params = new URLSearchParams(location.search);
   const enrollToken = params.get('token');
   if (enrollToken) return renderEnroll(enrollToken);
@@ -14,13 +18,16 @@ async function main() {
     try { return await loadDashboard(); }
     catch { clearSession(); }
   }
-  // Warm start: no JWT but a refresh token from a prior browser session.
-  if (getRefresh()) {
-    try {
-      const d = await api('POST', '/api/auth/refresh', { refresh_token: getRefresh() });
-      setSession({ token: d.token, refresh_token: d.refresh_token });
-      return await loadDashboard();
-    } catch { clearSession(); }
+  // Warm start: no JWT but the browser still has the refresh cookie from a
+  // prior session. Delegate to tryRefresh() so we share the in-flight
+  // dedupe and the CSRF-header wiring with fetch.js.
+  if (hasRefreshSession()) {
+    if (await tryRefresh()) {
+      try { return await loadDashboard(); }
+      catch { clearSession(); }
+    } else {
+      clearSession();
+    }
   }
   renderLogin();
 }
@@ -118,8 +125,13 @@ async function loadDashboard() {
 }
 
 async function signOut() {
-  const rt = getRefresh();
-  try { await api('POST', '/api/logout', rt ? { refresh_token: rt } : undefined); }
+  // V-11: the refresh cookie is HttpOnly + path-scoped to /api/auth/refresh,
+  // so JS can't read it and the browser won't attach it to /api/logout. The
+  // server clears the cookie via Set-Cookie on the response and revokes any
+  // refresh token presented in the body (older clients still send it; the
+  // current code-path doesn't, which is fine — the cookie clear is what
+  // matters for V-11).
+  try { await api('POST', '/api/logout'); }
   catch { /* best effort */ }
   clearSession();
   location.assign('/');

@@ -1,4 +1,5 @@
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { config, ROOT_DIR } from './config.js';
@@ -58,6 +59,11 @@ app.use((req, res, next) => {
 
 app.use(cspMiddleware);
 app.use(express.json({ limit: '2mb' }));
+// cookie-parser must precede the routes so /api/auth/refresh can read
+// req.cookies.sred_refresh (V-11 mitigation). The refresh-token cookie is
+// HttpOnly + path-scoped to /api/auth/refresh; no other endpoint reads from
+// req.cookies, so the parser overhead on other routes is negligible.
+app.use(cookieParser());
 
 // --- Health / readiness probes ---------------------------------------------
 //
