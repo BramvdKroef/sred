@@ -9,6 +9,12 @@ import { sendMagicLink } from '../lib/email.js';
 import { badRequest, unauthorized, notFound } from '../lib/errors.js';
 import { log } from '../lib/logger.js';
 import {
+  setRefreshCookies,
+  clearRefreshCookies,
+  refreshCsrfGuard,
+  REFRESH_COOKIE,
+} from '../lib/refresh-cookie.js';
+import {
   webauthnLimiter,
   recoveryShortLimiter,
   recoveryHourLimiter,
@@ -71,6 +77,10 @@ router.post('/webauthn/register/finish', webauthnLimiter, async (req, res, next)
     const fresh = db.prepare(`SELECT id, email, name, role, status FROM users WHERE id = ?`).get(user.id);
     const session = signSession(fresh);
     const refresh = mintRefreshToken(fresh.id);
+    // Set HttpOnly + double-submit cookies (V-11). The body still carries
+    // refresh_token during the transition window so older clients keep
+    // working until they're all reloaded.
+    setRefreshCookies(res, refresh.raw);
     res.json({ user: fresh, token: session, refresh_token: refresh.raw, refresh_expires_at: refresh.expiresAt });
   } catch (e) { next(e); }
 });
@@ -96,18 +106,26 @@ router.post('/webauthn/login/finish', webauthnLimiter, async (req, res, next) =>
     const user = await finishLogin({ response: assertion });
     const session = signSession(user);
     const refresh = mintRefreshToken(user.id);
+    // V-11: stash refresh token in HttpOnly cookie + CSRF double-submit cookie.
+    setRefreshCookies(res, refresh.raw);
     res.json({ user, token: session, refresh_token: refresh.raw, refresh_expires_at: refresh.expiresAt });
   } catch (e) { next(e); }
 });
 
 // --- Refresh ----------------------------------------------------------------
 
-router.post('/auth/refresh', refreshLimiter, (req, res, next) => {
+router.post('/auth/refresh', refreshLimiter, refreshCsrfGuard, (req, res, next) => {
   try {
-    const { refresh_token } = req.body ?? {};
+    // V-11: prefer the HttpOnly cookie. Fall back to the JSON body so older
+    // tabs (issued before the cookie deploy) keep refreshing successfully
+    // until they reload. The fallback is gated by refreshCsrfGuard: if the
+    // cookie IS present the CSRF guard above already ran and rejected any
+    // request without a matching x-refresh-csrf header.
+    const refresh_token = req.cookies?.[REFRESH_COOKIE] || req.body?.refresh_token;
     const user = consumeRefreshToken(refresh_token);  // also rotates (marks old revoked)
     const session = signSession(user);
     const next_ = mintRefreshToken(user.id);
+    setRefreshCookies(res, next_.raw);
     res.json({ token: session, refresh_token: next_.raw, refresh_expires_at: next_.expiresAt });
   } catch (e) { next(e); }
 });
@@ -133,7 +151,13 @@ router.post('/recovery', recoveryShortLimiter, recoveryHourLimiter, (req, res, n
 router.post('/logout', requireAuth, (req, res) => {
   // JWT is stateless; client discards. Refresh tokens are server-side state,
   // so revoke the one the client presents (and quietly accept absence).
+  // The refresh cookie is path-scoped to /api/auth/refresh, so the browser
+  // does NOT attach it to this request — we still accept it from the body
+  // for the older clients that send it that way. The clearCookie call below
+  // tells the browser to drop the cookie regardless (Set-Cookie with the
+  // matching path + Max-Age=0 deletes it without needing the original value).
   revokeRefreshToken(req.body?.refresh_token);
+  clearRefreshCookies(res);
   res.json({ ok: true });
 });
 
