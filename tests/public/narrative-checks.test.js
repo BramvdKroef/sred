@@ -201,6 +201,36 @@ test('uncertainties-needs-hypothesis: passes with "whether" / "unproven"', () =>
   assert.ok(!findings.some(f => f.ruleId === 'uncertainties-needs-hypothesis'));
 });
 
+// Migration 016 (SRED_DOMAIN_REVIEW P3) carve-out: when `hypothesis` is
+// populated as its own field, the "uncertainties needs a hypothesis-shaped
+// phrase" rule is suppressed — the working hypothesis no longer needs to
+// live inside the uncertainties paragraph.
+test('uncertainties-needs-hypothesis: suppressed when separate hypothesis field is populated', () => {
+  const noHypothesisText = 'The problem is hard and there are many edge cases in the data pipeline that affect modelling.';
+  // Baseline: this text would normally trip the rule.
+  const baseline = checkNarrative({ ...CLEAN, uncertainties: noHypothesisText });
+  assert.ok(hasRule(baseline.findings, 'uncertainties-needs-hypothesis', 'uncertainties'),
+    'baseline must still fire when hypothesis field is empty');
+
+  // With a populated hypothesis field, the rule is silenced.
+  const carved = checkNarrative({
+    ...CLEAN,
+    uncertainties: noHypothesisText,
+    hypothesis: 'We hypothesised that streaming graph inference would converge under correlated churn.',
+  });
+  assert.ok(!hasRule(carved.findings, 'uncertainties-needs-hypothesis'),
+    'rule must not fire when hypothesis field is non-empty');
+});
+
+test('uncertainties-needs-hypothesis: empty/whitespace hypothesis does NOT trigger the carve-out', () => {
+  const noHypothesisText = 'The problem is hard and there are many edge cases in the data pipeline that affect modelling.';
+  for (const hyp of ['', '   ', '\n\t']) {
+    const out = checkNarrative({ ...CLEAN, uncertainties: noHypothesisText, hypothesis: hyp });
+    assert.ok(hasRule(out.findings, 'uncertainties-needs-hypothesis', 'uncertainties'),
+      `whitespace-only hypothesis (${JSON.stringify(hyp)}) must not silence the rule`);
+  }
+});
+
 test('work-needs-experimental-verb: fires when no experimental verb', () => {
   const text = 'Our code base now has the new module deployed and integrated with the rest of the system for production, ' +
                'serving users at the regional pilot locations including Niagara and surrounding counties.';

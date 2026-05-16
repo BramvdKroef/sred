@@ -94,6 +94,17 @@ export function toMarkdown(totals) {
     lines.push(``);
     lines.push(`**Uncertainties:** ${proj.narrative.uncertainties ?? '_(unset)_'}`);
     lines.push(``);
+    // Migration 016 (SRED_DOMAIN_REVIEW P3): the working hypothesis is a
+    // distinct CRA five-question element from `uncertainties` (which captures
+    // the open question). Surface it inline so the tax preparer can see the
+    // hypothesis cycle without opening the admin form.
+    lines.push(`**Hypothesis:** ${proj.narrative.hypothesis ?? '_(unset)_'}`);
+    lines.push(``);
+    // The date the team identified the uncertainty proves contemporaneity to
+    // a CRA reviewer (the SR&ED framing existed during the claim period,
+    // not as a post-hoc rationalisation).
+    lines.push(`**Uncertainty identified:** ${proj.narrative.uncertainty_identified_at ?? '_(unset)_'}`);
+    lines.push(``);
     lines.push(`**Work performed:** ${proj.narrative.work_performed ?? '_(unset)_'}`);
     lines.push(``);
     lines.push(`### Totals`);
@@ -228,6 +239,10 @@ export function toPdf(totals) {
 
     narrativeBlock(doc, 'Advancement sought', proj.narrative.advancement_sought);
     narrativeBlock(doc, 'Technological uncertainties', proj.narrative.uncertainties);
+    // Migration 016: hypothesis is a distinct CRA five-question element.
+    // Inline next to uncertainties so the reviewer sees the pair.
+    narrativeBlock(doc, 'Hypothesis', proj.narrative.hypothesis);
+    narrativeBlock(doc, 'Uncertainty identified', proj.narrative.uncertainty_identified_at);
     narrativeBlock(doc, 'Work performed', proj.narrative.work_performed);
 
     doc.moveDown(0.3);

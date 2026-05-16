@@ -185,6 +185,12 @@ export function computeT661({ claimant, period }) {
         advancement_sought: project.advancement_sought,
         uncertainties: project.uncertainties,
         work_performed: project.work_performed,
+        // Migration 016 (SRED_DOMAIN_REVIEW P3): the working hypothesis and
+        // the date the uncertainty was identified. Both are nullable — older
+        // projects predate the fields and will surface as `null` to the
+        // formatter, which renders them as "(unset)".
+        hypothesis: project.hypothesis ?? null,
+        uncertainty_identified_at: project.uncertainty_identified_at ?? null,
       },
       totals: {
         labour_cost_cents: projectLabourCents,

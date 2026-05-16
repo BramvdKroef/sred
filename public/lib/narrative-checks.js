@@ -196,20 +196,28 @@ function countWords(text) {
  * field" info finding instead of running every rule (which would spew
  * noise).
  *
- * @param {{advancement_sought?:string, uncertainties?:string, work_performed?:string}} fields
+ * Migration 016 (SRED_DOMAIN_REVIEW P3) introduced a separate `hypothesis`
+ * column on `projects`. When that field is also populated, the
+ * `uncertainties-needs-hypothesis` rule on `uncertainties` is suppressed
+ * — the working hypothesis no longer needs to live inside the
+ * uncertainties paragraph, so demanding a hypothesis-shaped phrase there
+ * produces false noise.
+ *
+ * @param {{advancement_sought?:string, uncertainties?:string, work_performed?:string, hypothesis?:string}} fields
  * @returns {{findings: Array<{field:string, severity:string, span:{start:number,end:number}|null, message:string, hint:string, ruleId:string}>}}
  */
 export function checkNarrative(fields) {
   const findings = [];
+  const hypothesisProvided = typeof fields.hypothesis === 'string' && fields.hypothesis.trim().length > 0;
   for (const field of FIELDS) {
     const raw = fields[field];
     const text = typeof raw === 'string' ? raw : '';
-    findings.push(...checkField(field, text));
+    findings.push(...checkField(field, text, { hypothesisProvided }));
   }
   return { findings };
 }
 
-function checkField(field, text) {
+function checkField(field, text, { hypothesisProvided = false } = {}) {
   const out = [];
   const trimmed = text.trim();
 
@@ -250,6 +258,11 @@ function checkField(field, text) {
   // Missing-element checks. No span — the whole field is the locus.
   for (const check of REQUIRED_ELEMENTS) {
     if (!check.fields.includes(field)) continue;
+    // P3 carve-out: when the separate `hypothesis` field is populated, the
+    // `uncertainties-needs-hypothesis` rule no longer applies — the working
+    // hypothesis has its own column (migration 016) and the uncertainties
+    // paragraph is free to describe just the open question.
+    if (check.id === 'uncertainties-needs-hypothesis' && hypothesisProvided) continue;
     if (!check.test(text)) {
       out.push({
         field,

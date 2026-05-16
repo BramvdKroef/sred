@@ -7,8 +7,12 @@ import { getProject, mutateAndAudit, createAndAudit } from '../lib/route-helpers
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-const SNAPSHOT_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed', 'type', 'manager_user_id'];
+const SNAPSHOT_FIELDS = ['title', 'field_of_science', 'advancement_sought', 'uncertainties', 'work_performed', 'hypothesis', 'uncertainty_identified_at', 'type', 'manager_user_id'];
 const EDITABLE_FIELDS = [...SNAPSHOT_FIELDS, 'start_date', 'end_date', 'status'];
+// ISO date shape — matches the GLOB CHECK on the column. We validate at the
+// route layer so the response is a clear 400 (not a CHECK constraint
+// violation surfaced as a 500).
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const VALID_TYPES    = ['sred', 'internal'];
 const VALID_STATUSES = ['concept', 'development', 'complete'];
 
@@ -105,6 +109,11 @@ router.patch('/:id', (req, res, next) => {
     if (updates.title !== undefined && !updates.title) {
       throw badRequest('title cannot be empty');
     }
+    if (updates.uncertainty_identified_at !== undefined &&
+        updates.uncertainty_identified_at !== null &&
+        !ISO_DATE.test(String(updates.uncertainty_identified_at))) {
+      throw badRequest('uncertainty_identified_at must be an ISO date (YYYY-MM-DD) or null');
+    }
 
     const keys = Object.keys(updates);
     if (keys.length === 0) return res.json(preflight);
@@ -156,8 +165,9 @@ router.patch('/:id', (req, res, next) => {
             db.prepare(`
               INSERT INTO project_revisions
                 (project_id, title, field_of_science, advancement_sought, uncertainties,
-                 work_performed, type, manager_user_id, revised_by_user_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 work_performed, hypothesis, uncertainty_identified_at,
+                 type, manager_user_id, revised_by_user_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
               before.id,
               merged.title,
@@ -165,6 +175,8 @@ router.patch('/:id', (req, res, next) => {
               merged.advancement_sought,
               merged.uncertainties,
               merged.work_performed,
+              merged.hypothesis ?? null,
+              merged.uncertainty_identified_at ?? null,
               merged.type,
               merged.manager_user_id ?? null,
               req.user.id,
