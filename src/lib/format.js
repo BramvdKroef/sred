@@ -45,16 +45,34 @@ function dollars(cents, currency = 'CAD') {
   return `${(cents / 100).toFixed(2)} ${currency}`;
 }
 
-// Format an expense category for human consumption. For overhead rows we
-// append the CRA sub-classification + allocation basis when present
-// (migration 014 — SRED_DOMAIN_REVIEW F5). Non-overhead rows pass through
-// as-is. The T661 line is unchanged (line 360) — this is presentation only.
+// Format an expense category for human consumption with its CRA sub-
+// classification appended. Examples:
+//   - `overhead · rent · 30% of total floor area` (migration 014, F5)
+//   - `material · consumed`                       (migration 015, P3.1)
+//   - `material · transformed`                    (migration 015, P3.1)
+//   - `contract · arms-length`                    (migration 015, P3.2)
+//   - `contract · non-arms-length`                (migration 015, P3.2)
+//   - `third_party_payment`                       (no sub-classification)
+// T661 lines are unchanged (320 still maps to all materials regardless of
+// disposition; 340 to all contracts regardless of NAL flag) — this is
+// presentation only. The line-number split between 320 and 325 is a
+// follow-up; the column is now populated so the formatter can drive that
+// split when ready.
 function categoryLabel(e) {
-  if (e.category !== 'overhead') return e.category;
-  const parts = ['overhead'];
-  if (e.overhead_subcategory) parts.push(e.overhead_subcategory);
-  if (e.allocation_basis)     parts.push(e.allocation_basis);
-  return parts.join(' · ');
+  if (e.category === 'overhead') {
+    const parts = ['overhead'];
+    if (e.overhead_subcategory) parts.push(e.overhead_subcategory);
+    if (e.allocation_basis)     parts.push(e.allocation_basis);
+    return parts.join(' · ');
+  }
+  if (e.category === 'material' && e.material_disposition) {
+    return `material · ${e.material_disposition}`;
+  }
+  if (e.category === 'contract' &&
+      (e.contract_arms_length === 0 || e.contract_arms_length === 1)) {
+    return `contract · ${e.contract_arms_length === 1 ? 'arms-length' : 'non-arms-length'}`;
+  }
+  return e.category;
 }
 
 export function toMarkdown(totals) {

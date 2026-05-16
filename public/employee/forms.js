@@ -152,7 +152,7 @@ export function renderExpense(main, ctx) {
         </label></div>
         <div><label>Amount <span class="muted" data-amount-unit>(CAD)</span> <input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></label></div>
         <div><label>Currency <input name="currency" value="CAD" data-currency-input></label></div>
-        <div><label>FX rate (if not reporting currency) <input type="number" step="0.0001" name="fx_rate"></label></div>
+        <div><label>FX rate (if not reporting currency) <input type="number" step="0.0001" name="fx_rate" data-fx-rate-input></label></div>
         <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
         <div data-overhead-only hidden><label>Overhead type
           <select name="overhead_subcategory">
@@ -164,6 +164,19 @@ export function renderExpense(main, ctx) {
           </select>
         </label></div>
         <div class="full" data-overhead-only hidden><label>Allocation basis <input name="allocation_basis" placeholder="e.g. 30% of total floor area"></label></div>
+        <div data-material-only hidden><label>Disposition
+          <select name="material_disposition">
+            <option value="consumed">consumed (T661 line 320)</option>
+            <option value="transformed">transformed into product (T661 line 325)</option>
+          </select>
+        </label></div>
+        <div data-contract-only hidden><label>Arm's-length contractor
+          <select name="contract_arms_length">
+            <option value="1">yes — arm's length</option>
+            <option value="0">no — non-arm's-length</option>
+          </select>
+        </label></div>
+        <div class="full" data-fx-rate-source-only hidden><label>FX-rate source <input name="fx_rate_source" placeholder="e.g. Bank of Canada noon rate, 2026-03-15"></label></div>
       </div>
       <details class="attach-block mt-sm" open>
         <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
@@ -185,19 +198,32 @@ export function renderExpense(main, ctx) {
     ccyInput.addEventListener('input', sync);
     sync();
   }
-  // Toggle the overhead-only fields when the category select changes
-  // (SRED_DOMAIN_REVIEW F5 / migration 014). Same pattern as the
-  // bindEvidenceKindToggle helper but kept inline because there's only
-  // one occurrence in this file.
+  // Toggle the category-conditional fields (overhead / material / contract)
+  // when the category select changes, and the fx-rate-source field when the
+  // FX rate input gains/loses a value. Migration 014 added overhead; 015
+  // added material disposition, contract arms-length flag, and fx-rate
+  // attribution.
   const catSel = expForm?.querySelector('[data-expense-category]');
+  const fxInput = expForm?.querySelector('[data-fx-rate-input]');
   if (catSel) {
-    const overheadOnlyDivs = expForm.querySelectorAll('[data-overhead-only]');
-    const sync = () => {
-      const isOverhead = catSel.value === 'overhead';
-      overheadOnlyDivs.forEach(d => { d.hidden = !isOverhead; });
+    const overheadDivs = expForm.querySelectorAll('[data-overhead-only]');
+    const materialDivs = expForm.querySelectorAll('[data-material-only]');
+    const contractDivs = expForm.querySelectorAll('[data-contract-only]');
+    const fxSourceDivs = expForm.querySelectorAll('[data-fx-rate-source-only]');
+    const syncCategory = () => {
+      const c = catSel.value;
+      overheadDivs.forEach(d => { d.hidden = c !== 'overhead'; });
+      materialDivs.forEach(d => { d.hidden = c !== 'material'; });
+      contractDivs.forEach(d => { d.hidden = c !== 'contract'; });
     };
-    catSel.addEventListener('change', sync);
-    sync();
+    const syncFx = () => {
+      const has = fxInput && fxInput.value && Number(fxInput.value) > 0;
+      fxSourceDivs.forEach(d => { d.hidden = !has; });
+    };
+    catSel.addEventListener('change', syncCategory);
+    if (fxInput) fxInput.addEventListener('input', syncFx);
+    syncCategory();
+    syncFx();
   }
 
   bindForm('#expense-form', async fd => {
@@ -214,10 +240,21 @@ export function renderExpense(main, ctx) {
       description: fd.get('description'),
     };
     const fx = fd.get('fx_rate');
-    if (fx) body.fx_rate = Number(fx);
+    if (fx) {
+      body.fx_rate = Number(fx);
+      // Migration 015 P3.3: fx_rate_source required when fx_rate is set.
+      body.fx_rate_source = fd.get('fx_rate_source') || null;
+    }
     if (category === 'overhead') {
       body.overhead_subcategory = fd.get('overhead_subcategory') || null;
       body.allocation_basis     = fd.get('allocation_basis') || null;
+    }
+    if (category === 'material') {
+      body.material_disposition = fd.get('material_disposition') || null;
+    }
+    if (category === 'contract') {
+      const v = fd.get('contract_arms_length');
+      body.contract_arms_length = v === '1' ? 1 : v === '0' ? 0 : null;
     }
     const entry = await api('POST', '/api/expenses', body);
     await attachInlineReceipt(fd, { project_id: entry.project_id, expense_id: entry.id, evidence_date: entry.expense_date });

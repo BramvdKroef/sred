@@ -152,7 +152,10 @@ test('PATCH overhead → material auto-clears overhead fields', async () => {
   assert.equal(created.status, 201);
   const patched = await callApi({
     method: 'PATCH', path: `/api/expenses/${created.body.id}`, token: adminToken,
-    body: { category: 'material' },
+    // Migration 015 (P3.1): switching to material also requires the new
+    // disposition field. The overhead → material auto-clear is what this
+    // test cares about — we still need to provide a valid material body.
+    body: { category: 'material', material_disposition: 'consumed' },
   });
   assert.equal(patched.status, 200, `expected 200, got ${patched.status}: ${JSON.stringify(patched.body)}`);
   assert.equal(patched.body.category, 'material');

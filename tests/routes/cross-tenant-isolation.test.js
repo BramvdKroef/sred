@@ -331,6 +331,7 @@ test('POST /api/expenses against B project as Alice → 403 (resolveUserClaimant
       amount_cents: 100,
       currency: 'CAD',
       description: 'cross-tenant expense attempt',
+      material_disposition: 'consumed', // required since migration 015 (P3.1)
     },
   });
   assert.equal(r.status, 403, `expected 403, got ${r.status}: ${JSON.stringify(r.body)}`);

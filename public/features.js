@@ -185,42 +185,76 @@ export function labourEditFormHtml(e, opts = {}) {
 //
 // Overhead fields (migration 014 / SRED_DOMAIN_REVIEW F5): when the row is
 // (or becomes) category='overhead' we expose a subcategory <select> and an
-// allocation-basis <input>. The wrapping div carries data-overhead-only so
-// bindExpenseOverheadToggle can show/hide both on a category-change
-// listener. Initial visibility follows the row's saved category.
+// allocation-basis <input>. Migration 015 (P3) adds three more conditional
+// groups: a `material_disposition` select (visible when material), a
+// `contract_arms_length` select (visible when contract), and a
+// `fx_rate_source` text input (visible whenever fx_rate is populated).
+// Each group's wrapper div carries a data-*-only attribute so
+// bindExpenseOverheadToggle can show/hide it on a category-change /
+// fx-rate-input listener. Initial visibility follows the row's saved
+// category + fx_rate.
 export function expenseEditFormHtml(e, opts = {}) {
   const cats = ['material','contract','third_party_payment','overhead'];
   const subcats = ['rent','utilities','maintenance','supporting_salaries','other'];
+  const dispositions = ['consumed','transformed'];
   const attr = opts.formAttr ?? `data-form-edit-expense="${e.id}"`;
   const isOverhead = e.category === 'overhead';
+  const isMaterial = e.category === 'material';
+  const isContract = e.category === 'contract';
+  const hasFx      = e.fx_rate != null && Number(e.fx_rate) > 0;
+  const armsLengthValue = e.contract_arms_length;     // 0 | 1 | null
   return `<form ${attr} class="row gap-md inline-edit-row wrap">
     <div><label>Date <input type="date" name="expense_date" value="${esc(e.expense_date)}" required></label></div>
     <div><label>Category <select name="category" data-expense-category>${cats.map(c =>
       `<option value="${c}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
     <div><label>Amount <span class="muted">(${esc(e.currency)})</span> <input type="number" step="0.01" min="0" name="amount" value="${(e.amount_cents / 100).toFixed(2)}" required class="w-amount"></label></div>
     <div><label>Currency <input name="currency" value="${esc(e.currency)}" required class="w-ccy"></label></div>
-    <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" class="w-hours"></label></div>
+    <div><label>FX rate <input type="number" step="0.0001" name="fx_rate" value="${e.fx_rate ?? ''}" class="w-hours" data-fx-rate-input></label></div>
     <div class="input-grow"><label>Description <input name="description" value="${esc(e.description)}" required></label></div>
     <div data-overhead-only ${isOverhead ? '' : 'hidden'}><label>Overhead type <select name="overhead_subcategory">${subcats.map(s =>
       `<option value="${s}" ${s === e.overhead_subcategory ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
     <div class="input-grow" data-overhead-only ${isOverhead ? '' : 'hidden'}><label>Allocation basis <input name="allocation_basis" value="${esc(e.allocation_basis ?? '')}" placeholder="e.g. 30% of total floor area"></label></div>
+    <div data-material-only ${isMaterial ? '' : 'hidden'}><label>Disposition <select name="material_disposition">${dispositions.map(d =>
+      `<option value="${d}" ${d === e.material_disposition ? 'selected' : ''}>${d}</option>`).join('')}</select></label></div>
+    <div data-contract-only ${isContract ? '' : 'hidden'}><label>Arm's-length <select name="contract_arms_length">
+      <option value="1" ${armsLengthValue === 1 ? 'selected' : ''}>yes — arm's length</option>
+      <option value="0" ${armsLengthValue === 0 ? 'selected' : ''}>no — non-arm's-length</option>
+    </select></label></div>
+    <div class="input-grow" data-fx-rate-source-only ${hasFx ? '' : 'hidden'}><label>FX-rate source <input name="fx_rate_source" value="${esc(e.fx_rate_source ?? '')}" placeholder="e.g. Bank of Canada noon rate, 2026-03-15"></label></div>
     <div><label>&nbsp;</label><div class="row gap-sm"><button class="small">Save expense</button>${opts.cancelAttr ? `<button type="button" class="small secondary" ${opts.cancelAttr}>Cancel</button>` : ''}</div></div>
   </form>`;
 }
 
-// Wire the category <select> in an expense-edit form to toggle the
-// overhead-only wrappers. Idempotent — safe to call after every render.
-// Mirrors the pattern in employee/forms.js and admin/projects/on-behalf.js.
+// Wire the category <select> + fx-rate <input> in an expense-edit form to
+// toggle the category-conditional wrappers. Idempotent — safe to call
+// after every render. Mirrors the pattern in employee/forms.js and
+// admin/projects/on-behalf.js.
+//
+// Migration 014 added overhead; 015 (P3) added material disposition,
+// contract arm's-length, and fx-rate source. The first three are
+// category-conditional, the fourth is fx-rate-conditional.
 export function bindExpenseOverheadToggle(form) {
   const sel = form.querySelector('[data-expense-category]');
   if (!sel) return;
-  const overheadOnlyDivs = form.querySelectorAll('[data-overhead-only]');
-  const sync = () => {
-    const isOverhead = sel.value === 'overhead';
-    overheadOnlyDivs.forEach(d => { d.hidden = !isOverhead; });
+  const fxInput      = form.querySelector('[data-fx-rate-input]');
+  const overheadDivs = form.querySelectorAll('[data-overhead-only]');
+  const materialDivs = form.querySelectorAll('[data-material-only]');
+  const contractDivs = form.querySelectorAll('[data-contract-only]');
+  const fxSourceDivs = form.querySelectorAll('[data-fx-rate-source-only]');
+  const syncCategory = () => {
+    const c = sel.value;
+    overheadDivs.forEach(d => { d.hidden = c !== 'overhead'; });
+    materialDivs.forEach(d => { d.hidden = c !== 'material'; });
+    contractDivs.forEach(d => { d.hidden = c !== 'contract'; });
   };
-  sel.addEventListener('change', sync);
-  sync();
+  const syncFx = () => {
+    const has = fxInput && fxInput.value && Number(fxInput.value) > 0;
+    fxSourceDivs.forEach(d => { d.hidden = !has; });
+  };
+  sel.addEventListener('change', syncCategory);
+  if (fxInput) fxInput.addEventListener('input', syncFx);
+  syncCategory();
+  syncFx();
 }
 
 // Submit a PATCH /api/labour/:id from a FormData built off labourEditFormHtml.
@@ -259,12 +293,33 @@ export async function submitExpenseEdit(id, fd) {
   };
   const fx = fd.get('fx_rate');
   body.fx_rate = fx ? Number(fx) : null;
+  // Migration 015 P3.3: pass-through fx_rate_source when fx_rate is set;
+  // explicitly null when fx_rate is cleared so the server clears any stale
+  // source attribution (the server auto-nulls too, but sending the
+  // explicit clear keeps the wire payload self-describing — matches the
+  // overhead-fields convention immediately below).
+  body.fx_rate_source = (body.fx_rate != null) ? (fd.get('fx_rate_source') || null) : null;
   if (category === 'overhead') {
     body.overhead_subcategory = fd.get('overhead_subcategory') || null;
     body.allocation_basis     = fd.get('allocation_basis') || null;
   } else {
     body.overhead_subcategory = null;
     body.allocation_basis     = null;
+  }
+  // Migration 015 P3.1: material_disposition only on material rows.
+  if (category === 'material') {
+    body.material_disposition = fd.get('material_disposition') || null;
+  } else {
+    body.material_disposition = null;
+  }
+  // Migration 015 P3.2: contract_arms_length only on contract rows.
+  // The <select> emits string "0" / "1" — coerce to numeric so the server
+  // sees the canonical wire form.
+  if (category === 'contract') {
+    const v = fd.get('contract_arms_length');
+    body.contract_arms_length = v === '1' ? 1 : v === '0' ? 0 : null;
+  } else {
+    body.contract_arms_length = null;
   }
   return api('PATCH', `/api/expenses/${id}`, body);
 }
@@ -442,16 +497,26 @@ export function renderActivityDetail(type, e, auditItems, linkedEv, opts = {}) {
       ${e.rejection_reason ? `<div class="full"><strong>Rejection reason:</strong> <span class="muted">${esc(e.rejection_reason)}</span></div>` : ''}
     `;
   } else if (type === 'expense') {
-    const overheadLabel = e.category === 'overhead' && e.overhead_subcategory
-      ? `${esc(e.category)} · ${esc(e.overhead_subcategory)}`
-      : esc(e.category);
+    // Migration 014/015: surface the category sub-classification inline
+    // (e.g. "overhead · rent", "material · consumed", "contract · arm's
+    // length") and an extra row for the allocation basis / fx-rate source
+    // when present. Keeps the detail panel a quick-glance summary without
+    // forcing the user to open the edit form to see them.
+    let catLabel = esc(e.category);
+    if (e.category === 'overhead' && e.overhead_subcategory)
+      catLabel = `${esc(e.category)} · ${esc(e.overhead_subcategory)}`;
+    else if (e.category === 'material' && e.material_disposition)
+      catLabel = `${esc(e.category)} · ${esc(e.material_disposition)}`;
+    else if (e.category === 'contract' && (e.contract_arms_length === 0 || e.contract_arms_length === 1))
+      catLabel = `${esc(e.category)} · ${e.contract_arms_length === 1 ? "arm's length" : "non-arm's-length"}`;
     body += `
       <div><strong>Date:</strong> ${esc(e.expense_date)}</div>
-      <div><strong>Category:</strong> ${overheadLabel}</div>
+      <div><strong>Category:</strong> ${catLabel}</div>
       <div><strong>Amount:</strong> ${(e.amount_cents/100).toFixed(2)} ${esc(e.currency)}${e.fx_rate ? ` @ ${e.fx_rate}` : ''}</div>
       <div><strong>Status:</strong> <span class="pill ${e.status}">${esc(e.status)}</span></div>
       <div class="full"><strong>Description:</strong> ${esc(e.description)}</div>
       ${e.category === 'overhead' && e.allocation_basis ? `<div class="full"><strong>Allocation basis:</strong> ${esc(e.allocation_basis)}</div>` : ''}
+      ${e.fx_rate && e.fx_rate_source ? `<div class="full"><strong>FX-rate source:</strong> ${esc(e.fx_rate_source)}</div>` : ''}
       ${e.reviewed_at ? `<div class="full muted"><strong>Reviewed</strong> ${esc(e.reviewed_at)} (user #${e.reviewed_by_user_id})</div>` : ''}
       ${e.rejection_reason ? `<div class="full"><strong>Rejection reason:</strong> <span class="muted">${esc(e.rejection_reason)}</span></div>` : ''}
     `;

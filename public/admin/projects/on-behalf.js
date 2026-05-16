@@ -71,8 +71,8 @@ export function renderLogOnBehalfCards(project, claimant) {
                 </select>
               </label></div>
               <div><label>Amount <span class="muted">(${esc(reportingCcy)})</span> <input type="number" step="0.01" name="amount" min="0" placeholder="e.g. 1234.56" required></label></div>
-              <div><label>Currency <input name="currency" value="${esc(reportingCcy)}" required></label></div>
-              <div><label>FX rate (if not ${esc(reportingCcy)}) <input type="number" step="0.0001" name="fx_rate"></label></div>
+              <div><label>Currency <input name="currency" value="${esc(reportingCcy)}" required data-currency-input></label></div>
+              <div><label>FX rate (if not ${esc(reportingCcy)}) <input type="number" step="0.0001" name="fx_rate" data-fx-rate-input></label></div>
               <div class="full"><label>Description <textarea name="description" rows="2" required></textarea></label></div>
               <div data-overhead-only hidden><label>Overhead type
                 <select name="overhead_subcategory">
@@ -84,6 +84,19 @@ export function renderLogOnBehalfCards(project, claimant) {
                 </select>
               </label></div>
               <div class="full" data-overhead-only hidden><label>Allocation basis <input name="allocation_basis" placeholder="e.g. 30% of total floor area"></label></div>
+              <div data-material-only hidden><label>Disposition
+                <select name="material_disposition">
+                  <option value="consumed">consumed (T661 line 320)</option>
+                  <option value="transformed">transformed into product (T661 line 325)</option>
+                </select>
+              </label></div>
+              <div data-contract-only hidden><label>Arm's-length contractor
+                <select name="contract_arms_length">
+                  <option value="1">yes — arm's length</option>
+                  <option value="0">no — non-arm's-length</option>
+                </select>
+              </label></div>
+              <div class="full" data-fx-rate-source-only hidden><label>FX-rate source <input name="fx_rate_source" placeholder="e.g. Bank of Canada noon rate, 2026-03-15"></label></div>
             </div>
             <details class="mt-sm" open>
               <summary class="summary-link">＋ Attach receipt (optional, strongly encouraged)</summary>
@@ -144,10 +157,26 @@ export function bindLogOnBehalfForms(project, ctx) {
       description: fd.get('description'),
     };
     const fx = fd.get('fx_rate');
-    if (fx) body.fx_rate = Number(fx);
+    if (fx) {
+      body.fx_rate = Number(fx);
+      // Migration 015 P3.3: fx_rate_source is required by the API when
+      // fx_rate is set. Pass through the user's free-text attribution.
+      body.fx_rate_source = fd.get('fx_rate_source') || null;
+    }
     if (category === 'overhead') {
       body.overhead_subcategory = fd.get('overhead_subcategory') || null;
       body.allocation_basis     = fd.get('allocation_basis') || null;
+    }
+    if (category === 'material') {
+      body.material_disposition = fd.get('material_disposition') || null;
+    }
+    if (category === 'contract') {
+      // Wire format is a numeric 0/1 (see coerceArmsLengthFlag in the
+      // expenses route). The <select> emits a string "0" / "1" which the
+      // server coerces — sending the canonical int form anyway is more
+      // self-describing.
+      const v = fd.get('contract_arms_length');
+      body.contract_arms_length = v === '1' ? 1 : v === '0' ? 0 : null;
     }
     const entry = await api('POST', '/api/expenses', body);
     await attachInlineReceipt(fd, { project_id: entry.project_id, expense_id: entry.id, evidence_date: entry.expense_date });
@@ -155,21 +184,36 @@ export function bindLogOnBehalfForms(project, ctx) {
   });
 }
 
-// Show/hide the two overhead fields (subcategory select + allocation basis
-// input) based on the category select. Mirrors bindEvidenceKindToggle: the
-// caller marks the form with `data-expense-category` on the <select> and
-// `data-overhead-only` on each wrapping div. Hidden = visually gone AND
-// detached from FormData submission for non-overhead rows (the wrapping div
-// hides; the input inside doesn't submit because the name attribute is
-// scoped per-form to the active category check above).
+// Show/hide the category-conditional fields based on the category select +
+// fx-rate input. Mirrors bindEvidenceKindToggle: the caller marks the form
+// with `data-expense-category` on the category <select>, `data-fx-rate-input`
+// on the FX <input>, and `data-overhead-only` / `data-material-only` /
+// `data-contract-only` / `data-fx-rate-source-only` on the wrapping divs
+// of each conditional field group. Hidden = visually gone AND submitted
+// fields are gated by the server-side category check (the route ignores
+// stale values for the wrong category).
+//
+// Migration 015 (P3) added the material / contract / fx-rate-source groups.
 function bindOverheadFieldsToggle(form) {
   const sel = form.querySelector('[data-expense-category]');
-  const overheadOnlyDivs = form.querySelectorAll('[data-overhead-only]');
+  const fxInput = form.querySelector('[data-fx-rate-input]');
   if (!sel) return;
-  const sync = () => {
-    const isOverhead = sel.value === 'overhead';
-    overheadOnlyDivs.forEach(d => { d.hidden = !isOverhead; });
+  const overheadDivs    = form.querySelectorAll('[data-overhead-only]');
+  const materialDivs    = form.querySelectorAll('[data-material-only]');
+  const contractDivs    = form.querySelectorAll('[data-contract-only]');
+  const fxSourceDivs    = form.querySelectorAll('[data-fx-rate-source-only]');
+  const syncCategory = () => {
+    const c = sel.value;
+    overheadDivs.forEach(d => { d.hidden = c !== 'overhead'; });
+    materialDivs.forEach(d => { d.hidden = c !== 'material'; });
+    contractDivs.forEach(d => { d.hidden = c !== 'contract'; });
   };
-  sel.addEventListener('change', sync);
-  sync();
+  const syncFx = () => {
+    const has = fxInput && fxInput.value && Number(fxInput.value) > 0;
+    fxSourceDivs.forEach(d => { d.hidden = !has; });
+  };
+  sel.addEventListener('change', syncCategory);
+  if (fxInput) fxInput.addEventListener('input', syncFx);
+  syncCategory();
+  syncFx();
 }
