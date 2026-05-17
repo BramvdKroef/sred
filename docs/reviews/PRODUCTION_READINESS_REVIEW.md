@@ -2,6 +2,14 @@
 
 _2026-05-14, against branch `master`, commit `d533fc3`_
 
+## Status
+
+**Mostly addressed** as of 2026-05-16.
+
+- **Closed:** B-1 (`trust proxy` honours `TRUST_PROXY` env, default 1) · B-2 (SIGTERM/SIGINT drain + `unhandledRejection`) · B-3 (`npm run backup`, `npm run cleanup:bundles`, email_tokens reaper on each mint) · B-4 (JWT_SECRET strength check; weak values rejected at startup) · S-1 (structured JSON logger `src/lib/logger.js`, `req.id` + `x-request-id`) · S-2 (pluggable `src/lib/error-reporter.js` — Sentry init commented out in `server.js` as the documented hookpoint) · S-3 (`/healthz` + `/readyz` mounted before auth, no DB hit for liveness) · S-5 (SMTP `connectionTimeout: 5000` + truthful `delivered` flag) · S-7 (`.nvmrc` pins Node 22; `engines.node>=22` in package.json).
+- **Still open:** S-4 (`PRAGMA integrity_check` after table-recreate migrations; migrate `--dry-run`) · S-6 (`Cache-Control` tuning on `express.static`) · S-8 (HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` — CSP ships but the others don't) · P3 Sentry/Honeybadger SDK wiring (hookpoint exists; no SDK chosen) · P3 request-correlation IDs propagated into `audit_log` rows.
+- **Nice-to-haves still pending:** N-1 CORS doc · N-2 timezone-rendering helper · N-3 DB encryption-at-rest · N-4 secrets-management hook · N-7 body-parse-limit doc · N-8 compression (deferred to reverse proxy).
+
 ## Summary
 
 **Verdict: not ready for production. Ready with substantial caveats for a single-VM, one-or-two-claimant pilot _only_ after the four blockers below are addressed.**

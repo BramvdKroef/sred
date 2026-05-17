@@ -2,6 +2,13 @@
 
 _2026-05-14, against branch `master`, commit `d533fc3`_
 
+## Status
+
+**Mostly addressed** as of 2026-05-16. The top-3 recommendations are all done; the long-tail P3 splits are still open.
+
+- **Closed:** `mutateAndAudit` extracted to `src/lib/route-helpers.js` and swept across ~25 callsites (commit `0dcfdf0`). `public/api.js` split into `session.js` / `fetch.js` / `dom.js` / `features.js` — `api.js` is now a 16-line re-export shim. `public/admin/projects.js` (771 → entry + 6 sub-modules under `public/admin/projects/`) and `public/admin/employees.js` (663 → entry + 7 sub-modules under `public/admin/employees/`) split. Inline `style="…"` attributes reduced from 109 → 1 (the data-driven bar-chart height). Status-pill mapping consolidated via `pillClassFor()` / `statusPill()`. Unused `dollarInput` / `$$` exports removed.
+- **Still open (P2/P3):** Split `src/routes/auth.js` (295 LOC) into `auth.js` (ceremonies) + `me.js` (`/api/me*` endpoints) — `src/routes/me.js` does not exist on disk. Split `src/lib/format.js` (723 LOC) along the single-period / compare seam. Extract `buildUpdate(table, id, updates)` helper for the labour/expenses/users PATCH partial-update builders. Extract `sendFormat(res, baseName, { json, csv, md, pdf })` for the exports/compare download dispatcher. Promote `MAX_UPLOAD_BYTES` and `BUNDLES_DIR` to `config.*`. Add startup `wage-caps` future-year check (warn if `LATEST_YEAR < currentYear + 1`). Optional `repositories/` layer if the schema keeps growing. Toggle-card consolidation in `public/admin/*`.
+
 ## Summary
 
 The codebase is in healthy structural shape for a 12-month-old vanilla-JS Express

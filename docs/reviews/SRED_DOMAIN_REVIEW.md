@@ -2,6 +2,15 @@
 
 _2026-05-14, against branch `worktree-agent-afe428beb8e93ea24`, commit `d533fc3`._
 
+## Status
+
+**Partly addressed** as of 2026-05-16. Most P3 schema gaps closed via migrations 014/015/016; two structural items remain.
+
+- **Closed:** F2 T661 line numbers shipping in every export format (`src/lib/format.js` constants `T661_LINES` / `T661_LINE_NUMBERS` covering 305/306/307/320/325/340/345/350/360 — commits `22427d2` + `561f639`). F3 `hypothesis` + `uncertainty_identified_at` columns via migration 016. F4 `fx_rate_source` (free-text attribution required when `fx_rate` is set) via migration 015 + `validateFxRateSource` in `routes/expenses.js`. F5 `overhead_subcategory` (rent/utilities/maintenance/supporting_salaries/other) + `allocation_basis` via migration 014. P3 materials consumed-vs-transformed (`material_disposition`) and contract arm's-length flag (`contract_arms_length`) via migration 015 + T661 splits 320/325 and 340/350.
+- **Still open:** F1 specified-employee cap pro-ration by days-as-specified — design documented at `docs/specified-employee-pro-ration.md`; **not yet implemented** in `src/lib/t661.js`. V1 wage-cap values for 2025-2027 still carry `// verify` annotations in `src/lib/wage-caps.js`. F6 the "T661 line 305 vs 306 reporting" comment at `src/lib/t661.js:106` is suspect and not cleaned up. P3 audit-defensibility gaps (evidence-to-uncertainty link; personnel-on-project competency record; currency-lock on claimant `reporting_currency`). P3 re-run with web access enabled to verify 2025-2027 wage caps + current T661 v22 line numbers + OT straight-time question.
+
+The format.js mapping currently uses `third_party_payment → line 345` and `overhead → line 360`. Worth verifying against the live T661 form (the review and CRA T661 v22 typically place third-party payments at line 360); part of the "verify with web access" bullet.
+
 **Caveat:** I am an LLM, not a tax professional. This review cross-references publicly-available CRA documentation against my training knowledge of T661, T4088, and ITA s.37 / s.248. Live web access was unavailable for this run (`WebSearch`/`WebFetch` permissions denied), so I could not pull the current CRA pages verbatim — every CRA citation below is from training-data recollection and is flagged accordingly. **Final accuracy must be verified by a qualified tax preparer before filing.**
 
 When I write "[CRA, T4088 §2.x]" or "[ITA s.37(...)]" below, treat it as "this is what I recall the rule to be — please confirm against the live publication". I have not invented rules; where I cannot recall a specific value I have written "couldn't verify".

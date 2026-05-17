@@ -2,6 +2,13 @@
 
 _2026-05-14, against branch `master`, commit `d533fc3`_
 
+## Status
+
+**Mostly addressed** as of 2026-05-16. The top-5 concerns at the bottom of the report are all closed.
+
+- **Closed:** D-4 concurrent project PATCH (strict `__updated_at` precondition, 409 on mismatch — see `routes/projects.js` + `tests/routes/project-patch-race.test.js`) · N-1 / N-2 SMTP fire-and-forget + lying `delivered:true` (nodemailer timeouts + truthful `delivered` field + audit row written before send) · S-3 deactivated employee can still PATCH (`isOwnerOrAdmin` now requires `uc.status='active'`; same fix applied to labour/expenses GET filters) · F-2 evidence-package archiver error handling · D-1 `busy_timeout = 5000` pragma explicit on every connection (see `src/db/index.js:33`) · D-5 refresh-token race (V-03 family revoke already in place).
+- **Still open (P3):** D-1 application-level retry helper on `SQLITE_BUSY` (busy_timeout is set; retry-wrapper not yet added) · F-1 multer disk-full mid-write cleanup hardening · F-3 `uploads/` deleted while server running (per-request `mkdirSync`) · E-1 supervisor / systemd / pm2 documentation · T-1 JWT `clockTolerance: 30` · C-2 nightly purge of long-stale refresh tokens · C-3 audit-log archive strategy beyond closed-period retention.
+
 ## Summary
 
 Headline risk: the server runs in a single Node process with no supervisor, no SQLite `busy_timeout`, no SMTP timeout, and no optimistic-concurrency check on any mutation. Most failure modes degrade gracefully because better-sqlite3 is synchronous (so the lock window per request is sub-millisecond), but several scenarios produce a hard 500 to the user where a retry or a friendly message would be far better, and one scenario (concurrent narrative edits) silently destroys an admin's work.

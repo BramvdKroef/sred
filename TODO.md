@@ -2,23 +2,26 @@
 
 Loose punch list. `[P1]` = blocks correctness or a planned demo path. `[P2]` = should fix soon. `[P3]` = polish / nice-to-have.
 
-> **2026-05-14 multi-review batch.** Ten reviews landed: [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md), [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md), [RENDER_REVIEW.md](RENDER_REVIEW.md), [DATABASE_REVIEW.md](DATABASE_REVIEW.md), [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md), [TEST_STRATEGY_REVIEW.md](TEST_STRATEGY_REVIEW.md), [RELIABILITY_REVIEW.md](RELIABILITY_REVIEW.md), [DOCS_ACCURACY_REVIEW.md](DOCS_ACCURACY_REVIEW.md), [SRED_DOMAIN_REVIEW.md](SRED_DOMAIN_REVIEW.md), [DEPENDENCY_REVIEW.md](DEPENDENCY_REVIEW.md). Findings distilled into the sections below.
+> **2026-05-14 multi-review batch.** Ten reviews landed. Findings distilled into the sections below. Surviving review reports with unresolved items live under [`docs/reviews/`](docs/reviews/README.md): [ARCHITECTURE](docs/reviews/ARCHITECTURE_REVIEW.md) · [PRODUCTION_READINESS](docs/reviews/PRODUCTION_READINESS_REVIEW.md) · [RELIABILITY](docs/reviews/RELIABILITY_REVIEW.md) · [SRED_DOMAIN](docs/reviews/SRED_DOMAIN_REVIEW.md) · [TEST_STRATEGY](docs/reviews/TEST_STRATEGY_REVIEW.md). The fully-addressed reviews (DATABASE, DEPENDENCY, DOCS_ACCURACY, RENDER, UI_USABILITY, UI_USE_CASE_AUDIT, VISUAL_DESIGN, VULNERABILITY) were deleted.
 
 ## Production-readiness blockers
 
-From [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md). Verdict: not ready for production; pilot-acceptable after these.
+From [PRODUCTION_READINESS_REVIEW.md](docs/reviews/PRODUCTION_READINESS_REVIEW.md). Verdict: not ready for production; pilot-acceptable after these.
 
 - [x] ~~**`app.set('trust proxy', …)`.**~~ Honours `TRUST_PROXY` env var (default 1, single proxy hop). `req.ip` now resolves to the real client; V-04 rate limiters work as intended.
 - [x] ~~**SIGTERM/SIGINT shutdown hook.**~~ `shutdown()` closes the listener, drains in-flight, calls `db.close()` to flush WAL. 10s force-exit safety. Also: `unhandledRejection` exits 1 so a supervisor restarts.
 - [x] ~~**Backup + retention strategy.**~~ `npm run backup` (WAL-safe via `db.backup()`, tars `uploads/`, default 30-day retention). `npm run cleanup:bundles` (default 90-day). `email_tokens` is reaped on each mint (V-09 pattern). README has a Backup-and-restore section.
 - [x] ~~**Structured logging.**~~ `src/lib/logger.js` (dep-free, JSON-lines). Per-request logger middleware attaches `req.id` + emits `http_request` lines with method/path/status/duration. `x-request-id` header set on every response. ~10 source sites converted from `console.*`. `LOG_LEVEL` env var (default `info`).
 - [x] ~~**Health / readiness endpoints.**~~ `GET /healthz` → `{ok:true}` (no DB hit). `GET /readyz` → 200 `{ok:true, checks:{db:'ok'}}` or 503 `{ok:false, checks:{db:'fail', error:...}}`. Mounted before auth middleware; bypasses rate limiter and audit log.
-- [ ] [P3] Error-monitoring hook (Sentry/Honeybadger integration point).
+- [ ] [P3] Error-monitoring hook (Sentry/Honeybadger SDK). Pluggable hookpoint exists in `src/lib/error-reporter.js`; no SDK chosen yet.
 - [ ] [P3] Request correlation IDs flowing into logs + `audit_log`.
+- [ ] [P2] **Security response headers beyond CSP.** Add `Strict-Transport-Security` (prod only), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()` to `cspMiddleware` (or a sibling middleware).
+- [ ] [P3] **`PRAGMA integrity_check` after table-recreate migrations** (007/011/014/015) and a `--dry-run` flag on the migrate runner.
+- [ ] [P3] **`Cache-Control` tuning on `express.static`** — explicit `maxAge: '1h'` + `no-cache` on `index.html`. Hash-based cache-busting is a separate, larger change.
 
 ## Accessibility
 
-From [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md) and [RENDER_REVIEW.md](RENDER_REVIEW.md) (24 axe-critical + 301 axe-serious violations across 64 page captures).
+From VISUAL_DESIGN_REVIEW.md and RENDER_REVIEW.md (24 axe-critical + 301 axe-serious violations across 64 page captures). Source reports deleted; findings preserved here.
 
 - [x] ~~**`--text-muted` contrast.**~~ Token bumped to `#5a6470` (4.93:1 on surface, 4.62:1 on bg).
 - [x] ~~**`<select>` and form inputs without accessible names.**~~ 9 `aria-label` adds on filter selects/textarea; ~120 controls converted from sibling-label to wrapping-label across 8 files.
@@ -60,7 +63,7 @@ From [VISUAL_DESIGN_REVIEW.md](VISUAL_DESIGN_REVIEW.md) and [RENDER_REVIEW.md](R
 
 ## UI: missing / partial use cases
 
-Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs reference `docs/use-cases.md`.
+Distilled from UI_USE_CASE_AUDIT.md (source report deleted; findings preserved here). Use-case IDs reference `docs/use-cases.md`.
 
 - [x] ~~**UC-R1 — Review queue scoping + bulk approve.**~~ All 5 sub-tasks done.
   - [x] ~~Render employee name + project title.~~
@@ -83,7 +86,7 @@ Distilled from [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). Use-case IDs refere
 
 ## UI: usability
 
-Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact items first.
+Distilled from UI_USABILITY_REVIEW.md (source report deleted; findings preserved here). Top-impact items first.
 
 - [x] ~~**Hoist active-claimant selector into page header.**~~ All 4 steps done.
   - [x] ~~Step 1: move selector visually into the header.~~
@@ -108,31 +111,40 @@ Distilled from [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top-impact item
 
 ## Reliability
 
-From [RELIABILITY_REVIEW.md](RELIABILITY_REVIEW.md).
+From [RELIABILITY_REVIEW.md](docs/reviews/RELIABILITY_REVIEW.md).
 
 - [x] ~~**Concurrent narrative PATCH silently overwrites.**~~ Fixed: strict `__updated_at` precondition (missing = 400, mismatch = 409). Server uses millisecond-precision `strftime('%Y-%m-%d %H:%M:%f', 'now')` to handle same-second PATCHes. Client snapshots `updated_at` at form-bind and shows a "reload-and-retry" banner on 409. Other PATCH routes audited — only `projects` has the narrative co-edit risk; others target narrow scalars where loss is small/visible.
 - [x] ~~**SMTP invite returns lying `delivered:true`.**~~ Now awaits with 8s timeout race + nodemailer connection/greeting/socket timeouts (5s each). Response: `{ ..., delivered: true }` on success; `{ ..., delivered: false, error, reason }` on failure; `delivered: false` (no error field) when SMTP intentionally disabled. Audit row written before the send so failed deliveries still have a trail.
 - [x] ~~**`isOwnerOrAdmin` doesn't check `user_claimants.status`.**~~ Now requires `uc.status='active'`. Audit found two more places (`labour.js` + `expenses.js` GET list filters) where the user-claimant-status check was missing — both fixed alongside.
-- [ ] [P3] **SQLITE_BUSY** under concurrent writers — no retry; user gets a 500. Wrap mutations with a small retry-on-busy.
+- [ ] [P3] **SQLITE_BUSY** under concurrent writers — `busy_timeout = 5000` is set explicitly, but there's no application-level retry; a busy throw surfaces as a 500. Wrap mutations with a 2-3 attempt retry-on-busy helper.
 - [ ] [P3] **Disk-full mid-write** on uploads / bundles leaves partial files. Wrap in transactions with cleanup.
+- [ ] [P3] **`uploads/` deleted while server running.** Re-`mkdirSync` per upload in multer's `destination` callback; add a startup self-check that verifies `uploadsDir`, `bundlesDir`, DB path are writeable.
+- [ ] [P3] **JWT `clockTolerance: 30`** — current `jwt.verify` has tolerance 0; tokens flip 401 exactly at `exp`. Conventional value is 30s.
+- [ ] [P3] **Run under supervisor (systemd / pm2).** Document in README; no in-code change needed.
+- [ ] [P3] **Long-stale refresh-token purge** — `mintRefreshToken` only prunes when a user mints; users who never return leave rows indefinitely. Optional nightly `DELETE FROM refresh_tokens WHERE expires_at < datetime('now','-30 days')`.
+- [ ] [P3] **Audit-log archive after closed-period retention.** Append-only ledger grows monotonically. For multi-year scale, copy rows older than the most-recent closed period into an `audit_log_archive.db`.
 
 ## Database performance
 
-From [DATABASE_REVIEW.md](DATABASE_REVIEW.md). The DB has 12 existing indexes plus PKs/UNIQUEs; these are the gaps.
+From DATABASE_REVIEW.md (source report deleted; all items below resolved). The DB had 12 existing indexes plus PKs/UNIQUEs at review time; these were the gaps.
 
 - [x] ~~**Performance indexes + CHECK constraints.**~~ Migration 013 adds 8 indexes (`idx_comp_uc`, `idx_expense_project`, `idx_expense_uc`, `idx_evidence_period`, `idx_evidence_labour`, `idx_evidence_expense`, `idx_audit_actor`, `idx_audit_created`) and 5 CHECK constraints (`amount_cents > 0` on expenses + comp rows; `expense_date`/`evidence_date` GLOB; positive `fx_rate`). audit_log CHECKs skipped (would conflict with the append-only triggers).
 
 ## SR&ED domain accuracy
 
-From [SRED_DOMAIN_REVIEW.md](SRED_DOMAIN_REVIEW.md). **The agent did this without web access; cite recall with caution.** A tax preparer should final-check.
+From [SRED_DOMAIN_REVIEW.md](docs/reviews/SRED_DOMAIN_REVIEW.md). **The agent did this without web access; cite recall with caution.** A tax preparer should final-check.
 
-- [ ] [P1] **Specified-employee cap not pro-rated by days-as-specified.** Over-claims for mid-year hires, part-time, most hourly specified employees. Steady-state full-time year-round cases are correct. Needs a `days_as_specified_in_year` factor.
+- [ ] [P1] **Specified-employee cap not pro-rated by days-as-specified.** Over-claims for mid-year hires, part-time, most hourly specified employees. Steady-state full-time year-round cases are correct. Needs a `days_as_specified_in_year` factor. Design documented at [`docs/specified-employee-pro-ration.md`](docs/specified-employee-pro-ration.md).
 - [x] ~~**T661 line numbers absent from every export format.**~~ `T661_LINES` / `T661_LINE_NUMBERS` constants in `src/lib/format.js`; Markdown/CSV/PDF all carry line annotations (305 labour, 306 OT, 307 specified-emp cap, 320 materials, 340 contract, 345 third-party, 360 overhead). Pinned with tests. PDF byte-sniff loosened to magic+length only since PDFKit splits text across `Tj` ops even with `compress:false`.
-- [ ] [P2] **Traditional-method overhead is one bucket.** No sub-categorisation (rent/utilities/maintenance/supporting-salaries) and no allocation-basis field. CRA expects per-overhead-type documentation.
-- [ ] [P3] **Materials** are one category — no consumed-vs-transformed split.
-- [ ] [P3] **Contract** doesn't distinguish arm's-length vs non-arm's-length (different allowable percentages).
-- [ ] [P3] **Audit-defensibility gaps**: no `hypothesis` field, no FX-rate-source attribution, evidence isn't linked to a specific uncertainty, no "date uncertainty was identified" field.
-- [ ] [P3] Re-run the domain review with web access enabled to verify 2025-2027 wage-cap values, current T661 v22 line numbers, and the OT straight-time-vs-premium question.
+- [x] ~~**Traditional-method overhead is one bucket.**~~ Migration 014 adds `overhead_subcategory` (rent/utilities/maintenance/supporting_salaries/other) + `allocation_basis` text on `expenses`; route-layer validators require both when `category='overhead'`.
+- [x] ~~**Materials** are one category — no consumed-vs-transformed split.~~ Migration 015 adds `material_disposition` (consumed/transformed); T661 export splits lines 320 / 325 (commit `561f639`).
+- [x] ~~**Contract** doesn't distinguish arm's-length vs non-arm's-length.~~ Migration 015 adds `contract_arms_length` int flag; T661 export splits lines 340 / 350.
+- [x] ~~**Audit-defensibility: `hypothesis` field, FX-rate-source attribution, "date uncertainty was identified" field.**~~ Migration 015 adds `fx_rate_source` (TEXT, required when `fx_rate` is set); migration 016 adds `hypothesis` + `uncertainty_identified_at` on `projects` and `project_revisions`.
+- [ ] [P3] **Audit-defensibility: evidence-to-uncertainty link.** Evidence is attached to a project or labour entry but not explicitly tied to "this evidence resolves uncertainty X."
+- [ ] [P3] **`format.js` T661 line-mapping verification.** Current mapping has `third_party_payment → line 345` and `overhead → line 360`; review (and current CRA T661 v22) typically places third-party payments at line 360. Verify against the live T661 PDF.
+- [ ] [P3] **Drop the suspect "T661 line 305 vs 306 reporting" comment at `src/lib/t661.js:106`** — no current CRA reference for a line-306 OT split.
+- [ ] [P3] **Currency-lock on claimant `reporting_currency`.** Today it defaults to CAD but isn't constrained; T661 reports in CAD only. Add a check constraint or route validator.
+- [ ] [P3] Re-run the domain review with web access enabled to verify 2025-2027 wage-cap values (`src/lib/wage-caps.js` still annotated `// verify`), current T661 v22 line numbers, and the OT straight-time-vs-premium question.
 
 ## Tests to add
 
@@ -143,13 +155,17 @@ From [SRED_DOMAIN_REVIEW.md](SRED_DOMAIN_REVIEW.md). **The agent did this withou
 - [x] ~~**Route-level integration tests.**~~ 18 new tests across three files: `close-period.test.js` (10), `t661-export-roundtrip.test.js` (7), `audit-log-writes.test.js` (1 parameterised covering 11 endpoints). Caught: admin-logged labour auto-approves into `status='approved'` which immediately locks it from PATCH via `assertEditable` — admin can't fix a typo on their own on-behalf entry without reject-then-edit-then-re-approve. Flagged for follow-up.
 - [x] ~~**`src/auth/middleware.js` is untested.**~~ 19 new negative-path tests added. `requireAuth` does validate user status (`!== 'active'` → 401). Worth flagging: every JWT-library error surfaces as generic `"unauthorized"` but the deactivated path leaks `"user not active"` — a 401 with that exact message confirms the token was crypto-valid + the user exists (minor enumeration vector).
 - [x] ~~**Cross-tenant isolation tests.**~~ 27 new tests covering every endpoint as a wrong-claimant employee. **Zero leaks found.** Clarified actual behaviour: `GET /api/projects` is admin-only, foreign-claimant filters yield empty list (not 403), single-row GETs on others' rows return 403 (not 404).
-- [ ] [P2] **`src/auth/webauthn.js` is untested** — counter regression, expired/replayed challenges, unknown credential.
-- [ ] [P3] **`src/lib/email.js` is untested** — silent invite regressions would slip through.
+- [ ] [P2] **`src/auth/webauthn.js` counter-regression path** still untested — would need dependency injection or pre-canned attestations.
+- [x] ~~**`src/lib/email.js`**~~ — `tests/lib/email-disabled.test.js` + `email-enabled.test.js` cover SMTP-disabled / SMTP-failed / SMTP-success paths.
 - [x] ~~**`src/auth/webauthn.js` tests.**~~ 12 new tests covering challenge management, V-09 reaper, unknown-credential, malformed-body rejection. Verifier-dependent paths (counter regression) not exercised — would need dependency injection or pre-canned attestations.
+- [ ] [P3] **Migration data-preservation tests.** Per-migration replay harness for the table-recreate migrations (002, 006, 007, 010, 011, 012, 013, 014, 015) — seed under pre-migration schema, apply, assert row count + key column values.
+- [ ] [P3] **Property-based tests via `fast-check`.** Highest-value targets: `reportingAmount` (positive integers; non-negative monotonic result; cents drift on FX edge cases), `dollarsToCents` round-trip, `buildCompareDiff.grand_total` symmetry, `computeT661` labour aggregation.
+- [ ] [P3] **Direct `bulk-approve` test.** `POST /api/labour/bulk-approve` transactional behaviour and per-row audit rows are currently exercised only via the parameterised audit-log-writes test.
+- [ ] [P3] **Error-shape conformance.** One parameterised test that hits every 4xx-producing path with a malformed body and asserts `{error: {code, message}}` shape (currently nine `assert.match` calls regex error messages — brittle).
 
 ## Refactoring
 
-From [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). Largest files: `admin/projects.js` 771 LOC · `admin/employees.js` 663 · `api.js` 630 · `lib/format.js` 590 · `admin.js` 428. **Zero import cycles** — the DAG is clean.
+From [ARCHITECTURE_REVIEW.md](docs/reviews/ARCHITECTURE_REVIEW.md). Largest files at review time: `admin/projects.js` 771 LOC · `admin/employees.js` 663 · `api.js` 630 · `lib/format.js` 590 · `admin.js` 428. **Zero import cycles** — the DAG is clean.
 
 - [x] ~~`scripts/seed-data.js` hardcoded IDs.~~ Replaced with email-keyed user/uc lookups and a derived admin/period lookup.
 - [x] ~~**Extract `mutateAndAudit(table, id, mutator, …)`.**~~ Helper (+ sibling `createAndAudit`) in `src/lib/route-helpers.js`. Swept across labour, expenses, evidence, projects, users, user-claimants, claimants, periods, exports. audit-log-writes.test.js still passes.
@@ -158,12 +174,13 @@ From [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). Largest files: `admin/pro
 - [ ] [P2] **Split `src/routes/auth.js`** into `auth.js` (ceremonies) + `me.js` (`/api/me*` endpoints).
 - [x] ~~**109 inline `style="…"` attributes.**~~ 109 → 1 (only the data-driven bar-chart height left). ~30 new utility classes (`.mt-sm`, `.mb-md`, `.gap-sm`, `.flex-1`, `.wrap`, …) + component classes (`.card-inset`, `.modal`, `.action-bar.sticky`, `.bulk-reject-editor`, `.filter-bar`, etc.).
 - [x] ~~**Status pill mapping inconsistency.**~~ `pillClassFor()` + `statusPill()` helpers in `public/api.js` with a single canonical mapping; swept 12 ad-hoc ternaries across 6 files.
-- [ ] [P3] **Split `public/api.js`** (630 LOC). Do when it next needs a non-trivial edit.
-  - [ ] Extract session storage + `setSession`/`clearSession` into `public/session.js`.
-  - [ ] Extract `api`, `apiUpload`, refresh-on-401 into `public/fetch.js`.
-  - [ ] Extract DOM helpers (`esc`, `cents`, `$`, `$$`, `safeHref`, `onSubmit`, `bindForm`) into `public/dom.js`.
-  - [ ] Extract per-feature renderers (`activityHtml`, `wireActivityDetails`, `renderPreferencesPage`, etc.) into per-feature files.
-- [ ] [P3] **Remove unused exports** in `public/api.js`: `dollarInput`, `$$`. Move `setJwt`/`clearJwt`/`setRefresh`/`clearRefresh` to non-exported (used only internally).
+- [x] ~~**Split `public/api.js`** (630 LOC).~~ Done: `api.js` is now a 16-LOC re-export shim over `public/session.js`, `public/fetch.js`, `public/dom.js`, `public/features.js`.
+- [x] ~~**Remove unused exports** in `public/api.js`: `dollarInput`, `$$`.~~ Done.
+- [ ] [P3] **Split `src/lib/format.js`** (723 LOC) along the single-period / compare seam. Tests already split (`format.test.js` + `format-compare.test.js`).
+- [ ] [P3] **Extract `buildUpdate(table, id, updates)`** helper; apply to the labour/expenses/users PATCH partial-update builders (currently hand-rolled in two-to-three places).
+- [ ] [P3] **Extract `sendFormat(res, baseName, { json, csv, md, pdf })`** dispatcher; apply to the two exports.js download handlers (`exports.js` and `compare/download`).
+- [ ] [P3] **Promote `MAX_UPLOAD_BYTES` and `BUNDLES_DIR` to `config.*`** with current values as defaults.
+- [ ] [P3] **Wage-caps future-year startup check.** Single `console.warn` (or `log.warn`) if `LATEST_YEAR < currentYear + 1` so the table-runs-out failure mode is visible at boot, not at the first 2027 labour entry.
 - [x] ~~**Unused tokens** `--gold`/`--green`~~ — removed; replaced with 9 new status-color tokens (`--status-pending-{bg,text,border}` + success + error triplets) consolidating recurring hex literals.
 - [x] ~~**CSS approach.**~~ Stylesheet reorganised into 19 banner-headed sections (tokens, base, layout, header, nav, search, cards, buttons, forms, tables, pills, banners, dialog, activity, misc, metrics, chart, utilities, responsive). 747 → 1101 LOC (growth is doc comments + utility classes; pure rules roughly flat).
 - [ ] [P3] Inline SQL is fine at this scale, but if the schema keeps growing, a thin `repositories/` layer would make handlers more testable.
@@ -171,16 +188,16 @@ From [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md). Largest files: `admin/pro
 
 ## Dependencies
 
-From [DEPENDENCY_REVIEW.md](DEPENDENCY_REVIEW.md). License posture clean (292 packages, all permissive); `npm audit` reports 0 vulnerabilities.
+From DEPENDENCY_REVIEW.md (source report deleted; remaining items below). License posture clean (292 packages, all permissive); `npm audit` reports 0 vulnerabilities.
 
 - [x] ~~**Upgrade `multer` 1.4.5-lts → 2.x.**~~ Now on `^2.1.1`. `npm audit --omit=dev` still clean. Existing evidence-upload tests pass unchanged.
 - [x] ~~**Upgrade `@simplewebauthn/server` 11 → 13.**~~ Now on `^13.3.0`. Single API break: dropped `type: 'public-key'` from `excludeCredentials`/`allowCredentials`. Deprecated `@simplewebauthn/types@11` transitive gone. `npm audit --omit=dev` clean.
-- [ ] [P3] **Resolve `file-type@22` engine mismatch** — declares `engines.node >=22`; project says `>=20`. Either bump `engines.node` or downgrade to `^21`.
-- [ ] [P3] **`express` 4.x is in maintenance.** 5.x migration when convenient.
+- [x] ~~**Resolve `file-type@22` engine mismatch.**~~ Bumped `engines.node` to `>=22` (`.nvmrc` pinned to 22). `package.json` reflects the new floor.
+- [x] ~~**`express` 4.x is in maintenance.**~~ Upgraded to `^5.2.1` (commit `aaeaf1d`).
 
 ## Security
 
-Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 critical, 2 high, 5 medium, 4 low/info (11 findings). High-priority items below; full evidence + fix suggestions in the report.
+Tracked in VULNERABILITY_REVIEW.md (source report deleted; all 11 findings closed). 0 critical, 2 high, 5 medium, 4 low/info.
 
 - [x] ~~**V-01 (High) Stored XSS via `javascript:` URLs in evidence link items.**~~ Fixed: scheme allowlist (`http:`/`https:`/`mailto:`) on both write (`src/routes/evidence.js`) and render (`safeHref` in `public/api.js`, applied at the three render sites).
 - [x] ~~**CSP header.**~~ Middleware in `src/lib/csp.js` ships `Content-Security-Policy` on every response: bans inline scripts and `javascript:` URIs, allows jsdelivr (for `@simplewebauthn/browser`) and Google Fonts. Verified via `curl -I /`.
@@ -193,11 +210,11 @@ Tracked in [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). Latest audit: 0 c
 - [x] ~~**V-08 `audit_log` append-only triggers.**~~ Migration 008.
 - [x] ~~**V-09 Stale WebAuthn challenges reaped.**~~ `storeChallenge` now deletes expired rows on each call.
 - [x] ~~**V-10 `nodemailer` bumped to ^8.0.7.**~~ `npm audit --omit=dev` clean.
-- [ ] [P3] **V-11 (Low) Refresh token in `localStorage`; JWT in `sessionStorage`.** XSS exfiltration risk; CSP now mitigates. Long-term: move refresh to `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/api/auth/refresh`.
+- [x] ~~**V-11 (Low) Refresh token in `localStorage`; JWT in `sessionStorage`.**~~ Refresh now lives in an `HttpOnly; Secure; SameSite=Strict` cookie (`sred_refresh`, path-scoped to `/api/auth/refresh`) with a companion `sred_refresh_csrf` double-submit value enforced by `refreshCsrfGuard` (`src/lib/refresh-cookie.js`). JSON body fallback retained during deploy window so older client tabs keep rotating.
 
 ## Docs to update
 
-Drift from [DOCS_ACCURACY_REVIEW.md](DOCS_ACCURACY_REVIEW.md). Per-doc severity: api **largest**, data-model **large**, use-cases medium, auth medium, README small.
+Drift from DOCS_ACCURACY_REVIEW.md (source report deleted; all five docs rewritten). Per-doc severity at review time: api **largest**, data-model **large**, use-cases medium, auth medium, README small.
 
 - [x] ~~**`docs/api.md`**~~ rewritten — wrong path prefixes fixed, ~14 missing endpoints added, phantom `/me/summary` dropped, comparative-export endpoints documented, optimistic-concurrency 409 on project PATCH documented, retention claim corrected.
 - [x] ~~**`docs/data-model.md`**~~ — `refresh_tokens` + `webauthn_challenges` added; six new columns added; status enum renamed; **false 6-year retention claim removed** + replaced with the actual closed-period rule; audit_log triggers documented.
@@ -220,9 +237,9 @@ Notable corrections from the draft agent:
 
 ## Done
 
-- [x] **UI use-case audit** — see [UI_USE_CASE_AUDIT.md](UI_USE_CASE_AUDIT.md). 8 of 12 use cases fully reachable, 4 partial, 0 missing; action items distilled into "UI: missing / partial use cases" above.
-- [x] **UI usability review** — see [UI_USABILITY_REVIEW.md](UI_USABILITY_REVIEW.md). Top 10 ranked recommendations + detailed findings by category; action items distilled into "UI: usability" above.
-- [x] **Vulnerability review** — see [VULNERABILITY_REVIEW.md](VULNERABILITY_REVIEW.md). 11 findings tracked in "Security" section above.
+- [x] **UI use-case audit** (source report deleted). 8 of 12 use cases fully reachable, 4 partial, 0 missing; action items distilled into "UI: missing / partial use cases" above.
+- [x] **UI usability review** (source report deleted). Top 10 ranked recommendations + detailed findings by category; action items distilled into "UI: usability" above.
+- [x] **Vulnerability review** (source report deleted). 11 findings tracked in "Security" section above.
 - [x] **Unit tests for `lib/format.js`** — 9 tests added.
 - [x] **Unit tests for `auth/tokens.js`** — 10 tests added, uncovered a real purpose-enforcement gap (tracked in "Correctness / bugs" above).
-- [x] **2026-05-14 multi-review batch (10 reports)** — production-readiness, visual design, render-and-look (Playwright + 64 screenshots), database, architecture, test strategy, reliability, docs accuracy, SR&ED domain, dependencies. All distilled into the sections above; full reports retained at the repo root.
+- [x] **2026-05-14 multi-review batch (10 reports)** — production-readiness, visual design, render-and-look (Playwright + 64 screenshots), database, architecture, test strategy, reliability, docs accuracy, SR&ED domain, dependencies. All distilled into the sections above. Surviving reports (with status banners) live in [`docs/reviews/`](docs/reviews/README.md); fully-resolved reports deleted.
