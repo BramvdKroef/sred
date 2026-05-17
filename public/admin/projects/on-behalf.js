@@ -2,7 +2,9 @@
 // expense forms that record entries against an active assignee. Entries
 // created here skip the review queue (admin actor → approved).
 import { api, esc, onSubmit, dollarsToCents,
-         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle } from '../../api.js';
+         attachInlineEvidence, attachInlineReceipt, bindEvidenceKindToggle,
+         showTopBanner } from '../../api.js';
+import { showLabourCsvImportModal } from './labour-csv-import.js';
 
 export function renderLogOnBehalfCards(project, claimant) {
   const activeAssignees = project.assignments.filter(a => a.status === 'active');
@@ -17,7 +19,10 @@ export function renderLogOnBehalfCards(project, claimant) {
       <div class="card compact">
         <div class="card-head">
           <h2>Log labour</h2>
-          <button id="behalf-labour-toggle" class="secondary small">＋ New</button>
+          <div class="row gap-sm">
+            <button id="behalf-labour-import-csv" type="button" class="secondary small">Import CSV</button>
+            <button id="behalf-labour-toggle" class="secondary small">＋ New</button>
+          </div>
         </div>
         <div id="behalf-labour-form" hidden>
           <form id="form-behalf-labour">
@@ -118,6 +123,18 @@ export function bindLogOnBehalfForms(project, ctx) {
   const lTog = document.getElementById('behalf-labour-toggle');
   const lForm = document.getElementById('behalf-labour-form');
   if (lTog && lForm) lTog.addEventListener('click', () => { lForm.hidden = !lForm.hidden; });
+
+  const importBtn = document.getElementById('behalf-labour-import-csv');
+  if (importBtn) {
+    importBtn.addEventListener('click', () => {
+      showLabourCsvImportModal({
+        onSuccess: async (count) => {
+          showTopBanner(`Imported ${count} labour ${count === 1 ? 'entry' : 'entries'}`);
+          await ctx.render();
+        },
+      });
+    });
+  }
   const eTog = document.getElementById('behalf-expense-toggle');
   const eForm = document.getElementById('behalf-expense-form');
   if (eTog && eForm) eTog.addEventListener('click', () => { eForm.hidden = !eForm.hidden; });

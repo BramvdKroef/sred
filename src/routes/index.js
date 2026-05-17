@@ -4,7 +4,7 @@ import claimantsRouter from './claimants.js';
 import projectsRouter from './projects.js';
 import usersRouter from './users.js';
 import userClaimantsRouter from './user-claimants.js';
-import labourRouter from './labour.js';
+import labourRouter, { labourImportRouter } from './labour.js';
 import periodsRouter from './periods.js';
 import evidenceRouter from './evidence.js';
 import expensesRouter from './expenses.js';
@@ -22,6 +22,9 @@ api.use('/user-claimants', userClaimantsRouter);
 api.use('/claimants', claimantsRouter);
 api.use('/projects', projectsRouter);
 api.use('/labour', labourRouter);
+// CSV bulk import — admin only. Separate mount so the path matches the
+// public spec without colliding with /api/labour/:id.
+api.use('/labour-logs', labourImportRouter);
 api.use('/periods', periodsRouter);
 api.use('/evidence', evidenceRouter);
 api.use('/expenses', expensesRouter);
