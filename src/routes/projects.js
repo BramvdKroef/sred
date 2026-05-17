@@ -27,24 +27,71 @@ function validateManagerUserId(id) {
     throw badRequest(`manager_user_id ${id} must be active`);
 }
 
-router.get('/', (req, res) => {
-  const q = (req.query.q ?? '').trim();
-  const limit = Math.min(Number(req.query.limit || 20), 100);
-  const where = [];
-  const params = [];
-  if (q) {
-    where.push('(p.title LIKE ? OR c.legal_name LIKE ?)');
-    params.push(`%${q}%`, `%${q}%`);
-  }
-  const sql = `
-    SELECT p.id, p.title, p.status, p.type, p.claimant_id,
-           c.legal_name AS claimant_name
-      FROM projects p JOIN claimants c ON c.id = p.claimant_id
-     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-     ORDER BY p.title
-     LIMIT ?
-  `;
-  res.json({ items: db.prepare(sql).all(...params, limit) });
+router.get('/', (req, res, next) => {
+  try {
+    const q = (req.query.q ?? '').trim();
+    const limit = Math.min(Number(req.query.limit || 20), 100);
+    const where = [];
+    const params = [];
+    if (q) {
+      where.push('(p.title LIKE ? OR c.legal_name LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    // Enum filters: exact match. Empty/missing values are ignored; an
+    // unknown enum value is a 400 so a typo in a UI dropdown surfaces
+    // loudly rather than silently returning everything.
+    const status = req.query.status;
+    if (status !== undefined && status !== '') {
+      if (!VALID_STATUSES.includes(status)) {
+        throw badRequest(`status must be ${VALID_STATUSES.join('|')}`);
+      }
+      where.push('p.status = ?');
+      params.push(status);
+    }
+
+    const type = req.query.type;
+    if (type !== undefined && type !== '') {
+      if (!VALID_TYPES.includes(type)) {
+        throw badRequest(`type must be ${VALID_TYPES.join('|')}`);
+      }
+      where.push('p.type = ?');
+      params.push(type);
+    }
+
+    // Integer FK filters. Non-integer values (including empty floats /
+    // garbage strings) are a 400 — same rationale as the enum guards.
+    const parseIntFilter = (raw, name) => {
+      if (raw === undefined || raw === '') return null;
+      const n = Number(raw);
+      if (!Number.isInteger(n) || !/^-?\d+$/.test(String(raw))) {
+        throw badRequest(`${name} must be an integer`);
+      }
+      return n;
+    };
+
+    const claimantId = parseIntFilter(req.query.claimant_id, 'claimant_id');
+    if (claimantId !== null) {
+      where.push('p.claimant_id = ?');
+      params.push(claimantId);
+    }
+
+    const managerUserId = parseIntFilter(req.query.manager_user_id, 'manager_user_id');
+    if (managerUserId !== null) {
+      where.push('p.manager_user_id = ?');
+      params.push(managerUserId);
+    }
+
+    const sql = `
+      SELECT p.id, p.title, p.status, p.type, p.claimant_id,
+             c.legal_name AS claimant_name
+        FROM projects p JOIN claimants c ON c.id = p.claimant_id
+       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+       ORDER BY p.title
+       LIMIT ?
+    `;
+    res.json({ items: db.prepare(sql).all(...params, limit) });
+  } catch (e) { next(e); }
 });
 
 router.get('/:id', (req, res, next) => {

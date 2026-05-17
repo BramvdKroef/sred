@@ -4,6 +4,43 @@
 import { api, esc, bindForm, showTopBanner, statusPill, TYPE_LABEL, STATUS_LABEL } from '../../api.js';
 import { mountNarrativeHelper } from './narrative-helper.js';
 
+// Allow-listed filter keys for the projects-list filter bar. Anything outside
+// this list is dropped before being written to the URL hash so a hand-edited
+// hash can't smuggle arbitrary keys into our state. STATUS / TYPE values are
+// derived from the shared label maps in dom.js so the dropdown options stay
+// in lockstep with whatever's rendered elsewhere (status pills, kind pills).
+const FILTER_KEYS    = ['status', 'type', 'claimant_id', 'manager_user_id'];
+const VALID_STATUSES = Object.keys(STATUS_LABEL);
+const VALID_TYPES    = Object.keys(TYPE_LABEL);
+
+// Field-name → human label for the filter bar's visible / aria labels.
+const FILTER_LABEL = {
+  status:          'Status',
+  type:            'Type',
+  claimant_id:     'Claimant',
+  manager_user_id: 'Manager',
+};
+
+// Stash for the latest fetched filtered items, keyed by the active filter
+// signature. Lets the view re-render synchronously after a hash-driven render
+// pass (the renderer reads from here when filters are present).
+let filteredProjects = null;
+let filteredSignature = '';
+
+function activeFilters(state) {
+  const q = state.hashQuery || {};
+  const out = {};
+  for (const k of FILTER_KEYS) {
+    const v = q[k];
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  }
+  return out;
+}
+
+function filterSignature(filters) {
+  return Object.keys(filters).sort().map(k => `${k}=${filters[k]}`).join('&');
+}
+
 export function renderClaimantsTab(ctx) {
   const { state } = ctx;
   // The active claimant now comes from the header selector
@@ -68,13 +105,25 @@ export function renderClaimantsTab(ctx) {
 function renderProjectsAndUsers(state) {
   const managerOpts = state.managers.map(u =>
     `<option value="${u.id}">${esc(u.name)} (${esc(u.role)})</option>`).join('');
+  const filters = activeFilters(state);
+  const hasFilters = Object.keys(filters).length > 0;
+  // When filters are active, render whatever the last fetch returned for the
+  // current signature (set asynchronously by bindList). Until that resolves
+  // we show an empty-state placeholder rather than the unfiltered list so
+  // the UI doesn't briefly contradict the visible filter values.
+  const tableProjects = hasFilters
+    ? (filteredSignature === filterSignature(filters) && filteredProjects ? filteredProjects : null)
+    : state.projects;
   return `
     <div class="card">
       <div class="card-head">
         <h2>Projects</h2>
         <button id="new-project-toggle" class="secondary small">＋ New project</button>
       </div>
-      ${renderProjectsTable(state.projects)}
+      ${renderProjectsFilterBar(state, filters)}
+      ${tableProjects === null
+        ? '<p class="empty">Loading…</p>'
+        : renderProjectsTable(tableProjects)}
       <div id="new-project-form" class="mt-lg" hidden>
         <form id="project-form">
           <div class="grid">
@@ -143,6 +192,43 @@ function renderPeriodsTable(periods) {
         </td>
       </tr>`).join('')}
     </tbody></table></div>`;
+}
+
+// Filter bar above the projects table. Status / type / claimant selects bind
+// to query-string params on the URL hash so the filtered view is
+// bookmarkable; a "Clear filters" link drops them all. Manager filter is
+// included only if state.managers is already loaded (it always is in the
+// admin shell, but we guard so the helper degrades gracefully if it isn't).
+function renderProjectsFilterBar(state, filters) {
+  const sel = (name, current, options) => `
+    <label class="label-plain">${esc(FILTER_LABEL[name])}
+      <select name="${name}" aria-label="Filter by ${esc(FILTER_LABEL[name].toLowerCase())}">
+        <option value="">All</option>
+        ${options.map(o =>
+          `<option value="${esc(String(o.value))}"${String(current ?? '') === String(o.value) ? ' selected' : ''}>${esc(o.label)}</option>`
+        ).join('')}
+      </select>
+    </label>
+  `;
+  const statusOpts   = VALID_STATUSES.map(s => ({ value: s, label: STATUS_LABEL[s] ?? s }));
+  const typeOpts     = VALID_TYPES.map(t    => ({ value: t, label: TYPE_LABEL[t]   ?? t }));
+  const claimantOpts = (state.claimants || []).map(c => ({ value: c.id, label: c.legal_name }));
+  const managerOpts  = (state.managers  || []).map(m => ({ value: m.id, label: `${m.name} (${m.role})` }));
+
+  const showClear = Object.keys(filters).length > 0;
+  return `
+    <div class="card filter-bar mt-md">
+      <form id="projects-filter-form" class="row gap-lg align-end wrap m-0">
+        <div>${sel('status',          filters.status,          statusOpts)}</div>
+        <div>${sel('type',            filters.type,            typeOpts)}</div>
+        <div>${sel('claimant_id',     filters.claimant_id,     claimantOpts)}</div>
+        ${managerOpts.length ? `<div>${sel('manager_user_id', filters.manager_user_id, managerOpts)}</div>` : ''}
+        ${showClear
+          ? '<button type="button" class="small secondary" data-projects-filter-clear>Clear filters</button>'
+          : ''}
+      </form>
+    </div>
+  `;
 }
 
 function renderProjectsTable(projects) {
@@ -223,6 +309,8 @@ export function bindList(ctx) {
 
   // The claimant selector now lives in the page header (public/admin.js).
   // We just read state.activeClaimantId here.
+
+  bindProjectsFilterBar(ctx);
 
   // Row-click → drilldown (drive hash; hashchange triggers render)
   document.querySelectorAll('[data-open-project]').forEach(tr => {
@@ -335,4 +423,70 @@ export function bindList(ctx) {
     });
     await reloadAll();
   });
+}
+
+// Wire the filter bar's selects + Clear-filters link. Each <select> change
+// rewrites the URL hash query string (which triggers a re-render via the
+// admin shell's hashchange handler); the renderer then issues a single
+// `/api/projects?<filters>` fetch and re-renders the table once it lands.
+//
+// We keep the URL as the single source of truth for filter state so a
+// shared link reproduces the same view (the "bookmarkable" requirement).
+function bindProjectsFilterBar(ctx) {
+  const form = document.getElementById('projects-filter-form');
+  if (!form) return;
+  const { state } = ctx;
+
+  const writeFiltersToHash = (next) => {
+    const base = state.viewingProjectId
+      ? `projects/${state.viewingProjectId}`
+      : 'projects';
+    const params = Object.keys(next)
+      .filter(k => FILTER_KEYS.includes(k) && next[k] !== '' && next[k] != null)
+      .sort()
+      .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(next[k])}`)
+      .join('&');
+    const newHash = '#' + base + (params ? '?' + params : '');
+    if (location.hash !== newHash) location.hash = newHash;
+  };
+
+  form.querySelectorAll('select').forEach(s => {
+    s.addEventListener('change', () => {
+      const fd = new FormData(form);
+      const next = {};
+      for (const k of FILTER_KEYS) {
+        const v = fd.get(k);
+        if (v) next[k] = v;
+      }
+      writeFiltersToHash(next);
+    });
+  });
+
+  const clearBtn = form.querySelector('[data-projects-filter-clear]');
+  if (clearBtn) clearBtn.addEventListener('click', () => writeFiltersToHash({}));
+
+  // Asynchronously fetch the filtered list when any filter is active and
+  // we haven't already cached results for this signature. Render is
+  // re-invoked through ctx.render() once the fetch resolves.
+  const filters = activeFilters(state);
+  const sig = filterSignature(filters);
+  if (Object.keys(filters).length === 0) {
+    // No filters → ensure stale cache doesn't leak into a subsequent
+    // filtered render that hasn't yet completed.
+    filteredProjects = null;
+    filteredSignature = '';
+    return;
+  }
+  if (sig === filteredSignature && filteredProjects) return;
+  // Mark the signature optimistically so concurrent re-renders dedupe.
+  filteredSignature = sig;
+  const qs = Object.keys(filters)
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(filters[k])}`)
+    .join('&');
+  api('GET', `/api/projects?${qs}&limit=100`).then(r => {
+    // Drop stale responses if the user has flipped filters again.
+    if (filterSignature(activeFilters(ctx.state)) !== sig) return;
+    filteredProjects = r.items;
+    ctx.render();
+  }).catch(e => showTopBanner(e.message));
 }

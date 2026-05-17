@@ -29,6 +29,9 @@ const state = {
   exports: [],
   viewingProjectId: null,
   viewingUserId: null,
+  // Parsed query-string portion of the URL hash (everything after `?`).
+  // Currently consumed by the projects-list filter bar.
+  hashQuery: {},
 };
 
 export const ALLOWED_TABS = ['overview', 'projects', 'employees', 'review', 'exports', 'audit', 'preferences'];
@@ -84,10 +87,27 @@ export function writeActiveClaimantId(id, storage = globalThis.localStorage) {
   } catch { /* localStorage may be disabled (private mode, quota, ...) */ }
 }
 
-// Pure parser for the URL hash. Returns { tab, projectId, userId, valid }.
+// Pure parser for the URL hash. Returns { tab, projectId, userId, query, valid }.
+// `query` is a plain object of decoded query-string params (everything after
+// the first `?` in the hash). Empty when no query string is present. Used by
+// the projects-list filter bar to make filters bookmarkable.
 // Exported so tests can verify hash handling without a DOM.
 export function parseHashStr(rawHash) {
-  const raw = (rawHash ?? '').replace(/^#/, '');
+  let raw = (rawHash ?? '').replace(/^#/, '');
+  const qIdx = raw.indexOf('?');
+  const query = {};
+  if (qIdx >= 0) {
+    const qs = raw.slice(qIdx + 1);
+    raw = raw.slice(0, qIdx);
+    for (const part of qs.split('&')) {
+      if (!part) continue;
+      const eq = part.indexOf('=');
+      const k = eq < 0 ? part : part.slice(0, eq);
+      const v = eq < 0 ? ''   : part.slice(eq + 1);
+      try { query[decodeURIComponent(k)] = decodeURIComponent(v); }
+      catch { query[k] = v; }
+    }
+  }
   const [tab, ...rest] = raw.split('/');
   const id = rest[0] ? Number(rest[0]) : null;
   const numId = Number.isInteger(id) ? id : null;
@@ -95,6 +115,7 @@ export function parseHashStr(rawHash) {
     tab,
     projectId: tab === 'projects'  ? numId : null,
     userId:    tab === 'employees' ? numId : null,
+    query,
     valid:     ALLOWED_TABS.includes(tab),
   };
 }
@@ -118,16 +139,33 @@ function onHashChange() {
   // The replace fires another hashchange that we then handle normally.
   const migrated = migrateLegacyHash(location.hash);
   if (migrated) { location.replace(migrated); return; }
-  const { tab, projectId, userId, valid } = parseHash();
+  const { tab, projectId, userId, query, valid } = parseHash();
   // Unknown hash → revert URL to the current valid tab so URL ≠ view doesn't desync.
   if (!valid) { history.replaceState(null, '', '#' + state.tab); return; }
   const nextProject = (tab === 'projects')  ? projectId : null;
   const nextUser    = (tab === 'employees') ? userId    : null;
-  if (tab === state.tab && nextProject === state.viewingProjectId && nextUser === state.viewingUserId) return;
+  // Query-string changes (e.g. flipping a filter in the projects-list filter
+  // bar) need to trigger a re-render even when tab/id are otherwise unchanged.
+  const prevQS = serializeHashQuery(state.hashQuery);
+  const nextQS = serializeHashQuery(query);
+  if (
+    tab === state.tab &&
+    nextProject === state.viewingProjectId &&
+    nextUser === state.viewingUserId &&
+    prevQS === nextQS
+  ) return;
   state.tab = tab;
   state.viewingProjectId = nextProject;
   state.viewingUserId    = nextUser;
+  state.hashQuery        = query;
   render();
+}
+
+// Stable serialization of the parsed hash-query object for change-detection.
+// Keys sorted so two objects with the same key/value pairs always serialize
+// identically regardless of insertion order.
+function serializeHashQuery(q) {
+  return Object.keys(q ?? {}).sort().map(k => `${k}=${q[k]}`).join('&');
 }
 
 // --- Shell render + nav + search ------------------------------------------
@@ -138,11 +176,12 @@ function shell() {
   // back-button history clean.
   const migrated = migrateLegacyHash(location.hash);
   if (migrated) history.replaceState(null, '', migrated);
-  const { tab, projectId, userId, valid } = parseHash();
+  const { tab, projectId, userId, query, valid } = parseHash();
   if (valid) {
     state.tab = tab;
     state.viewingProjectId = (tab === 'projects')  ? projectId : null;
     state.viewingUserId    = (tab === 'employees') ? userId    : null;
+    state.hashQuery        = query ?? {};
   } else {
     location.hash = state.tab;
   }
