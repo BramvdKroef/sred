@@ -2,6 +2,14 @@
 
 _2026-05-14, against branch `master`, commit `d533fc3`_
 
+## Status
+
+**Mostly addressed** as of 2026-05-16. The "critical untested" list at the top of the report is now mostly green.
+
+- **Closed:** `tests/auth/middleware.test.js` (19 negative-path tests) · `tests/auth/webauthn.test.js` (12 tests covering challenge management, V-09 reaper, unknown-credential, malformed-body) · `tests/routes/cross-tenant-isolation.test.js` (27 tests across every endpoint as a wrong-claimant employee — zero leaks) · `tests/lib/email-disabled.test.js` + `tests/lib/email-enabled.test.js` · `tests/server/health.test.js` (smoke for `/healthz` + `/readyz`) · `tests/server/request-logging.test.js` · `tests/server/trust-proxy.test.js` · `tests/server/shutdown.test.js` · `tests/db/busy-timeout.test.js` · `tests/db/perf-indexes.test.js` · `tests/lib/logger.test.js` · `tests/lib/error-reporter.test.js` · shared `tests/helpers/spawn-server.js` (fixes listen-race flake — commit `c12c600`). Route integration: close-period (10), t661-export-roundtrip (7), audit-log-writes (1 parameterised covering 11 endpoints), admin-edit-approved, project-patch-race, refresh-cookie, expense-domain-fields, expense-overhead-fields, project-audit-fields, invite-smtp-delivery, inactive-uc-edit.
+- **Still open:** Migration data-preservation tests (per-migration replay harness for 002/006/007/010/011/012/013/014/015) · property-based tests via fast-check (currency conversion, `dollarsToCents`, `buildCompareDiff.grand_total`, `computeT661` labour aggregation) · direct bulk-approve test (`/api/labour/bulk-approve` transactional behaviour) · error-shape conformance parameterised test · Express body-parser failure response shape · `mintEmailToken` race hardening from the web layer.
+- **Test-quality nits still open:** brittle `assert.match` on error messages (9 occurrences) — preferred pattern is `assert.equal(body.error.code, …)` + `details` field on `HttpError`.
+
 ## Summary
 
 **Total tests: 235** across 32 test files (counted as top-level `test(` / `it(` callsites). Distribution:
